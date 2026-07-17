@@ -1,0 +1,111 @@
+{
+  "_comment": "Custom fields for the Smart1Suite (GoHighLevel) integration, built from Todd's field-map files. defaultModel=contact because every field map specifies the Contact object and the apps use {{contact.x}} merge fields. Flip a group or a single field to the Opportunity object by adding \"model\": \"opportunity\". Pipelines (Boat/RV/Ski/IO) are created in the GHL UI - the API cannot create pipelines. Field types: text, textarea, number, phone, money, email, date, dropdown, multi_select, radio, checkbox. Option types require an \"options\" array.",
+  "defaultModel": "contact",
+  "groups": [
+    {
+      "name": "Boat & Ski Lead Fields (shared)",
+      "_note": "Boat Dealer + Ski Resort tools share these keys (ski reuses them with relabeled meaning per your docs). Created once; used by both pipelines.",
+      "fields": [
+        { "name": "Dealer / Resort Name", "type": "text" },
+        { "name": "Website", "type": "text" },
+        { "name": "ZIP / Market Anchor", "type": "text" },
+        { "name": "Target Radius", "type": "text" },
+        { "name": "Product Categories", "type": "textarea", "_note": "boat_types; ski = activity/product types" },
+        { "name": "Inventory / Program Mix", "type": "text" },
+        { "name": "Campaign Objective", "type": "textarea" },
+        { "name": "Notes / Exclusions", "type": "textarea" },
+        { "name": "Report Status", "type": "dropdown", "options": ["completed", "failed"] },
+        { "name": "Market Type", "type": "text" },
+        { "name": "Market Summary", "type": "textarea" },
+        { "name": "Est. Owner / Skier Households", "type": "number" },
+        { "name": "Recommended Package", "type": "text" },
+        { "name": "Recommended Investment", "type": "text", "_note": "e.g. $5,000/month; use money type + numeric if you strip the $ and /month" },
+        { "name": "Weather Triggers", "type": "textarea" },
+        { "name": "Proposal Report Link", "type": "text", "_note": "report_url / report_pdf_url - used in the Send Email button" },
+        { "name": "Report JSON (full)", "type": "textarea", "_note": "backup of full report data" }
+      ]
+    },
+    {
+      "name": "RV Demand Fields",
+      "prefix": "RV:",
+      "_note": "smart1rv_* keys from smart1rv_ghl_fields.xlsx. Prefixed 'RV:' so they group cleanly in the field list.",
+      "fields": [
+        { "name": "Dealership Name", "type": "text" },
+        { "name": "Dealer Contact Name", "type": "text" },
+        { "name": "Dealer Website URL", "type": "text" },
+        { "name": "Dealer ZIP", "type": "text" },
+        { "name": "Sales Radius Miles", "type": "text" },
+        { "name": "Service Radius Miles", "type": "text" },
+        { "name": "Multiple Locations", "type": "text" },
+        { "name": "Primary Campaign Goal", "type": "textarea" },
+        { "name": "Main Service Opportunity", "type": "text" },
+        { "name": "Market Climate Region", "type": "text" },
+        { "name": "Market Region Reason", "type": "textarea" },
+        { "name": "Campground Estimate Range", "type": "text" },
+        { "name": "Estimated Site Range", "type": "text" },
+        { "name": "Estimated Peak Season Reach Range", "type": "text" },
+        { "name": "Recommended Package", "type": "text" },
+        { "name": "Recommended Package Reason", "type": "textarea" },
+        { "name": "Recommended Channels", "type": "textarea" },
+        { "name": "Audience & Data Targeting", "type": "textarea" },
+        { "name": "Best Weather Triggers", "type": "textarea" },
+        { "name": "Selected Weather Triggers Text", "type": "textarea" },
+        { "name": "Suggested Monthly Budget", "type": "text" },
+        { "name": "Average Monthly Budget", "type": "text" },
+        { "name": "Suggested Budget Total", "type": "text" },
+        { "name": "Budget Note", "type": "textarea" },
+        { "name": "Dealer Summary", "type": "textarea" },
+        { "name": "Month By Month Plan Text", "type": "textarea" },
+        { "name": "Estimate Disclaimer", "type": "textarea" },
+        { "name": "Proposal Summary Text", "type": "textarea" },
+        { "name": "Proposal PDF URL", "type": "text" }
+      ]
+    },
+    {
+      "name": "RV Demand Opportunity-level Fields",
+      "prefix": "RV:",
+      "model": "opportunity",
+      "_note": "These three are explicitly Opportunity-object customs in the RV sheet.",
+      "fields": [
+        { "name": "Lead Type", "type": "text" },
+        { "name": "Submitted At", "type": "text" },
+        { "name": "Review Request", "type": "text" }
+      ]
+    },
+    {
+      "name": "IO / Insertion Order Fields",
+      "prefix": "IO:",
+      "_note": "Campaign detail fields from GHL_Opportunity_Field_Map.md. Array/object payloads are stored as large text (JSON) unless you want to break them out.",
+      "fields": [
+        { "name": "Order Number", "type": "text" },
+        { "name": "Monthly Budget", "type": "text" },
+        { "name": "Total Campaign Budget", "type": "text" },
+        { "name": "Campaign Start Date", "type": "date" },
+        { "name": "Campaign End Date", "type": "date" },
+        { "name": "Media Partner", "type": "text" },
+        { "name": "Campaign Goals", "type": "textarea" },
+        { "name": "KPIs", "type": "textarea" },
+        { "name": "Geographic Target", "type": "textarea" },
+        { "name": "Audiences", "type": "textarea" },
+        { "name": "Income Targets", "type": "textarea" },
+        { "name": "Dayparting", "type": "text" },
+        { "name": "Creative Source", "type": "text" },
+        { "name": "Exclusions / Negative Keywords", "type": "textarea" },
+        { "name": "Landing Page Mode", "type": "text" },
+        { "name": "Shared Landing Page", "type": "text" },
+        { "name": "Products (line items)", "type": "textarea" },
+        { "name": "Creative Assets", "type": "textarea" },
+        { "name": "Management Fee", "type": "text" },
+        { "name": "Creative Fee", "type": "text" },
+        { "name": "Tracking Plan", "type": "textarea" },
+        { "name": "Media-Mix Recommendation", "type": "textarea" },
+        { "name": "Naming Conventions", "type": "textarea" },
+        { "name": "Campaign Owner", "type": "text" },
+        { "name": "Brand Info", "type": "textarea" },
+        { "name": "Full Campaign Record", "type": "textarea", "_note": "campaign_data - complete IO JSON for reference" },
+        { "name": "Client IO PDF URL", "type": "text", "_note": "client-facing PDF - send this one" },
+        { "name": "Internal IO PDF URL", "type": "text", "_note": "internal only - do NOT send to client" }
+      ]
+    }
+  ]
+}
