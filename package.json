@@ -1,0 +1,17 @@
+{
+  "name": "ghl-opportunity-fields",
+  "version": "1.0.0",
+  "description": "Create GoHighLevel opportunity custom fields from a config file via the private-integration API.",
+  "type": "module",
+  "main": "create-fields.js",
+  "scripts": {
+    "verify": "node create-fields.js --verify",
+    "dry-run": "node create-fields.js --dry-run",
+    "create": "node create-fields.js",
+    "start": "node create-fields.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

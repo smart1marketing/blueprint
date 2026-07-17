@@ -1,0 +1,19 @@
+# Render Blueprint — runs the field creator once as a Job.
+# In Render: New + -> Blueprint -> connect this repo. Then set GHL_TOKEN and
+# GHL_LOCATION_ID as environment variables (sync:false means Render will prompt).
+#
+# A "job" runs to completion and stops (you are not paying for an always-on
+# web service). Trigger it manually from the Render dashboard whenever you want
+# to (re)run it — it is idempotent and skips fields that already exist.
+services:
+  - type: job
+    name: ghl-opportunity-fields
+    runtime: node
+    plan: free
+    buildCommand: "npm install"
+    startCommand: "node create-fields.js"
+    envVars:
+      - key: GHL_TOKEN
+        sync: false
+      - key: GHL_LOCATION_ID
+        sync: false
