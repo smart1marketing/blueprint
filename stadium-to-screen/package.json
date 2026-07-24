@@ -1,0 +1,15 @@
+{
+  "name": "stadium-to-screen",
+  "version": "1.0.0",
+  "description": "Smart 1 Marketing — Stadium to Screen proposal builder (Express + OpenAI on Render)",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

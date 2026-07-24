@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stadium to Screen — College & Pro Football Advertising | Smart 1 Marketing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --field-night:#0a1626;--field-deep:#060f1d;--field-panel:#0f2036;
+    --chalk:#f4f8fc;--steel:#8ba0b8;--steel-dim:#5f7691;
+    --electric:#1e9de3;--electric-soft:#4fbef2;--turf:#2fd07a;--turf-soft:#5ee39a;
+    --line:rgba(139,160,184,.16);--line-strong:rgba(139,160,184,.32);
+    --shadow:0 24px 60px -24px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Barlow',system-ui,sans-serif;background:var(--field-night);color:var(--chalk);line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  h1,h2,h3,.display{font-family:'Archivo',sans-serif;line-height:1.02;letter-spacing:-.01em}
+  .mono{font-family:'JetBrains Mono',monospace}
+  a{color:inherit;text-decoration:none}
+  ::selection{background:var(--turf);color:var(--field-deep)}
+  :focus-visible{outline:2px solid var(--turf-soft);outline-offset:3px;border-radius:4px}
+  .wrap{width:min(1160px,92vw);margin-inline:auto}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:var(--electric-soft)}
+  .eyebrow.turf{color:var(--turf-soft)}
+
+  header.nav{position:sticky;top:0;z-index:40;backdrop-filter:blur(14px);background:rgba(6,15,29,.72);border-bottom:1px solid var(--line)}
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:66px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:'Archivo';font-weight:800;letter-spacing:.02em}
+  .brand .mark{width:30px;height:30px;border-radius:8px;flex:none;background:linear-gradient(150deg,var(--electric),#0a63a8);display:grid;place-items:center;box-shadow:0 4px 14px -4px var(--electric)}
+  .brand .mark svg{width:17px;height:17px}
+  .brand b{font-weight:900;color:var(--electric-soft)} .brand span{color:var(--steel);font-weight:600}
+  .nav-links{display:flex;align-items:center;gap:30px}
+  .nav-links a{font-size:.9rem;font-weight:600;color:var(--steel);transition:color .2s}
+  .nav-links a:hover{color:var(--chalk)}
+  .btn{font-family:'Archivo';font-weight:700;font-size:.9rem;letter-spacing:.01em;padding:.62em 1.25em;border-radius:9px;border:0;cursor:pointer;display:inline-flex;align-items:center;gap:.5em;transition:transform .15s,box-shadow .2s,background .2s}
+  .btn-turf{background:var(--turf);color:#05230f;box-shadow:0 8px 22px -8px var(--turf)}
+  .btn-turf:hover{transform:translateY(-2px);box-shadow:0 14px 30px -10px var(--turf)}
+  .btn-ghost{background:transparent;color:var(--chalk);border:1px solid var(--line-strong)}
+  .btn-ghost:hover{border-color:var(--electric-soft);color:var(--electric-soft)}
+  @media(max-width:860px){.nav-links a:not(.btn){display:none}}
+
+  .hero{position:relative;padding:92px 0 70px;overflow:hidden}
+  .hero-field{position:absolute;inset:0;z-index:0;background:radial-gradient(120% 90% at 78% 10%,rgba(30,157,227,.20),transparent 55%),radial-gradient(90% 80% at 12% 96%,rgba(47,208,122,.14),transparent 55%),linear-gradient(180deg,var(--field-deep),var(--field-night))}
+  .hero-field::before{content:"";position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,transparent 0 118px,rgba(244,248,252,.05) 118px 120px);mask:linear-gradient(180deg,transparent 40%,#000 100%);transform:perspective(600px) rotateX(64deg);transform-origin:bottom;opacity:.7}
+  .hero-inner{position:relative;z-index:2;max-width:44ch}
+  .hero h1{font-size:clamp(2.6rem,6.4vw,4.4rem);font-weight:900;margin:18px 0 20px}
+  .hero h1 .to{background:linear-gradient(100deg,var(--electric-soft),var(--turf-soft));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p.lede{font-size:clamp(1.05rem,2.2vw,1.26rem);color:var(--steel);margin-bottom:30px}
+  .hero-cta{display:flex;flex-wrap:wrap;gap:14px}
+  .hero .btn{font-size:.98rem;padding:.82em 1.5em}
+  .trust{margin-top:34px;display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;color:var(--steel-dim);font-size:.82rem;font-weight:600}
+  .trust .plat{color:var(--chalk);font-family:'Archivo';font-weight:700;opacity:.85}
+  .trust .dot{width:4px;height:4px;border-radius:50%;background:var(--turf);flex:none}
+
+  section{position:relative;padding:80px 0}
+  .sec-head{max-width:62ch;margin-bottom:42px}
+  .sec-head h2{font-size:clamp(1.9rem,4vw,2.8rem);font-weight:800;margin:14px 0 14px}
+  .sec-head p{color:var(--steel);font-size:1.06rem}
+  .divider-lines{height:1px;background:repeating-linear-gradient(90deg,var(--line-strong) 0 26px,transparent 26px 40px)}
+
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  @media(max-width:820px){.grid-3{grid-template-columns:1fr}}
+  .card{background:linear-gradient(180deg,var(--field-panel),rgba(15,32,54,.4));border:1px solid var(--line);border-radius:16px;padding:26px 24px;transition:transform .25s,border-color .25s}
+  .card:hover{transform:translateY(-4px);border-color:var(--line-strong)}
+  .card .ic{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;margin-bottom:16px;background:rgba(30,157,227,.12);border:1px solid rgba(30,157,227,.3)}
+  .card .ic svg{width:22px;height:22px;stroke:var(--electric-soft)}
+  .card.turf .ic{background:rgba(47,208,122,.12);border-color:rgba(47,208,122,.32)}
+  .card.turf .ic svg{stroke:var(--turf-soft)}
+  .card h3{font-size:1.16rem;font-weight:700;margin-bottom:8px}
+  .card p{color:var(--steel);font-size:.95rem}
+  .stat-num{font-family:'Archivo';font-weight:900;font-size:2.3rem;line-height:1;background:linear-gradient(120deg,var(--electric-soft),var(--turf-soft));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  .pillars{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media(max-width:820px){.pillars{grid-template-columns:1fr}}
+  .pillar{background:linear-gradient(165deg,var(--field-panel),rgba(6,15,29,.6));border:1px solid var(--line);border-radius:18px;padding:32px 30px}
+  .pillar .tag{font-family:'JetBrains Mono';font-size:.7rem;letter-spacing:.2em;text-transform:uppercase}
+  .pillar.audio .tag{color:var(--electric-soft)} .pillar.ctv .tag{color:var(--turf-soft)}
+  .pillar h3{font-size:1.6rem;font-weight:800;margin:8px 0 14px}
+  .pillar>p{color:var(--steel);margin-bottom:20px}
+  .feat{list-style:none;display:grid;gap:11px}
+  .feat li{display:flex;gap:11px;font-size:.94rem}
+  .feat svg{width:18px;height:18px;flex:none;margin-top:3px}
+  .pillar.audio .feat svg{stroke:var(--electric-soft)} .pillar.ctv .feat svg{stroke:var(--turf-soft)}
+
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.compare{grid-template-columns:1fr}}
+  .col{border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+  .col-head{padding:16px 22px;font-family:'Archivo';font-weight:800;font-size:1.12rem;text-align:center}
+  .old .col-head{background:#20303f;color:var(--steel)}
+  .new .col-head{background:linear-gradient(90deg,var(--electric),#0a63a8);color:#fff}
+  .row{display:flex;gap:12px;padding:15px 22px;border-top:1px solid var(--line);font-size:.92rem}
+  .row b{display:block;color:var(--chalk);margin-bottom:2px} .row span{color:var(--steel)}
+  .row .x,.row .v{width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.8rem;margin-top:1px}
+  .row .x{background:rgba(139,160,184,.16);color:var(--steel)} .row .v{background:rgba(47,208,122,.16);color:var(--turf-soft)}
+
+  .board{background:linear-gradient(180deg,var(--field-panel),rgba(6,15,29,.5));border:1px solid var(--line-strong);border-radius:20px;padding:32px}
+  .gauges{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+  @media(max-width:820px){.gauges{grid-template-columns:1fr 1fr}}
+  .gauge{text-align:center}
+  .gauge .val{font-family:'Archivo';font-weight:900;font-size:2rem;line-height:1}
+  .gauge .val.g{color:var(--turf-soft)} .gauge .val.b{color:var(--electric-soft)}
+  .gauge .lab{font-family:'JetBrains Mono';font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--steel);margin-top:8px}
+
+  .toggle{display:inline-flex;background:var(--field-panel);border:1px solid var(--line);border-radius:12px;padding:5px;margin-bottom:32px}
+  .toggle button{font-family:'Archivo';font-weight:700;font-size:.92rem;padding:.6em 1.3em;border:0;border-radius:8px;background:transparent;color:var(--steel);cursor:pointer;transition:.2s}
+  .toggle button.on{background:var(--electric);color:#03233d}
+  .toggle button.on[data-mode="ctv"]{background:var(--turf);color:#05230f}
+  .packs{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media(max-width:760px){.packs{grid-template-columns:1fr}}
+  .pack{background:var(--field-panel);border:1px solid var(--line);border-radius:20px;padding:32px 30px;position:relative}
+  .pack.hero-pack{border-color:var(--turf);box-shadow:0 0 0 1px var(--turf),0 20px 50px -22px rgba(47,208,122,.5);background:linear-gradient(180deg,rgba(47,208,122,.06),var(--field-deep))}
+  .pack .flag{position:absolute;top:-12px;right:24px;background:var(--turf);color:#05230f;font-family:'Archivo';font-weight:800;font-size:.7rem;letter-spacing:.08em;padding:.35em .9em;border-radius:20px}
+  .pack .pk-name{font-family:'Archivo';font-weight:800;font-size:1.28rem}
+  .pack .price{font-family:'Archivo';font-weight:900;font-size:2.6rem;margin:8px 0 2px;line-height:1}
+  .pack .price small{font-family:'Barlow';font-weight:600;font-size:1rem;color:var(--steel)}
+  .pack .focus{font-size:.85rem;color:var(--steel-dim);margin-bottom:20px}
+  .pack ul{list-style:none;display:grid;gap:12px;margin-bottom:26px}
+  .pack ul li{display:flex;gap:11px;font-size:.94rem}
+  .pack ul li svg{width:18px;height:18px;flex:none;margin-top:3px;stroke:var(--turf-soft)}
+  .pack .btn{width:100%;justify-content:center}
+
+  #builder{background:linear-gradient(180deg,var(--field-deep),var(--field-night))}
+  .builder-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:28px;align-items:start}
+  @media(max-width:940px){.builder-grid{grid-template-columns:1fr}}
+  .form-card{background:var(--field-panel);border:1px solid var(--line-strong);border-radius:20px;padding:30px;position:sticky;top:82px}
+  @media(max-width:940px){.form-card{position:static}}
+  .field{margin-bottom:20px}
+  .field label{display:block;font-family:'JetBrains Mono';font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);margin-bottom:9px}
+  .seg{display:flex;gap:8px}
+  .seg button{flex:1;font-family:'Archivo';font-weight:700;font-size:.88rem;padding:.7em;border-radius:10px;border:1px solid var(--line-strong);background:transparent;color:var(--steel);cursor:pointer;transition:.18s}
+  .seg button.on{background:var(--electric);color:#03233d;border-color:var(--electric)}
+  .seg.tri button.on,.seg.scope button.on{background:var(--turf);color:#05230f;border-color:var(--turf)}
+  input[type=text]{width:100%;background:var(--field-deep);border:1px solid var(--line-strong);border-radius:10px;padding:.8em 1em;color:var(--chalk);font-family:'Barlow';font-size:1rem}
+  input[type=text]::placeholder{color:var(--steel-dim)}
+  .hint{font-size:.78rem;color:var(--steel-dim);margin-top:8px;min-height:1.1em}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+  .chip{font-size:.78rem;font-family:'Barlow';font-weight:600;background:var(--field-deep);border:1px solid var(--line-strong);color:var(--steel);padding:.35em .8em;border-radius:20px;cursor:pointer;transition:.15s}
+  .chip:hover{border-color:var(--turf);color:var(--chalk)}
+  #buildBtn{width:100%;justify-content:center;font-size:1rem;padding:.9em;margin-top:4px}
+
+  .proposal{background:linear-gradient(165deg,var(--field-panel),var(--field-deep));border:1px solid var(--line-strong);border-radius:20px;padding:32px;min-height:100%;position:relative;overflow:hidden}
+  .prop-empty{display:grid;place-items:center;text-align:center;min-height:340px;color:var(--steel-dim)}
+  .prop-empty svg{width:54px;height:54px;stroke:var(--steel-dim);margin-bottom:16px}
+  .prop-empty p{max-width:34ch;font-size:.95rem}
+  .prop-eyebrow{font-family:'JetBrains Mono';font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--turf-soft)}
+  .prop h3{font-size:1.85rem;font-weight:900;margin:8px 0 6px}
+  .prop-meta{font-family:'JetBrains Mono';font-size:.76rem;color:var(--steel);margin-bottom:20px}
+  .prop-meta b{color:var(--electric-soft)}
+  .block-title{font-family:'JetBrains Mono';font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--steel);margin:24px 0 12px;display:flex;align-items:center;gap:10px}
+  .block-title::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .metric{background:rgba(6,15,29,.6);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .metric.wide{grid-column:1/-1;border-color:var(--turf);background:rgba(47,208,122,.06)}
+  .metric .n{font-family:'Archivo';font-weight:900;font-size:1.35rem;color:var(--chalk)}
+  .metric.wide .n{color:var(--turf-soft);font-size:1.6rem}
+  .metric .l{font-family:'JetBrains Mono';font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-top:4px}
+  .device-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+  .device{background:rgba(6,15,29,.5);border:1px solid var(--line);border-radius:10px;padding:11px 8px;text-align:center}
+  .device .n{font-family:'Archivo';font-weight:800;font-size:1.02rem;color:var(--electric-soft)}
+  .device .l{font-size:.64rem;color:var(--steel);margin-top:3px}
+
+  .rec-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:560px){.rec-cols{grid-template-columns:1fr}}
+  .rec-list{list-style:none;display:grid;gap:7px}
+  .rec-list li{font-size:.9rem;display:flex;gap:8px;align-items:baseline}
+  .rec-list li::before{content:"▸";color:var(--turf-soft);font-size:.8rem}
+  .rec-list li em{color:var(--steel-dim);font-style:normal;font-size:.78rem}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono';font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;padding:.3em .7em;border-radius:20px;margin-left:auto}
+  .badge.ai{background:rgba(47,208,122,.14);color:var(--turf-soft)}
+  .badge.static{background:rgba(139,160,184,.14);color:var(--steel)}
+
+  .prop-rec{border:1px solid var(--turf);border-radius:14px;padding:18px 20px;background:rgba(47,208,122,.06);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin:24px 0 8px}
+  .prop-rec .rl{font-family:'JetBrains Mono';font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--steel)}
+  .prop-rec .rn{font-family:'Archivo';font-weight:800;font-size:1.12rem}
+  .prop-rec .rp{font-family:'Archivo';font-weight:900;font-size:1.45rem;color:var(--turf-soft)}
+  .prop-note{font-size:.88rem;color:var(--steel);margin-bottom:16px}
+  .prop-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .disclaimer{font-size:.72rem;color:var(--steel-dim);margin-top:18px;line-height:1.55;border-top:1px solid var(--line);padding-top:14px}
+
+  .spinner{display:grid;place-items:center;min-height:340px;text-align:center;color:var(--steel)}
+  .spinner .ball{width:40px;height:40px;border-radius:50%;border:3px solid var(--line-strong);border-top-color:var(--turf);animation:spin .8s linear infinite;margin:0 auto 16px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .final{text-align:center;padding:92px 0}
+  .final h2{font-size:clamp(2.4rem,6vw,4rem);font-weight:900;margin-bottom:18px}
+  .final p{color:var(--steel);font-size:1.12rem;max-width:46ch;margin:0 auto 14px}
+  .final .tagline{font-family:'Archivo';font-weight:800;font-size:1.25rem;color:var(--turf-soft);margin:26px 0 28px}
+  footer{border-top:1px solid var(--line);padding:26px 0;text-align:center;color:var(--steel-dim);font-size:.82rem}
+
+  .reveal-el{opacity:0;transform:translateY(16px);transition:opacity .55s,transform .55s}
+  .reveal-el.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto}.reveal-el{opacity:1;transform:none;transition:none}}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <div class="brand">
+      <span class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.2V16h6v-.3c0-.8.4-1.6 1-2.2A6 6 0 0 0 12 3Z" fill="#fff"/><rect x="9.5" y="17.2" width="5" height="1.6" rx=".8" fill="#fff"/><rect x="10.2" y="19.4" width="3.6" height="1.4" rx=".7" fill="#fff"/></svg></span>
+      SMART<b>1</b><span>MARKETING</span>
+    </div>
+    <nav class="nav-links">
+      <a href="#pillars">How It Works</a>
+      <a href="#packages">Packages</a>
+      <a href="#builder" class="btn btn-turf">Build Your Proposal</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-field" aria-hidden="true"></div>
+  <div class="wrap hero-inner">
+    <span class="eyebrow">College &amp; Pro Football · Streaming Audio + CTV</span>
+    <h1>From the Stadium<br><span class="to">to the Screen.</span></h1>
+    <p class="lede">Reach high-intent college and pro football fans across premium streaming audio and Connected TV — then follow them from the tailgate to the couch.</p>
+    <div class="hero-cta">
+      <a href="#builder" class="btn btn-turf">Build your proposal →</a>
+      <a href="#packages" class="btn btn-ghost">See the packages</a>
+    </div>
+    <div class="trust">
+      <span class="plat">Spotify</span><span class="dot"></span>
+      <span class="plat">Pandora</span><span class="dot"></span>
+      <span class="plat">iHeartRadio</span><span class="dot"></span>
+      <span>38 streaming platforms · 33 podcast networks · Connected TV</span>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><div class="divider-lines"></div></div>
+
+<section id="opportunity">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">The Opportunity</span>
+      <h2>Peak attention lives on football weekends.</h2>
+      <p>The modern fan is multi-screen — watching on the wall, tracking stats on a laptop, streaming from the stadium. To win, a brand has to be in the living room <em>and</em> the stadium.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+        <div class="stat-num">~100M</div>
+        <h3 style="margin-top:6px">Streaming live sports</h3>
+        <p>Projected monthly live-sports streamers — the most engaged audience in modern media.</p>
+      </div>
+      <div class="card">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
+        <h3>The streaming shift</h3>
+        <p>Fans stream pre-game commentary, live play-by-play, and post-game podcasts in the car, at work, and on smart speakers.</p>
+      </div>
+      <div class="card turf">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></div>
+        <h3>High-value buyers</h3>
+        <p>College and pro sports audio audiences skew affluent and home-owning — premium, high-intent consumers.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pillars">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Two Ways to Win</span>
+      <h2>Audio drives the emotion. The screen drives the action.</h2>
+      <p>Run them together for a 1-2 punch: an audio spot that lands the message, and a clickable, trackable visual that turns passive listening into web traffic.</p>
+    </div>
+    <div class="pillars">
+      <div class="pillar audio">
+        <span class="tag">Pillar 01 · Streaming Audio</span>
+        <h3>Precision Digital Audio</h3>
+        <p>Your message deployed across the most trusted streaming ecosystems and a curated network of top-tier sports podcasts.</p>
+        <ul class="feat">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>38 premium platforms</b> — Spotify, Pandora, iHeartRadio, Audacy.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>33 top sports podcast networks</b> for pre- and post-game.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>Clickable 300×250 companion banners</b> run with every spot.</span></li>
+        </ul>
+      </div>
+      <div class="pillar ctv">
+        <span class="tag">Pillar 02 · Connected TV (CTV/OTT)</span>
+        <h3>The Big-Screen Lean-Back</h3>
+        <p>Deliver unskippable, brand-safe video to the largest screen in the house — with the tracking of a digital campaign.</p>
+        <ul class="feat">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>:15 or :30 unskippable video</b> during live college &amp; pro streams.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>Household-level targeting</b> by geography and viewing habits.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span>Pairs with mobile <b>Venue Replay</b> stadium retargeting.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap"><div class="divider-lines"></div></div>
+
+<section id="compare">
+  <div class="wrap">
+    <div class="sec-head"><span class="eyebrow">The Difference</span><h2>Smarter than traditional radio and linear TV.</h2></div>
+    <div class="compare">
+      <div class="col old">
+        <div class="col-head">Traditional Radio / Linear TV</div>
+        <div class="row"><span class="x">✕</span><div><b>Targeting</b><span>Mass blast to a broad radius. Hope for the best.</span></div></div>
+        <div class="row"><span class="x">✕</span><div><b>Actionability</b><span>Zero clickability. Relies on memorizing a URL.</span></div></div>
+        <div class="row"><span class="x">✕</span><div><b>Measurement</b><span>Unmeasured estimations and loose ratings.</span></div></div>
+      </div>
+      <div class="col new">
+        <div class="col-head">Stadium to Screen</div>
+        <div class="row"><span class="v">✓</span><div><b>Targeting</b><span>1st/3rd-party data. Verified fans by behavior and location.</span></div></div>
+        <div class="row"><span class="v">✓</span><div><b>Actionability</b><span>100% clickable companion banners drive trackable traffic.</span></div></div>
+        <div class="row"><span class="v">✓</span><div><b>Measurement</b><span>Exact listen-through, banner clicks, cost-per-acquisition.</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="scoreboard">
+  <div class="wrap">
+    <div class="sec-head"><span class="eyebrow">The Scoreboard</span><h2>The prestige of live sports, the accountability of performance marketing.</h2></div>
+    <div class="board">
+      <div class="gauges">
+        <div class="gauge"><div class="val g">96%</div><div class="lab">Audio Completion</div></div>
+        <div class="gauge"><div class="val b">2.5%</div><div class="lab">Banner CTR</div></div>
+        <div class="gauge"><div class="val g">$18.50</div><div class="lab">Cost / Acquisition</div></div>
+        <div class="gauge"><div class="val b">10–18:1</div><div class="lab">Return on Ad Spend</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="packages">
+  <div class="wrap">
+    <div class="sec-head"><span class="eyebrow turf">Choose Your Playbook</span><h2>Two products. Four ways to play.</h2><p>Start with streaming audio, go big with Connected TV, or run both for full-field coverage. Pricing is monthly.</p></div>
+    <div class="toggle">
+      <button data-mode="audio" class="on" onclick="setPack('audio')">Streaming Audio</button>
+      <button data-mode="ctv" onclick="setPack('ctv')">Connected TV / OTT</button>
+    </div>
+    <div class="packs" id="pack-audio">
+      <div class="pack">
+        <div class="pk-name">The Tailgater</div><div class="price">$2,500<small> / mo</small></div>
+        <div class="focus">The complete audio flow, Thursday through Monday.</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>The complete 3-block audio flow (Thurs–Mon)</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>3 custom audio spots produced</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>300×250 clickable companion banners</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>38 platforms &amp; 33 podcast networks</li>
+        </ul>
+        <a href="#builder" class="btn btn-ghost">Build this plan</a>
+      </div>
+      <div class="pack hero-pack">
+        <span class="flag">MOST LOCAL REACH</span>
+        <div class="pk-name">The Champion</div><div class="price">$4,500<small> / mo</small></div>
+        <div class="focus">Everything in Tailgater, plus stadium-level targeting.</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><b>Everything in The Tailgater, plus:</b></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Stadium Display Add-On (Location Lookback)</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Capture device IDs at the stadium Saturday</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Retarget those fans Sunday &amp; Monday</li>
+        </ul>
+        <a href="#builder" class="btn btn-turf">Build this plan</a>
+      </div>
+    </div>
+    <div class="packs" id="pack-ctv" style="display:none">
+      <div class="pack">
+        <div class="pk-name">The Alumni</div><div class="price">$3,500<small> / mo</small></div>
+        <div class="focus">Baseline CTV penetration and standard digital display.</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>High-impact CTV video impressions</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Standard programmatic display retargeting</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Standard campaign reporting</li>
+        </ul>
+        <a href="#builder" class="btn btn-ghost">Build this plan</a>
+      </div>
+      <div class="pack hero-pack">
+        <span class="flag">RECOMMENDED</span>
+        <div class="pk-name">The Championship</div><div class="price">$6,000<small> / mo</small></div>
+        <div class="focus">Ultimate multi-screen saturation and stadium capture.</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Premium CTV impressions (highest-tier inventory)</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><b>$2,000 dedicated to Venue Replay targeting</b></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Direct targeting of attendees &amp; tailgaters</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Maximum frequency and localized dominance</li>
+        </ul>
+        <a href="#builder" class="btn btn-turf">Build this plan</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="builder">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow turf">Draw Up Your Play</span>
+      <h2>Build your proposal.</h2>
+      <p>Pick your team and targeting scope. We'll size the audience from market data and generate a matching media plan — services, podcasts, networks, and adjacent audiences.</p>
+    </div>
+    <div class="builder-grid">
+      <div class="form-card">
+        <div class="field">
+          <label>1 · League</label>
+          <div class="seg" id="seg-league">
+            <button class="on" data-val="college" onclick="pickLeague('college')">College</button>
+            <button data-val="pro" onclick="pickLeague('pro')">Pro</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>2 · Your team</label>
+          <input type="text" id="teamInput" list="teamList" placeholder="Start typing a team…" autocomplete="off" oninput="onTeamType()">
+          <datalist id="teamList"></datalist>
+          <div class="hint" id="teamHint"></div>
+          <div class="chips" id="teamChips"></div>
+        </div>
+        <div class="field">
+          <label>3 · Targeting scope</label>
+          <div class="seg scope" id="seg-scope">
+            <button class="on" data-val="local" onclick="pickScope('local')">Local</button>
+            <button data-val="regional" onclick="pickScope('regional')">Regional</button>
+            <button data-val="national" onclick="pickScope('national')">National</button>
+          </div>
+          <div class="hint" id="scopeHint">Local = the stadium's DMA (media market).</div>
+        </div>
+        <div class="field">
+          <label>4 · Channel focus</label>
+          <div class="seg tri" id="seg-focus">
+            <button class="on" data-val="audio" onclick="pickFocus('audio')">Audio</button>
+            <button data-val="ctv" onclick="pickFocus('ctv')">CTV</button>
+            <button data-val="both" onclick="pickFocus('both')">Both</button>
+          </div>
+        </div>
+        <button class="btn btn-turf" id="buildBtn" onclick="buildProposal()">Build my game plan →</button>
+      </div>
+
+      <div class="proposal" id="proposal" aria-live="polite">
+        <div class="prop-empty" id="propEmpty">
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M4 4h16v12H5.5L4 18V4Z"/><path d="M8 9h8M8 12h5"/></svg>
+            <p>Your custom game plan appears here — audience sizing plus a matched media plan.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <span class="eyebrow turf">Kickoff is coming</span>
+    <h2>Secure your spot<br>on the roster.</h2>
+    <p>Flight dates are booking now for the upcoming college and pro football season. Don't leave your brand's biggest opportunity on the sidelines.</p>
+    <div class="tagline">"Strong partnerships create smarter marketing."</div>
+    <a href="#builder" class="btn btn-turf">Talk to a strategist</a>
+  </div>
+</section>
+
+<footer><div class="wrap">Smart 1 Marketing · Stadium to Screen — College &amp; Pro Football Audio + CTV Packages · [Contact information / representative details]</div></footer>
+
+<script src="data.js"></script>
+<script>
+const D = window.S1_DATA;
+let state = { league:"college", scope:"local", focus:"audio" };
+
+/* ---------- number formatting ---------- */
+function fmt(n){
+  if(n==null||isNaN(n)) return "—";
+  if(n>=1e6) return (n/1e6).toFixed(n>=1e7?1:2).replace(/\.0+$/,"")+"M";
+  if(n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1).replace(/\.0$/,"")+"K";
+  return String(n);
+}
+
+/* ---------- packages toggle ---------- */
+function setPack(mode){
+  document.getElementById('pack-audio').style.display = mode==='audio'?'grid':'none';
+  document.getElementById('pack-ctv').style.display = mode==='ctv'?'grid':'none';
+  document.querySelectorAll('#packages .toggle button').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
+}
+
+/* ---------- builder inputs ---------- */
+function seg(id,val){ document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.dataset.val===val)); }
+function pickLeague(v){ state.league=v; seg('seg-league',v); refreshTeams(); document.getElementById('teamInput').value=''; onTeamType(); }
+function pickFocus(v){ state.focus=v; seg('seg-focus',v); }
+function pickScope(v){
+  state.scope=v; seg('seg-scope',v);
+  const h={local:"Local = the stadium's DMA (media market).",regional:"Regional = the team's home state.",national:"National = across the United States."};
+  document.getElementById('scopeHint').textContent=h[v];
+}
+function refreshTeams(){
+  const dl=document.getElementById('teamList'); dl.innerHTML='';
+  (D.TEAMS[state.league]||[]).forEach(t=>{const o=document.createElement('option');o.value=t.name;dl.appendChild(o);});
+  const chips=document.getElementById('teamChips'); chips.innerHTML='';
+  const picks = state.league==='college'
+    ? ["Ohio State Buckeyes","Georgia Bulldogs","Texas Longhorns","Alabama Crimson Tide"]
+    : ["Kansas City Chiefs","Dallas Cowboys","Philadelphia Eagles","Cleveland Browns"];
+  picks.forEach(name=>{const c=document.createElement('button');c.className='chip';c.textContent=name.replace(/ (Buckeyes|Bulldogs|Longhorns|Crimson Tide)$/,'');c.onclick=()=>{document.getElementById('teamInput').value=name;onTeamType();};chips.appendChild(c);});
+}
+function onTeamType(){
+  const t=D.findTeam(state.league,document.getElementById('teamInput').value);
+  document.getElementById('teamHint').innerHTML = t
+    ? `✓ <b style="color:var(--turf-soft)">${t.venue}</b> · ${t.city} · ${t.dma} DMA`
+    : "Type any of the loaded teams — city and stadium autofill.";
+}
+
+/* ---------- build ---------- */
+async function buildProposal(){
+  const raw=document.getElementById('teamInput').value.trim();
+  const team=D.findTeam(state.league,raw);
+  const box=document.getElementById('proposal');
+  if(!team){ document.getElementById('teamInput').focus(); document.getElementById('teamHint').innerHTML='<span style="color:#ff9a9a">Pick a team from the list to build a plan.</span>'; return; }
+
+  const m = D.computeMetrics(team, state.scope);
+  const pkg = D.recommendPackage(state.focus);
+
+  // loading state while we fetch AI-matched lists
+  box.innerHTML = `<div class="spinner"><div class="ball"></div><div>Sizing the ${m.scopeLabel} audience and matching inventory…</div></div>`;
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+
+  // fetch AI recommendations from the backend; fall back to static lists offline
+  let rec, aiGenerated=false;
+  try{
+    const r = await fetch('/api/recommendations',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({league:state.league,team:team.name,focus:state.focus,scope:state.scope})});
+    if(!r.ok) throw new Error('bad status');
+    const j = await r.json(); rec=j.recommendations; aiGenerated=j.aiGenerated;
+  }catch(e){ rec = D.fallbackRecommendations(state.focus); aiGenerated=false; }
+
+  render(team,m,pkg,rec,aiGenerated);
+}
+
+function list(items,sub){ return (items||[]).map(i=>`<li>${i.name}${i[sub]?` <em>· ${i[sub]}</em>`:''}</li>`).join('') || '<li><em>None matched</em></li>'; }
+
+function render(team,m,pkg,rec,ai){
+  const wantAudio = state.focus==='audio'||state.focus==='both';
+  const scopeName = {local:'Local',regional:'Regional',national:'National'}[state.scope];
+  const badge = ai?'<span class="badge ai">◆ AI-matched</span>':'<span class="badge static">Curated fallback</span>';
+
+  const podcastsBlock = wantAudio ? `
+    <div class="block-title">Suggested podcasts (DSP) ${badge}</div>
+    <ul class="rec-list">${list(rec.podcasts,'network')}</ul>` : '';
+
+  document.getElementById('proposal').innerHTML = `
+    <div class="prop">
+      <div class="prop-eyebrow">Proposed Game Plan · ${scopeName} · ${state.league==='pro'?'pro':'college'} football</div>
+      <h3>The ${team.name} Play</h3>
+      <div class="prop-meta"><b>${m.scopeLabel}</b> &nbsp;·&nbsp; ${team.venue} &nbsp;·&nbsp; targeting ${m.geo}</div>
+
+      <div class="block-title">Audience size <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--steel-dim)">— modeled from market data</span></div>
+      <div class="metrics">
+        <div class="metric"><div class="n">${fmt(m.fanBase)}</div><div class="l">Est. reachable fan base</div></div>
+        <div class="metric"><div class="n">${fmt(m.households)}</div><div class="l">Households in scope</div></div>
+      </div>
+      <div class="device-row">
+        <div class="device"><div class="n">${fmt(m.devices.phones)}</div><div class="l">Phones</div></div>
+        <div class="device"><div class="n">${fmt(m.devices.computers)}</div><div class="l">Computers</div></div>
+        <div class="device"><div class="n">${fmt(m.devices.tablets)}</div><div class="l">Tablets</div></div>
+        <div class="device"><div class="n">${fmt(m.devices.connectedTV)}</div><div class="l">Connected TV</div></div>
+      </div>
+      <div class="metrics" style="margin-top:10px">
+        <div class="metric wide"><div class="n">${fmt(m.matchable)}</div><div class="l">Realistically matchable programmatic audience (devices)</div></div>
+      </div>
+
+      <div class="block-title">Matched streaming services ${badge}</div>
+      <ul class="rec-list">${list(rec.streamingServices,'why')}</ul>
+      ${podcastsBlock}
+      <div class="rec-cols" style="margin-top:4px">
+        <div>
+          <div class="block-title">Sports networks</div>
+          <ul class="rec-list">${list(rec.sportsNetworks,'why')}</ul>
+        </div>
+        <div>
+          <div class="block-title">Related audiences</div>
+          <ul class="rec-list">${list(rec.relatedAudiences,'why')}</ul>
+        </div>
+      </div>
+
+      <div class="prop-rec">
+        <div><div class="rl">Recommended package</div><div class="rn">${pkg.name}</div></div>
+        <div class="rp">${pkg.price}</div>
+      </div>
+      <div class="prop-note">${pkg.note}</div>
+
+      <div class="prop-actions">
+        <a href="#" class="btn btn-turf" id="sendProp">Send me this proposal</a>
+        <a href="#packages" class="btn btn-ghost">Compare packages</a>
+      </div>
+
+      <div class="disclaimer">
+        Audience figures are <b>modeled planning estimates</b> — computed from baseline market data (Nielsen-style DMA / Census households) and industry-average device and match-rate assumptions, not guaranteed delivery. Streaming, podcast, network, and audience lists are ${ai?'AI-generated suggestions':'curated suggestions'} to validate against live DSP availability. A Smart 1 strategist confirms exact inventory, reach, and pricing for ${team.name} on your call.
+      </div>
+    </div>`;
+
+  document.getElementById('sendProp').addEventListener('click',e=>{e.preventDefault();e.target.textContent='A strategist will follow up ✓';e.target.style.pointerEvents='none';});
+}
+
+/* ---------- scroll reveal ---------- */
+const io=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}}),{threshold:.14});
+document.querySelectorAll('.card,.pillar,.pack,.gauge,.col').forEach(el=>{el.classList.add('reveal-el');io.observe(el);});
+
+refreshTeams(); onTeamType();
+</script>
+</body>
+</html>

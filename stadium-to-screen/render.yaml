@@ -1,0 +1,15 @@
+# Render Blueprint — deploys the app as a Web Service.
+# In Render: New + > Blueprint > connect this GitHub repo.
+# Then add the OPENAI_API_KEY value in the dashboard (it is not stored in git).
+services:
+  - type: web
+    name: stadium-to-screen
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false          # you paste this secret in the Render dashboard
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini   # change to any chat model you have access to
