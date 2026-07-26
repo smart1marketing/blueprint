@@ -20,7 +20,34 @@ import { enqueue, getJob, listJobs, startWorkerLoop } from './jobs';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.OUTPUT_DIR ?? path.join(ROOT, 'out');
+const PUBLIC = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT ?? 3000);
+
+/**
+ * Sites allowed to iframe the embed. Browsers block framing unless the framed
+ * page permits it, so the Simvoly domain must be listed here or the embed
+ * renders as a blank box with a console error and no other clue.
+ */
+const FRAME_ANCESTORS = (process.env.ALLOWED_FRAME_ANCESTORS ?? "'self'")
+  .split(/[\s,]+/)
+  .filter(Boolean)
+  .join(' ');
+
+/** Origins allowed to POST to the API. The embed fetches same-origin, but a
+ *  customer pasting the form markup directly into their page would not. */
+const CORS_ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(/[\s,]+/)
+  .filter(Boolean);
+
+function corsHeaders(origin?: string): Record<string, string> {
+  if (!origin || !CORS_ORIGINS.includes(origin)) return {};
+  return {
+    'access-control-allow-origin': origin,
+    'access-control-allow-methods': 'POST, GET, OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'access-control-max-age': '86400',
+  };
+}
 
 /** Render sets PORT and expects the process to bind 0.0.0.0. */
 const HOST = '0.0.0.0';
@@ -36,11 +63,17 @@ const MIME: Record<string, string> = {
   '.svg': 'image/svg+xml',
 };
 
-function json(res: http.ServerResponse, code: number, body: unknown): void {
+function json(
+  res: http.ServerResponse,
+  code: number,
+  body: unknown,
+  extra: Record<string, string> = {},
+): void {
   const payload = JSON.stringify(body, null, 2);
   res.writeHead(code, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(payload),
+    ...extra,
   });
   res.end(payload);
 }
@@ -84,6 +117,57 @@ const server = http.createServer(async (req, res) => {
         uptime: Math.round(process.uptime()),
         queued: listJobs().filter((j) => j.status === 'queued').length,
       });
+    }
+
+    // The embeddable intake form. Framed by the customer's marketing site, so
+    // it sets frame-ancestors rather than relying on the default.
+    if (route === 'GET /embed' || route === 'GET /embed.html') {
+      const file = path.join(PUBLIC, 'embed.html');
+      if (!fs.existsSync(file)) return json(res, 404, { error: 'Embed page not built' });
+      const html = fs.readFileSync(file, 'utf8');
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'content-security-policy': `frame-ancestors ${FRAME_ANCESTORS}`,
+        // X-Frame-Options has no allow-list beyond a single origin, and CSP
+        // supersedes it in every browser we care about. Setting it here would
+        // only break multi-domain embedding.
+        'cache-control': 'public, max-age=300',
+      });
+      return res.end(html);
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, corsHeaders(req.headers.origin));
+      return res.end();
+    }
+
+    // Intake submissions from the embedded form.
+    if (route === 'POST /api/requests') {
+      const cors = corsHeaders(req.headers.origin);
+      const body = JSON.parse(await readBody(req, 200_000)) as Record<string, any>;
+
+      // Silently accept honeypot hits. Telling a bot it was detected just
+      // teaches whoever wrote it to leave the field alone next time.
+      if (body.honeypot) {
+        return json(res, 200, { requestId: `AD-${new Date().getFullYear()}-000000` }, cors);
+      }
+
+      const missing = ['business', 'website', 'contact', 'email', 'campaignName', 'promoting']
+        .filter((k) => !String(body[k] ?? '').trim());
+      if (missing.length) {
+        return json(res, 400, { error: `Missing required fields: ${missing.join(', ')}` }, cors);
+      }
+
+      const requestId = `AD-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+      const record = { requestId, receivedAt: new Date().toISOString(), ...body };
+      const dir = path.join(OUT, 'requests');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${requestId}.json`), JSON.stringify(record, null, 2));
+      console.log(`[intake] ${requestId} ${body.business} <${body.email}>`);
+
+      // TODO: push to HighLevel as a Creative Request custom object, kick off
+      // Brandfetch discovery, and send the confirmation email.
+      return json(res, 201, { requestId, status: 'received' }, cors);
     }
 
     if (route === 'POST /api/render') {

@@ -7,7 +7,7 @@
 
 services:
   - type: web
-    name: smart1-ad-builder
+    name: adbuilder
     runtime: node
     plan: starter          # sharp + font parsing need more than free tier gives
     region: ohio
@@ -35,6 +35,12 @@ services:
         value: smart1-ads
       - key: CLOUDINARY_FOLDER_MODE
         value: fixed
+      # Origins permitted to iframe /embed. Without the Simvoly hostname here,
+      # the browser blocks the frame and the visitor sees an empty box.
+      - key: ALLOWED_FRAME_ANCESTORS
+        value: "'self' https://smart1marketing.com https://www.smart1marketing.com"
+      - key: ALLOWED_ORIGINS
+        sync: false
     # Rendered files are written to disk before upload. Without a disk they
     # vanish on every deploy, and /files/ 404s for anything from a prior boot.
     disk:
