@@ -11,6 +11,7 @@ Results are gated behind a name, firm, email, and phone capture, so the tool dou
 | `server.js` | Express server: OpenAI proxy, PDF endpoint, lead capture, GHL delivery, rate limiting |
 | `pdf.js` | Branded PDF report generator (PDFKit — no headless browser, runs on Render's small instances) |
 | `cloudinary.js` | Signed Cloudinary upload for generated reports (no SDK, no dependencies) |
+| `ghl.js` | GoHighLevel client: contact upsert, PDF attach to custom field, summary note |
 | `public/index.html` | Landing-page frame (nav, hero, footer) plus the five-step questionnaire and report |
 | `public/app.js` | Benchmark data, scoring model, all calculations, rendering |
 | `public/styles.css` | Smart 1 design system matched to the partner landing page, plus a print stylesheet |
@@ -81,7 +82,8 @@ git push -u origin main
   - `LEAD_WEBHOOK_URL` — optional; every captured lead is POSTed here as JSON
   - `EMBED_ALLOWED_ORIGINS` — optional; space-separated domains allowed to iframe the audit
   - `GHL_WEBHOOK_URL` — Smart 1 Suite inbound webhook (see below)
-  - `GHL_API_KEY` / `GHL_LOCATION_ID` — optional; GHL API v2 contact upsert
+  - `GHL_API_KEY` / `GHL_LOCATION_ID` — GHL API v2 contact upsert and PDF attach
+  - `GHL_PDF_FIELD_ID` — file custom field on Contact that receives the PDF
   - `PUBLIC_BASE_URL` — your real domain, used to build PDF links
   - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` — PDF storage (recommended)
   - `PDF_DIR` — local fallback storage; point at a mounted disk for durable links
@@ -178,9 +180,9 @@ Check which mode is live at `/api/health` — look for `"pdfStorage": "cloudinar
 
 ## Sending leads to Smart 1 Suite (GoHighLevel)
 
-Two paths. The webhook is simpler and is what most GHL setups use; the API gives you a real contact record with a note attached.
+Two paths, and they can run together. The webhook is the simplest and fires workflows; the API is what attaches the PDF file to the contact record.
 
-### Option A — inbound webhook (recommended)
+### Option A — inbound webhook (simplest)
 
 In Smart 1 Suite: **Automation → Workflows → Create Workflow → Add New Trigger → Inbound Webhook**. Copy the URL and set it as `GHL_WEBHOOK_URL` in Render.
 
@@ -211,15 +213,38 @@ In the workflow, map those into contact fields, then use `auditPdfUrl` in an ema
 
 Each audit fires the webhook **twice**: once at `"stage": "started"` when the gate is submitted, and again at `"stage": "completed"` once the PDF exists. That way a visitor who closes the tab mid-analysis is still captured. Either filter on `stage` in the workflow, or upsert by email so the second hit updates the same contact.
 
-### Option B — GHL API v2
+### Option B — GHL API v2, with the PDF attached to the contact
 
-Set `GHL_API_KEY` (a Private Integration token from **Settings → Private Integrations**, scoped to `contacts.write`) and `GHL_LOCATION_ID` (**Settings → Business Profile**). The server upserts the contact, tags it `marketing-efficiency-audit` and `cpa-partner-referral`, and attaches a note containing the score, tier, spend, partner name, and the PDF link.
+This is the path that puts the actual file on the contact record rather than a link. Three calls run per completed audit: upsert the contact, attach the PDF to a file custom field, then write a note with the score summary.
 
-Both options can run at once. Confirm what's live at `/api/health`:
+**1. Create the custom field.** In Smart 1 Suite: **Settings → Custom Fields → Add Field → File Upload**, with Object Type **Contact**. Name it something like `Marketing Audit Report`. Allow PDF, and allow multiple files if partners will run more than one audit — otherwise each new report replaces the last.
+
+**2. Get the field ID.** Open the field in Settings and copy the ID from the browser URL, or call `GET /locations/{locationId}/customFields?model=contact` with your token and find it by name. Set it as `GHL_PDF_FIELD_ID`. If you'd rather not hunt for the ID, set `GHL_PDF_FIELD_KEY` to the field's key instead and the server resolves it once on first use and caches it.
+
+**3. Create the token.** **Settings → Private Integrations → Create**, with scopes `contacts.write`, `contacts.readonly`, `locations/customFields.readonly`, and `objects/record.write`. Copy the token to `GHL_API_KEY`. Your sub-account ID from **Settings → Business Profile** goes in `GHL_LOCATION_ID`.
+
+```
+GHL_API_KEY=pit-...
+GHL_LOCATION_ID=ve9EPM428h8vShlRW1KT
+GHL_PDF_FIELD_ID=1c8Xn9...
+```
+
+The upload uses `POST /forms/upload-custom-files?contactId=…&locationId=…` with the PDF as a multipart field named `<fieldId>_<uuid>`. Some accounts want the bare `<fieldId>` instead, so that's retried automatically if the first form fails. GHL caps these at 50 MB; audit reports run about 45 KB.
+
+The contact is tagged `marketing-efficiency-audit` and `cpa-partner-referral`, and the note records the client business, partner name and firm, score, tier, warning-sign points, monthly spend, and whether the PDF attached.
+
+**Failures are isolated.** If the attachment fails, the contact and note are still created and the note says so, with the Cloudinary link included as a fallback. Nothing in the GHL path can block the visitor's own download. Watch your Render logs for `ghl pdf attach failed:` with the API's reason.
+
+Verify what's live at `/api/health`:
 
 ```json
-{"ok":true,"aiEnabled":true,"pdfEnabled":true,"ghl":{"webhook":true,"api":false}}
+{"ok":true,"aiEnabled":true,"pdfEnabled":true,"pdfStorage":"cloudinary",
+ "ghl":{"webhook":true,"api":true,"pdfAttach":true}}
 ```
+
+`pdfAttach: false` with `api: true` means the token and location are set but the field ID isn't — you'll get contacts and notes, but no attached file. Each completed audit also logs a line like `GHL: {"contactId":"...","attached":true,"noted":true}`.
+
+Options A and B can run together: use the webhook to fire a workflow (email the partner, notify a rep) while the API attaches the file.
 
 ## Legacy generic webhook
 

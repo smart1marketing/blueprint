@@ -32,9 +32,13 @@ services:
       - key: GHL_WEBHOOK_URL
         sync: false          # Smart 1 Suite inbound webhook URL
       - key: GHL_API_KEY
-        sync: false          # optional: GHL API v2 private integration token
+        sync: false          # GHL private integration token (needed to attach the PDF)
       - key: GHL_LOCATION_ID
-        sync: false          # optional: required with GHL_API_KEY
+        sync: false          # required with GHL_API_KEY
+      - key: GHL_PDF_FIELD_ID
+        sync: false          # file-upload custom field that receives the PDF
+      - key: GHL_PDF_FIELD_KEY
+        sync: false          # optional alternative to GHL_PDF_FIELD_ID
       - key: LEAD_WEBHOOK_URL
         sync: false          # optional: Zapier / Make
       # --- Misc ---

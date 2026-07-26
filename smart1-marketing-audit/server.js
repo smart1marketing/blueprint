@@ -16,6 +16,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { buildAuditPdf } = require('./pdf');
 const cloudinary = require('./cloudinary');
+const ghl = require('./ghl');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -206,7 +207,8 @@ app.get('/api/health', (req, res) => {
     pdfStorage: cloudinary.isConfigured() ? 'cloudinary' : 'local-disk',
     ghl: {
       webhook: Boolean(GHL_WEBHOOK_URL),
-      api: Boolean(GHL_API_KEY && GHL_LOCATION_ID),
+      api: ghl.isConfigured(),
+      pdfAttach: ghl.canAttach(),
     },
   });
 });
@@ -271,15 +273,6 @@ app.post('/api/analyze', async (req, res) => {
    Lead delivery: generic webhook + GoHighLevel (Smart 1 Suite)
 ---------------------------------------------------------------- */
 const GHL_WEBHOOK_URL = process.env.GHL_WEBHOOK_URL;
-const GHL_API_KEY = process.env.GHL_API_KEY;
-const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
-const GHL_API = 'https://services.leadconnectorhq.com';
-
-function splitName(full = '') {
-  const parts = String(full).trim().split(/\s+/);
-  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') || '' };
-}
-
 /** Flat payload sent to the GHL inbound webhook and any generic webhook. */
 function leadPayload(body = {}, pdfUrl) {
   const snap = body.client || body.snapshot || {};
@@ -315,47 +308,20 @@ async function postJson(url, body, headers = {}) {
   return r.json().catch(() => ({}));
 }
 
-/** Upsert the contact in GHL and attach a note holding the audit summary + PDF link. */
-async function ghlUpsert(payload) {
-  if (!GHL_API_KEY || !GHL_LOCATION_ID) return null;
-  const headers = { Authorization: `Bearer ${GHL_API_KEY}`, Version: '2021-07-28' };
-  const { firstName, lastName } = splitName(payload.name || payload.partnerName);
-
-  const contact = await postJson(`${GHL_API}/contacts/upsert`, {
-    locationId: GHL_LOCATION_ID,
-    firstName, lastName,
-    email: payload.email || undefined,
-    phone: payload.phone || undefined,
-    companyName: payload.firm || payload.partnerFirm || undefined,
-    source: 'Marketing Efficiency Audit',
-    tags: ['marketing-efficiency-audit', 'cpa-partner-referral'],
-  }, headers);
-
-  const id = contact?.contact?.id || contact?.id;
-  if (!id) return contact;
-
-  const note = [
-    `Marketing Efficiency Audit — ${payload.clientBusiness || 'client'} (${payload.clientIndustry || 'industry not given'})`,
-    `Prepared by: ${payload.partnerName || '—'}${payload.partnerFirm ? ` (${payload.partnerFirm})` : ''}`,
-    `Efficiency Score: ${payload.efficiencyScore ?? '—'}/100 — ${payload.scoreTier || ''}`,
-    `Warning signs: ${payload.leakPoints ?? '—'}/30 — ${payload.leakTier || ''}`,
-    `Monthly marketing spend: ${payload.monthlyMarketingSpend != null ? '$' + Number(payload.monthlyMarketingSpend).toLocaleString('en-US') : '—'}`,
-    payload.auditPdfUrl ? `PDF report: ${payload.auditPdfUrl}` : 'PDF report: pending',
-  ].join('\n');
-
-  await postJson(`${GHL_API}/contacts/${id}/notes`, { body: note }, headers).catch((e) =>
-    console.error('ghl note failed:', e.message));
-  return contact;
-}
-
-async function deliverLead(body, pdfUrl) {
+async function deliverLead(body, pdfUrl, pdfBuffer, filename) {
   const payload = leadPayload(body, pdfUrl);
   console.log('LEAD:', JSON.stringify(payload));
 
   const jobs = [];
   if (LEAD_WEBHOOK_URL) jobs.push(postJson(LEAD_WEBHOOK_URL, payload).catch((e) => console.error('lead webhook failed:', e.message)));
   if (GHL_WEBHOOK_URL) jobs.push(postJson(GHL_WEBHOOK_URL, payload).catch((e) => console.error('ghl webhook failed:', e.message)));
-  if (GHL_API_KEY && GHL_LOCATION_ID) jobs.push(ghlUpsert(payload).catch((e) => console.error('ghl api failed:', e.message)));
+  if (ghl.isConfigured()) {
+    jobs.push(
+      ghl.sendAudit(payload, pdfBuffer, filename)
+        .then((r) => console.log('GHL:', JSON.stringify(r)))
+        .catch((e) => console.error('ghl api failed:', e.message))
+    );
+  }
   await Promise.allSettled(jobs);
   return payload;
 }
@@ -421,7 +387,7 @@ app.post('/api/report', async (req, res) => {
       url = `${baseUrl(req)}/audit/${name}`;
     }
 
-    deliverLead({ ...(payload.lead || {}), ...payload, client: payload.snapshot }, url)
+    deliverLead({ ...(payload.lead || {}), ...payload, client: payload.snapshot }, url, buf, name)
       .catch((e) => console.error('lead delivery failed:', e.message));
 
     res.json({ ok: true, url, filename: name, bytes: buf.length, storage });
