@@ -117,6 +117,57 @@ Amazon.
 the OpenAI creative director. The model picks a `layout_family` and writes copy
 per size. It never emits coordinates.
 
+## Deploying to Render
+
+| Setting | Value |
+|---|---|
+| Build command | `npm ci --include=dev && npm run build` |
+| Start command | `npm start` |
+| Health check path | `/healthz` |
+| Node version | 22 |
+
+`render.yaml` in the repo root is a blueprint with the same settings plus the
+env vars and disk.
+
+Three things that will bite you if changed:
+
+**`--include=dev` is required.** Render sets `NODE_ENV=production`, which makes
+`npm ci` skip devDependencies — and `typescript` is a devDependency, so the
+build fails with "tsc: not found" without it.
+
+**The build is two steps, not just `tsc`.** `tsc` compiles `.ts` and ignores
+everything else, so the template and platform JSON that the registry reads at
+runtime never reaches `dist/`. `npm run build` runs `scripts/copy-assets.mjs`
+afterwards to copy them. Running bare `tsc` produces a build that crashes on
+first request.
+
+**Attach the disk.** Creatives are written to `OUTPUT_DIR` before upload. With
+no disk, they vanish on every deploy and `/files/` 404s for anything rendered
+before the last restart.
+
+### Endpoints
+
+```
+GET  /healthz                  liveness; cheap, touches no external service
+POST /api/render               { campaign, platforms[], upload } -> 202 + jobId
+GET  /api/render/:id           job status, results, report paths
+GET  /files/<path>             rendered creatives and reports
+```
+
+`POST /api/render` validates synchronously and returns 422 with findings if the
+campaign is bad, so a missing brand font is an immediate error rather than a job
+that fails in the background. Valid jobs return 202 and are rendered off the
+request path.
+
+### The worker is not deployable yet
+
+`render.yaml` has the Background Worker commented out. The queue is in-memory,
+so a separate worker process would have its own queue and never see jobs from
+the web service. Leave `WORKER_MODE` unset and the queue runs in-process. Move
+the queue to Render Key Value before splitting them — and note that jobs
+currently do not survive a restart, which on Render means a deploy drops
+anything in flight.
+
 ## Cloudinary, the image report, and the gallery
 
 Copy `.env.example` to `.env` and fill in the three Cloudinary variables.

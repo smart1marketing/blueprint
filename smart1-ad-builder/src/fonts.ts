@@ -12,7 +12,24 @@ import * as path from 'path';
 import * as opentype from 'opentype.js';
 import type { Weight } from './types';
 
-const NM = path.resolve(__dirname, '..', 'node_modules');
+/**
+ * Resolve node_modules by walking up from this file. `__dirname/../node_modules`
+ * is correct when running from src/ but points at dist/node_modules once
+ * compiled, where nothing exists — every family then falls back silently.
+ */
+function findNodeModules(): string {
+  let dir = __dirname;
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, 'node_modules');
+    if (fs.existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.resolve(process.cwd(), 'node_modules');
+}
+
+const NM = findNodeModules();
 const SYS = '/usr/share/fonts/truetype';
 
 export interface FamilySpec {
@@ -50,17 +67,14 @@ const REGISTRY: FamilySpec[] = [
       bold: `${SYS}/google-fonts/Poppins-Bold.ttf`,
     },
   },
-  {
-    family: 'DejaVu Sans',
-    files: {
-      regular: `${SYS}/dejavu/DejaVuSans.ttf`,
-      medium: `${SYS}/dejavu/DejaVuSans-Bold.ttf`,
-      bold: `${SYS}/dejavu/DejaVuSans-Bold.ttf`,
-    },
-  },
 ];
 
-const FALLBACK = 'DejaVu Sans';
+/**
+ * Poppins, not DejaVu. opentype.js cannot parse DejaVu's ccmp lookup
+ * (substFormat 2) and throws on any getPath call, so using it as the fallback
+ * turns a missing-font warning into a crashed render.
+ */
+const FALLBACK = 'Poppins';
 const cache = new Map<string, opentype.Font>();
 
 function loadFile(file: string): opentype.Font {
@@ -69,8 +83,29 @@ function loadFile(file: string): opentype.Font {
   const buf = fs.readFileSync(file);
   // Copy into a clean ArrayBuffer — Node Buffers are views into a pool.
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-  const font = opentype.parse(ab as ArrayBuffer);
+  const font = verify(opentype.parse(ab as ArrayBuffer), file);
   cache.set(file, font);
+  return font;
+}
+
+/**
+ * Some fonts parse fine but throw on glyph lookup because opentype.js does not
+ * implement every OpenType feature table. Verify once, at load, rather than
+ * discovering it halfway through a package.
+ */
+const verified = new Set<string>();
+
+function verify(font: opentype.Font, file: string): opentype.Font {
+  if (verified.has(file)) return font;
+  try {
+    font.getPath('Ag 1', 0, 0, 12, { kerning: true });
+  } catch (e: any) {
+    throw new Error(
+      `Font at ${file} cannot be rendered by opentype.js (${e?.message ?? e}). ` +
+        'Remove it from the registry or substitute another weight.',
+    );
+  }
+  verified.add(file);
   return font;
 }
 
