@@ -8,7 +8,10 @@
     "dev": "node --watch server.js"
   },
   "engines": { "node": ">=18.0.0" },
-  "dependencies": { "express": "^4.19.2" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pdfkit": "^0.15.0"
+  },
   "license": "UNLICENSED",
   "private": true
 }

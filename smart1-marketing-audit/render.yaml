@@ -2,14 +2,43 @@ services:
   - type: web
     name: smart1-marketing-audit
     runtime: node
-    plan: free
+    plan: free             # with Cloudinary storage the free plan is fine; it only sleeps after 15 min idle
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
+
+    # Only needed if you are NOT using Cloudinary. A Render disk requires a paid
+    # plan; without one, locally stored PDFs disappear on restart.
+    # disk:
+    #   name: audit-reports
+    #   mountPath: /var/data
+    #   sizeGB: 1
+
     envVars:
-      - key: OPENAI_API_KEY
-        sync: false          # set this in the Render dashboard, never in git
       - key: OPENAI_MODEL
         value: gpt-4o-mini
+      - key: OPENAI_API_KEY
+        sync: false          # set in the Render dashboard, never in git
+      # --- PDF storage (Cloudinary: durable links, works on the free plan) ---
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: smart1-audits
+      # --- Lead delivery ---
+      - key: GHL_WEBHOOK_URL
+        sync: false          # Smart 1 Suite inbound webhook URL
+      - key: GHL_API_KEY
+        sync: false          # optional: GHL API v2 private integration token
+      - key: GHL_LOCATION_ID
+        sync: false          # optional: required with GHL_API_KEY
       - key: LEAD_WEBHOOK_URL
-        sync: false          # optional: Zapier / Make / Smart 1 Suite endpoint
+        sync: false          # optional: Zapier / Make
+      # --- Misc ---
+      - key: PUBLIC_BASE_URL
+        sync: false          # e.g. https://audit.smart1marketing.com
+      - key: EMBED_ALLOWED_ORIGINS
+        sync: false          # optional: domains allowed to iframe the audit

@@ -4,47 +4,92 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Marketing Efficiency Audit™ | Smart 1 Marketing</title>
-<meta name="description" content="A 5-minute marketing audit for accounting and bookkeeping professionals. Score marketing efficiency, benchmark spend by industry, and identify profit leaks.">
+<meta name="description" content="A five-minute marketing audit for accounting and bookkeeping professionals. Score a client's marketing efficiency, benchmark spend by industry, and identify profit leaks.">
+<link rel="icon" href="/img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
+<!-- NAV -->
 <header class="nav">
   <div class="wrap nav-inner">
-    <div class="logo"><span class="mark">S1</span> Smart 1 Marketing</div>
-    <span class="nav-tag">Marketing Efficiency Audit™</span>
+    <a href="/" class="logo"><img src="/img/logo.png" alt="Smart 1 Marketing" class="logo-img"></a>
+    <nav class="nav-links">
+      <a href="#what">What you get</a>
+      <a href="#how">How it works</a>
+      <a href="#" class="btn btn-navy nav-cta" data-goto="step1">Start the audit</a>
+    </nav>
   </div>
 </header>
 
 <!-- ============ INTRO ============ -->
 <section id="intro" class="screen active">
-  <div class="wrap intro-grid">
-    <div>
-      <span class="eyebrow">For accounting &amp; bookkeeping professionals</span>
-      <h1>Find out what your client's marketing is actually producing.</h1>
-      <p class="lede">Answer 24 questions about a client's marketing spend and results. You get a Marketing Efficiency Score™, industry benchmark comparison, cost-per-lead and ROI math, and a findings summary you can bring to your next client meeting.</p>
-      <ul class="ticks">
-        <li>Takes about five minutes</li>
-        <li>Benchmarked against 14 industries</li>
-        <li>Findings written in plain financial language</li>
-      </ul>
-      <button class="btn btn-primary" data-goto="step1">Start the audit</button>
-      <p class="micro">Directional assessment only. Not a substitute for detailed analysis.</p>
+
+  <div class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow light">Marketing Efficiency Audit™</span>
+        <h1>Find out what your client's marketing is <span class="hl">actually producing</span></h1>
+        <p class="lead">Answer 24 questions about a client's marketing spend and results. You get a Marketing Efficiency Score™, an industry benchmark comparison, the cost-per-lead and ROI math, and a findings summary you can bring to your next client meeting.</p>
+        <div class="hero-cta">
+          <a href="#" class="btn btn-primary" data-goto="step1">Start the audit →</a>
+          <a href="#how" class="btn btn-ghost">See how it works</a>
+        </div>
+        <div class="hero-trust">
+          <span><span class="dot">●</span> About five minutes</span>
+          <span><span class="dot">●</span> Benchmarked across 20 industries</span>
+          <span><span class="dot">●</span> Findings in plain financial language</span>
+        </div>
+      </div>
+      <aside class="card-float" id="what">
+        <h4>What you get back</h4>
+        <div class="rev-row"><span class="lab">Marketing Efficiency Score™</span><span class="val">0–100</span></div>
+        <div class="rev-row"><span class="lab">Cost per lead vs. industry</span><span class="val">$ / lead</span></div>
+        <div class="rev-row"><span class="lab">Customer acquisition cost</span><span class="val">$ / customer</span></div>
+        <div class="rev-row"><span class="lab">Marketing ROI</span><span class="val green">%</span></div>
+        <div class="rev-row"><span class="lab">Spend vs. benchmark range</span><span class="val">% of revenue</span></div>
+        <div class="rev-row"><span class="lab">Growth opportunity</span><span class="val green">$ / year</span></div>
+        <p class="card-note">Directional assessment. Not a substitute for detailed analysis.</p>
+      </aside>
     </div>
-    <aside class="preview-card">
-      <h4>What you get back</h4>
-      <div class="prow"><span>Marketing Efficiency Score™</span><b class="mono">0–100</b></div>
-      <div class="prow"><span>Cost per lead vs. industry</span><b class="mono">$/lead</b></div>
-      <div class="prow"><span>Customer acquisition cost</span><b class="mono">$/customer</b></div>
-      <div class="prow"><span>Marketing ROI</span><b class="mono">%</b></div>
-      <div class="prow"><span>Spend vs. benchmark range</span><b class="mono">% rev</b></div>
-      <div class="prow"><span>Growth opportunity</span><b class="mono">$/yr</b></div>
-      <div class="prow"><span>Questions to ask the client</span><b class="mono">4–6</b></div>
-    </aside>
   </div>
+
+  <!-- CREDIBILITY -->
+  <div class="cred">
+    <div class="wrap cred-inner">
+      <div class="cred-label">Built on Smart 1 benchmark data</div>
+      <div class="cred-badges">
+        <span class="badge">4,000+ businesses served</span>
+        <span class="badge">20+ years in digital</span>
+        <span class="badge">14 industry budget ranges</span>
+        <span class="badge">10 published lead-cost ranges</span>
+      </div>
+      <p class="cred-note">Benchmarks vary by market, competition, business maturity, and geography. Use them as a guideline, not an absolute rule.</p>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <section id="how" class="pad">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">How it works</span>
+        <h2>Four short sections, then the findings</h2>
+        <p>Answer for the client as best you know. Unknowns are informative on their own — an unanswered question is often the finding.</p>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><h4>Client snapshot</h4><p>Industry, revenue, locations, and vendor count. Selects the right benchmark set.</p></div>
+        <div class="step"><div class="n">2</div><h4>Warning signs</h4><p>Ten weighted questions from the Client Profit Leak Assessment™.</p></div>
+        <div class="step"><div class="n">3</div><h4>Investment</h4><p>Monthly spend across ten marketing categories, straight off the books.</p></div>
+        <div class="step"><div class="n">4</div><h4>Performance</h4><p>Leads, customers, average sale, and lifetime value drive the ROI math.</p></div>
+      </div>
+      <div class="center mt40">
+        <a href="#" class="btn btn-primary" data-goto="step1">Start the audit →</a>
+      </div>
+    </div>
+  </section>
 </section>
 
 <!-- ============ PROGRESS ============ -->
@@ -58,49 +103,51 @@
 </div>
 
 <!-- ============ STEP 1 ============ -->
-<section id="step1" class="screen">
+<section id="step1" class="screen pad">
   <div class="wrap narrow">
     <span class="step-no">Section 1</span>
     <h2>Client snapshot</h2>
-    <p class="sub">Used to select the right benchmark set. Nothing here is required to be exact.</p>
+    <p class="sub">Used to select the right benchmark set. Nothing here needs to be exact.</p>
     <div class="grid-2">
       <label class="field"><span>Client business name</span><input id="clientName" type="text" placeholder="Acme Plumbing"></label>
       <label class="field"><span>Industry</span><select id="industry"></select></label>
       <label class="field"><span>Annual revenue</span><div class="prefix"><i>$</i><input id="annualRevenue" type="number" min="0" step="1000" placeholder="1,000,000"></div></label>
       <label class="field"><span>Number of locations</span><input id="locations" type="number" min="1" step="1" placeholder="1"></label>
       <label class="field"><span>Current marketing vendors</span><input id="vendors" type="number" min="0" step="1" placeholder="2"></label>
-      <label class="field"><span>Completed by</span><input id="completedBy" type="text" placeholder="Your name"></label>
+      <label class="field"><span>Prepared by <em>(partner name)</em></span><input id="preparedBy" type="text" placeholder="Jane Doe, CPA"></label>
+      <label class="field"><span>Partner firm</span><input id="partnerFirm" type="text" placeholder="Doe CPA Group"></label>
     </div>
-    <div class="nav-btns"><button class="btn btn-ghost" data-goto="intro">Back</button><button class="btn btn-primary" data-goto="step2">Continue</button></div>
+    <p class="micro">The partner name and firm appear on the PDF report and are attached to the referral record.</p>
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="intro">Back</button><button class="btn btn-primary" data-goto="step2">Continue</button></div>
   </div>
 </section>
 
 <!-- ============ STEP 2 ============ -->
-<section id="step2" class="screen">
+<section id="step2" class="screen pad">
   <div class="wrap narrow">
     <span class="step-no">Section 2</span>
     <h2>Profit leak warning signs</h2>
     <p class="sub">Answer for the client as best you know. "Not sure" counts as a yes — an unknown is itself a warning sign.</p>
     <div id="flags" class="flags"></div>
     <div class="running">Warning-sign points<b class="mono" id="leakRunning">0 / 30</b></div>
-    <div class="nav-btns"><button class="btn btn-ghost" data-goto="step1">Back</button><button class="btn btn-primary" data-goto="step3">Continue</button></div>
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step1">Back</button><button class="btn btn-primary" data-goto="step3">Continue</button></div>
   </div>
 </section>
 
 <!-- ============ STEP 3 ============ -->
-<section id="step3" class="screen">
+<section id="step3" class="screen pad">
   <div class="wrap narrow">
     <span class="step-no">Section 3</span>
     <h2>Monthly marketing investment</h2>
     <p class="sub">Enter what you can see on the books. Leave anything unknown at zero.</p>
     <div id="spend" class="spend"></div>
     <div class="running">Total monthly investment<b class="mono" id="spendTotal">$0</b></div>
-    <div class="nav-btns"><button class="btn btn-ghost" data-goto="step2">Back</button><button class="btn btn-primary" data-goto="step4">Continue</button></div>
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step2">Back</button><button class="btn btn-primary" data-goto="step4">Continue</button></div>
   </div>
 </section>
 
 <!-- ============ STEP 4 ============ -->
-<section id="step4" class="screen">
+<section id="step4" class="screen pad">
   <div class="wrap narrow">
     <span class="step-no">Section 4</span>
     <h2>Performance indicators</h2>
@@ -113,12 +160,12 @@
       <label class="field"><span>Average customer relationship (years)</span><input id="customerYears" type="number" min="0" step="0.5" placeholder="4"></label>
       <label class="field"><span>Lead improvement to model</span><div class="suffix"><input id="liftPct" type="number" min="0" max="200" step="5" value="15"><i>%</i></div></label>
     </div>
-    <div class="nav-btns"><button class="btn btn-ghost" data-goto="step3">Back</button><button class="btn btn-primary" id="toGate">Calculate results</button></div>
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step3">Back</button><button class="btn btn-primary" id="toGate">Calculate results</button></div>
   </div>
 </section>
 
 <!-- ============ RESULTS ============ -->
-<section id="results" class="screen">
+<section id="results" class="screen pad">
   <div class="wrap">
 
     <!-- Gate -->
@@ -146,7 +193,10 @@
           <h2 id="rTitle">Findings summary</h2>
           <p class="sub" id="rMeta"></p>
         </div>
-        <button class="btn btn-ghost print-hide" id="printBtn">Print / save PDF</button>
+        <div class="head-actions print-hide">
+          <a class="btn btn-primary" id="dlBtn" href="#" aria-disabled="true">Preparing PDF…</a>
+          <button class="btn btn-ghost dark" id="printBtn">Print page</button>
+        </div>
       </div>
 
       <!-- Score + benchmark -->
@@ -196,21 +246,38 @@
       </div>
 
       <div class="cta-band">
+        <span class="eyebrow light">No obligation</span>
         <h3>Complimentary Marketing Efficiency Audit™</h3>
         <p>Advertising spend analysis · conversion review · website evaluation · marketing technology review · competitive insights · recommendations report · 30–45 minute Zoom review.</p>
-        <a class="btn btn-gold" href="mailto:hello@smart1marketing.com?subject=Marketing%20Efficiency%20Audit%20request">Schedule the review</a>
-        <p class="micro">Helping businesses improve marketing efficiency and profitability for more than 16 years.</p>
+        <div class="cta-actions">
+          <a class="btn btn-gold" href="mailto:info@smart1marketing.com?subject=Marketing%20Efficiency%20Audit%20request">Schedule the review</a>
+          <a class="btn btn-ghost" id="dlBtn2" href="#" aria-disabled="true">Download the PDF report</a>
+        </div>
+        <p class="micro light">Helping businesses improve marketing efficiency and profitability for more than 16 years.</p>
       </div>
 
       <div class="nav-btns print-hide">
-        <button class="btn btn-ghost" data-goto="step4">Edit answers</button>
-        <button class="btn btn-ghost" id="restart">Start a new audit</button>
+        <button class="btn btn-ghost dark" data-goto="step4">Edit answers</button>
+        <button class="btn btn-ghost dark" id="restart">Start a new audit</button>
       </div>
     </div>
   </div>
 </section>
 
-<footer class="foot"><div class="wrap">Smart 1 Marketing · Marketing Efficiency Audit™ · Benchmarks vary by market, competition, maturity, and geography. Use as a guideline, not an absolute rule.</div></footer>
+<!-- FOOTER -->
+<footer>
+  <div class="wrap foot-inner">
+    <div>
+      <img src="/img/logo-white.png" alt="Smart 1 Marketing" class="logo-img foot">
+      <div class="foot-tag">PARTNERSHIPS &nbsp;|&nbsp; SOLUTIONS &nbsp;|&nbsp; RESULTS</div>
+    </div>
+    <div>
+      <div class="foot-strong">(614) 536-0768</div>
+      <div>info@smart1marketing.com</div>
+    </div>
+    <div>© 2026 Smart 1 Marketing · Marketing Efficiency Audit™</div>
+  </div>
+</footer>
 
 <script src="/app.js"></script>
 </body>

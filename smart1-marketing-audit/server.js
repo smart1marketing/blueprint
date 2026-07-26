@@ -11,6 +11,11 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
+const { buildAuditPdf } = require('./pdf');
+const cloudinary = require('./cloudinary');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,6 +25,16 @@ const LEAD_WEBHOOK_URL = process.env.LEAD_WEBHOOK_URL;
 
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
+
+/* Embedding: by default any site may iframe the audit. Set EMBED_ALLOWED_ORIGINS
+   to a space-separated list (e.g. "https://smart1marketing.com https://www.smart1marketing.com")
+   to restrict it to your own domains. */
+const FRAME_ANCESTORS = process.env.EMBED_ALLOWED_ORIGINS || '*';
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', `frame-ancestors ${FRAME_ANCESTORS}`);
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
 
 /* ---------------------------------------------------------------
@@ -183,7 +198,17 @@ function fallbackAnalysis(p = {}) {
    Routes
 ---------------------------------------------------------------- */
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, model: OPENAI_MODEL, aiEnabled: Boolean(OPENAI_API_KEY) });
+  res.json({
+    ok: true,
+    model: OPENAI_MODEL,
+    aiEnabled: Boolean(OPENAI_API_KEY),
+    pdfEnabled: true,
+    pdfStorage: cloudinary.isConfigured() ? 'cloudinary' : 'local-disk',
+    ghl: {
+      webhook: Boolean(GHL_WEBHOOK_URL),
+      api: Boolean(GHL_API_KEY && GHL_LOCATION_ID),
+    },
+  });
 });
 
 app.post('/api/analyze', async (req, res) => {
@@ -242,22 +267,180 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
-app.post('/api/lead', async (req, res) => {
-  const lead = { ...req.body, receivedAt: new Date().toISOString(), ip: req.ip };
-  console.log('LEAD:', JSON.stringify({ ...lead, ip: undefined }));
+/* ---------------------------------------------------------------
+   Lead delivery: generic webhook + GoHighLevel (Smart 1 Suite)
+---------------------------------------------------------------- */
+const GHL_WEBHOOK_URL = process.env.GHL_WEBHOOK_URL;
+const GHL_API_KEY = process.env.GHL_API_KEY;
+const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID;
+const GHL_API = 'https://services.leadconnectorhq.com';
 
-  if (LEAD_WEBHOOK_URL) {
-    try {
-      await fetch(LEAD_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(lead),
-      });
-    } catch (err) {
-      console.error('lead webhook failed:', err.message);
-    }
-  }
+function splitName(full = '') {
+  const parts = String(full).trim().split(/\s+/);
+  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') || '' };
+}
+
+/** Flat payload sent to the GHL inbound webhook and any generic webhook. */
+function leadPayload(body = {}, pdfUrl) {
+  const snap = body.client || body.snapshot || {};
+  return {
+    source: 'Marketing Efficiency Audit',
+    stage: pdfUrl ? 'completed' : 'started',
+    partnerName: body.partnerName || snap.preparedBy || body.name || '',
+    partnerFirm: body.partnerFirm || snap.partnerFirm || body.firm || '',
+    name: body.name || '',
+    firm: body.firm || '',
+    email: body.email || '',
+    phone: body.phone || '',
+    clientBusiness: snap.clientName || '',
+    clientIndustry: snap.industry || '',
+    clientAnnualRevenue: snap.annualRevenue || null,
+    monthlyMarketingSpend: body.monthlySpend ?? body.metrics?.spend ?? null,
+    efficiencyScore: body.score ?? null,
+    scoreTier: body.scoreTier || '',
+    leakPoints: body.leakPoints ?? null,
+    leakTier: body.leakTier || '',
+    auditPdfUrl: pdfUrl || '',
+    submittedAt: new Date().toISOString(),
+  };
+}
+
+async function postJson(url, body, headers = {}) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 300)}`);
+  return r.json().catch(() => ({}));
+}
+
+/** Upsert the contact in GHL and attach a note holding the audit summary + PDF link. */
+async function ghlUpsert(payload) {
+  if (!GHL_API_KEY || !GHL_LOCATION_ID) return null;
+  const headers = { Authorization: `Bearer ${GHL_API_KEY}`, Version: '2021-07-28' };
+  const { firstName, lastName } = splitName(payload.name || payload.partnerName);
+
+  const contact = await postJson(`${GHL_API}/contacts/upsert`, {
+    locationId: GHL_LOCATION_ID,
+    firstName, lastName,
+    email: payload.email || undefined,
+    phone: payload.phone || undefined,
+    companyName: payload.firm || payload.partnerFirm || undefined,
+    source: 'Marketing Efficiency Audit',
+    tags: ['marketing-efficiency-audit', 'cpa-partner-referral'],
+  }, headers);
+
+  const id = contact?.contact?.id || contact?.id;
+  if (!id) return contact;
+
+  const note = [
+    `Marketing Efficiency Audit — ${payload.clientBusiness || 'client'} (${payload.clientIndustry || 'industry not given'})`,
+    `Prepared by: ${payload.partnerName || '—'}${payload.partnerFirm ? ` (${payload.partnerFirm})` : ''}`,
+    `Efficiency Score: ${payload.efficiencyScore ?? '—'}/100 — ${payload.scoreTier || ''}`,
+    `Warning signs: ${payload.leakPoints ?? '—'}/30 — ${payload.leakTier || ''}`,
+    `Monthly marketing spend: ${payload.monthlyMarketingSpend != null ? '$' + Number(payload.monthlyMarketingSpend).toLocaleString('en-US') : '—'}`,
+    payload.auditPdfUrl ? `PDF report: ${payload.auditPdfUrl}` : 'PDF report: pending',
+  ].join('\n');
+
+  await postJson(`${GHL_API}/contacts/${id}/notes`, { body: note }, headers).catch((e) =>
+    console.error('ghl note failed:', e.message));
+  return contact;
+}
+
+async function deliverLead(body, pdfUrl) {
+  const payload = leadPayload(body, pdfUrl);
+  console.log('LEAD:', JSON.stringify(payload));
+
+  const jobs = [];
+  if (LEAD_WEBHOOK_URL) jobs.push(postJson(LEAD_WEBHOOK_URL, payload).catch((e) => console.error('lead webhook failed:', e.message)));
+  if (GHL_WEBHOOK_URL) jobs.push(postJson(GHL_WEBHOOK_URL, payload).catch((e) => console.error('ghl webhook failed:', e.message)));
+  if (GHL_API_KEY && GHL_LOCATION_ID) jobs.push(ghlUpsert(payload).catch((e) => console.error('ghl api failed:', e.message)));
+  await Promise.allSettled(jobs);
+  return payload;
+}
+
+app.post('/api/lead', async (req, res) => {
+  await deliverLead(req.body || {});
   res.json({ ok: true });
+});
+
+/* ---------------------------------------------------------------
+   PDF report: build, store, hand back a link, push to GHL
+---------------------------------------------------------------- */
+const PDF_DIR = process.env.PDF_DIR || path.join(os.tmpdir(), 'smart1-audits');
+const PDF_TTL_HOURS = Number(process.env.PDF_TTL_HOURS || 720); // 30 days
+fs.mkdirSync(PDF_DIR, { recursive: true });
+
+function baseUrl(req) {
+  if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  return `${proto}://${req.headers.host}`;
+}
+
+function slug(text, fallback) {
+  const s = String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return s.slice(0, 40) || fallback;
+}
+
+/** Delete expired reports so an instance with a mounted disk doesn't grow forever. */
+function sweepPdfs() {
+  try {
+    const cutoff = Date.now() - PDF_TTL_HOURS * 3600 * 1000;
+    for (const f of fs.readdirSync(PDF_DIR)) {
+      const p = path.join(PDF_DIR, f);
+      if (fs.statSync(p).mtimeMs < cutoff) fs.unlinkSync(p);
+    }
+  } catch (err) { console.error('pdf sweep failed:', err.message); }
+}
+setInterval(sweepPdfs, 6 * 3600 * 1000).unref();
+sweepPdfs();
+
+app.post('/api/report', async (req, res) => {
+  const payload = req.body || {};
+  try {
+    const buf = await buildAuditPdf(payload);
+    const id = crypto.randomBytes(12).toString('hex');
+    const name = `marketing-efficiency-audit-${slug(payload.snapshot?.clientName, 'client')}-${id}.pdf`;
+
+    let url = null;
+    let storage = 'local';
+
+    if (cloudinary.isConfigured()) {
+      try {
+        const up = await cloudinary.uploadPdf(buf, name);
+        url = up.url;
+        storage = 'cloudinary';
+      } catch (err) {
+        console.error('cloudinary upload failed, falling back to local disk:', err.message);
+      }
+    }
+
+    if (!url) {
+      fs.writeFileSync(path.join(PDF_DIR, name), buf);
+      url = `${baseUrl(req)}/audit/${name}`;
+    }
+
+    deliverLead({ ...(payload.lead || {}), ...payload, client: payload.snapshot }, url)
+      .catch((e) => console.error('lead delivery failed:', e.message));
+
+    res.json({ ok: true, url, filename: name, bytes: buf.length, storage });
+  } catch (err) {
+    console.error('pdf build failed:', err);
+    res.status(500).json({ error: 'Report could not be generated.' });
+  }
+});
+
+app.get('/audit/:file', (req, res) => {
+  const file = req.params.file;
+  if (!/^[a-zA-Z0-9._-]+\.pdf$/.test(file)) return res.status(400).send('Bad request');
+  const full = path.join(PDF_DIR, file);
+  if (!fs.existsSync(full)) {
+    return res.status(404).send('This report link has expired. Run the audit again to generate a new copy.');
+  }
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
+  fs.createReadStream(full).pipe(res);
 });
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

@@ -46,7 +46,7 @@ const SPEND_CATEGORIES = [
 ];
 
 /* ---------- State ---------- */
-const state = { flags:{}, spend:{}, lead:null, results:null, unlocked:false };
+const state = { flags:{}, spend:{}, lead:null, results:null, analysis:null, pdfUrl:null, unlocked:false };
 let gaugeTimer = null;
 
 /* ---------- Helpers ---------- */
@@ -101,6 +101,24 @@ const leakPoints = () => FLAGS.reduce((sum, f) => sum + (state.flags[f.id] ? f.p
 
 function updateLeakTotal() { $('#leakRunning').textContent = `${leakPoints()} / 30`; }
 
+/* ---------- Embed mode ---------- */
+const EMBED = new URLSearchParams(location.search).get('embed') === '1';
+if (EMBED) document.documentElement.classList.add('embed');
+
+let lastHeight = 0;
+function postHeight(force) {
+  if (!EMBED) return;
+  const h = Math.ceil(document.documentElement.scrollHeight);
+  if (!force && Math.abs(h - lastHeight) < 8) return;
+  lastHeight = h;
+  parent.postMessage({ type: 's1-audit-height', height: h }, '*');
+}
+if (EMBED) {
+  if (window.ResizeObserver) new ResizeObserver(() => postHeight()).observe(document.body);
+  window.addEventListener('load', () => postHeight(true));
+  setInterval(() => postHeight(), 800);
+}
+
 /* ---------- Navigation ---------- */
 const ORDER = ['intro','step1','step2','step3','step4','results'];
 function goto(id) {
@@ -110,11 +128,18 @@ function goto(id) {
   prog.hidden = (id === 'intro');
   $('#pfill').style.width = ((i / (ORDER.length - 1)) * 100) + '%';
   $('#psteps').querySelectorAll('span').forEach((s) => s.classList.toggle('on', Number(s.dataset.s) <= i));
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (EMBED) {
+    parent.postMessage({ type: 's1-audit-scroll' }, '*');
+    postHeight(true);
+  } else {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-goto]');
-  if (t) goto(t.dataset.goto);
+  if (!t) return;
+  if (t.tagName === 'A') e.preventDefault();
+  goto(t.dataset.goto);
 });
 
 /* ---------- Calculations ---------- */
@@ -198,7 +223,8 @@ function calculate() {
     snapshot: {
       clientName: $('#clientName').value.trim(), industry,
       annualRevenue, locations: num('#locations'), vendors: num('#vendors'),
-      completedBy: $('#completedBy').value.trim(),
+      preparedBy: $('#preparedBy').value.trim(),
+      partnerFirm: $('#partnerFirm').value.trim(),
     },
     spend: state.spend,
     metrics: { spend, leads, customers, avgSale, purchasesPerYear, customerYears,
@@ -229,6 +255,7 @@ function renderReport(r) {
   const m = r.metrics, b = r.benchmark;
   $('#rTitle').textContent = r.snapshot.clientName ? `Findings for ${r.snapshot.clientName}` : 'Findings summary';
   $('#rMeta').textContent = [
+    r.snapshot.preparedBy ? `Prepared by ${r.snapshot.preparedBy}${r.snapshot.partnerFirm ? ', ' + r.snapshot.partnerFirm : ''}` : null,
     r.snapshot.industry,
     m.spend ? usd(m.spend) + '/mo marketing investment' : null,
     r.snapshot.annualRevenue ? usd(r.snapshot.annualRevenue) + ' annual revenue' : null,
@@ -300,10 +327,13 @@ async function loadAnalysis(r) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r),
     });
     const data = await res.json();
+    state.analysis = data.analysis;
     renderAnalysis(data.analysis, data.source);
+    buildPdf();
   } catch {
     $('#aiBadge').textContent = 'Unavailable';
     $('#aiBody').innerHTML = '<p>Written findings could not be generated. The scores and calculations above are complete and can be printed.</p>';
+    buildPdf();
   }
 }
 
@@ -324,6 +354,51 @@ function renderAnalysis(a, source) {
     ${a.nextSteps?.length ? '<h5>Recommended next steps</h5><ul>' +
       a.nextSteps.map((s) => `<li>${esc(s)}</li>`).join('') + '</ul>' : ''}
     ${a.partnerTalkingPoint ? `<div class="quote">“${esc(a.partnerTalkingPoint)}”</div>` : ''}`;
+}
+
+/* ---------- PDF report ---------- */
+function setDownload(state_, url) {
+  [$('#dlBtn'), $('#dlBtn2')].forEach((btn) => {
+    if (!btn) return;
+    if (state_ === 'ready') {
+      btn.setAttribute('href', url);
+      btn.removeAttribute('aria-disabled');
+      // A cross-origin file (Cloudinary) ignores the download attribute, so open it in a tab instead
+      if (url.startsWith('http') && !url.startsWith(location.origin)) {
+        btn.setAttribute('target', '_blank');
+        btn.setAttribute('rel', 'noopener');
+        btn.removeAttribute('download');
+      } else {
+        btn.setAttribute('download', '');
+      }
+      btn.textContent = btn.id === 'dlBtn' ? 'Download PDF report' : 'Download the PDF report';
+    } else if (state_ === 'error') {
+      btn.setAttribute('aria-disabled', 'true');
+      btn.textContent = 'PDF unavailable';
+    } else {
+      btn.setAttribute('aria-disabled', 'true');
+      btn.textContent = 'Preparing PDF…';
+    }
+  });
+}
+
+async function buildPdf() {
+  if (!state.results) return;
+  setDownload('pending');
+  try {
+    const res = await fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...state.results, analysis: state.analysis || null, lead: state.lead || null }),
+    });
+    const data = await res.json();
+    if (!data.url) throw new Error('no url');
+    state.pdfUrl = data.url;
+    setDownload('ready', data.url);
+  } catch (err) {
+    console.error('PDF generation failed', err);
+    setDownload('error');
+  }
 }
 
 /* ---------- Gate ---------- */
@@ -351,8 +426,17 @@ $('#unlock').addEventListener('click', async () => {
   state.lead = { name, firm, email, phone: $('#gPhone').value.trim() };
   fetch('/api/lead', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...state.lead, client: state.results.snapshot, score: state.results.score,
-      leakTier: state.results.leakTier, monthlySpend: state.results.metrics.spend }),
+    body: JSON.stringify({
+      ...state.lead,
+      partnerName: state.results.snapshot.preparedBy || state.lead.name,
+      partnerFirm: state.results.snapshot.partnerFirm || state.lead.firm,
+      client: state.results.snapshot,
+      score: state.results.score,
+      scoreTier: state.results.scoreTier,
+      leakPoints: state.results.leakPoints,
+      leakTier: state.results.leakTier,
+      monthlySpend: state.results.metrics.spend,
+    }),
   }).catch(() => {});
 
   $('#gate').style.display = 'none';
@@ -367,4 +451,17 @@ $('#restart').addEventListener('click', () => location.reload());
 
 /* ---------- Init ---------- */
 buildUI();
+
+// Partner-specific links: /?partner=Jane%20Doe&firm=Doe%20CPA%20Group
+const qs = new URLSearchParams(location.search);
+if (qs.get('partner')) $('#preparedBy').value = qs.get('partner');
+if (qs.get('firm')) $('#partnerFirm').value = qs.get('firm');
+
+// Carry the partner's details into the gate so they aren't typed twice
+$('#toGate').addEventListener('click', () => {
+  if (!$('#gName').value) $('#gName').value = $('#preparedBy').value;
+  if (!$('#gFirm').value) $('#gFirm').value = $('#partnerFirm').value;
+});
+
 goto('intro');
+postHeight(true);
