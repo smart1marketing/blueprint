@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart 1 — Proposal Builder (IO-aligned)</title>
+<style>
+  :root{--navy:#14284b;--blue:#1f63ae;--blue2:#2A6FDB;--sky:#eaf2fa;--soft:#EAF1FC;--accent:#e5a323;
+    --ink:#1d2a3a;--muted:#66758a;--line:#d5dee9;--bg:#f3f6f9;--white:#fff;--good:#178653;--shadow:0 10px 30px rgba(20,40,75,.10)}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  .topbar{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line)}
+  .topbar .wrap{max-width:940px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:14px;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--navy)}
+  .brand .dot{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--blue),var(--navy));color:#fff;display:grid;place-items:center;font-size:13px}
+  .stepLabel{font-size:13px;color:var(--muted);font-weight:700}
+  .progress{height:5px;background:var(--sky)}.progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue2),var(--navy));transition:.3s}
+  .stage{max-width:940px;margin:0 auto;padding:32px 22px 130px}
+  .eyebrow{color:var(--blue);font-weight:800;text-transform:uppercase;letter-spacing:2px;font-size:12px}
+  h1.q{font-size:28px;color:var(--navy);margin:8px 0 6px;font-weight:800}
+  .sub{color:var(--muted);font-size:15px;margin-bottom:6px}
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;margin-top:20px}
+  .cards.c3{grid-template-columns:repeat(3,1fr)}
+  .choice{border:2px solid var(--line);border-radius:13px;padding:16px;cursor:pointer;background:#fff;transition:.15s;display:flex;gap:13px;align-items:flex-start}
+  .choice:hover{border-color:#b9d0f5}.choice.on{border-color:var(--blue);background:#f6faff;box-shadow:0 8px 18px rgba(31,99,174,.14)}
+  .choice .em{font-size:24px}.choice h3{margin:0 0 3px;font-size:15px;color:var(--navy)}.choice p{margin:0;font-size:12.5px;color:var(--muted)}
+  .choice .tick{margin-left:auto;width:22px;height:22px;border-radius:50%;border:2px solid var(--line);flex:none;display:grid;place-items:center}
+  .choice.on .tick{border-color:var(--blue);background:var(--blue);color:#fff}.choice.on .tick:after{content:"✓";font-size:12px;font-weight:800}
+  .fld{margin-top:14px;display:flex;flex-direction:column}
+  .fld label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+  .fld input,.fld textarea,.fld select{border:1px solid #b8c6d5;border-radius:10px;padding:11px 13px;font-size:14px;font-family:inherit;background:#fff}
+  .fld input:focus,.fld textarea:focus,.fld select:focus{outline:none;border-color:var(--blue)}
+  .fld textarea{resize:vertical;min-height:66px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:13px}.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}
+  .pill{display:inline-flex;align-items:center;gap:7px;border:1px solid #b7c7d8;background:#fff;border-radius:18px;padding:8px 13px;font-size:13px;font-weight:600;cursor:pointer;margin:6px 7px 0 0}
+  .pill:hover{background:var(--sky)}.pill.on{border-color:var(--blue);background:#edf5ff;color:var(--navy)}.pill.on:before{content:"✓ ";color:var(--blue);font-weight:800}
+  .addpill{display:flex;gap:8px;margin-top:11px;max-width:460px}.addpill input{flex:1;border:1px solid #b8c6d5;border-radius:18px;padding:9px 14px;font-size:13px}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:20px;box-shadow:var(--shadow)}
+  .panel .ttl{font-weight:800;color:var(--navy);font-size:13px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+  .estgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-top:12px}
+  .est{background:linear-gradient(180deg,#fbfdff,#eef4ff);border:1px solid var(--line);border-radius:11px;padding:15px;text-align:center}
+  .est b{display:block;font-size:22px;color:var(--navy);font-weight:800}.est span{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+  .note{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:11px}
+  .prod{border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-top:11px;background:#fff;display:flex;align-items:center;gap:12px}
+  .prod .pi{width:38px;height:38px;border-radius:10px;background:var(--sky);color:var(--blue);display:grid;place-items:center;font-size:17px;flex:none}
+  .prod .grow{flex:1;min-width:0}.prod h4{margin:0;font-size:14px;color:var(--navy)}.prod .meta{font-size:12px;color:var(--muted)}
+  .prod .alloc{font-weight:800;color:var(--navy);font-size:14px;text-align:right;min-width:92px}.prod .alloc small{display:block;font-weight:600;color:var(--muted);font-size:11px}
+  .prod .x{background:#fff;border:1px solid var(--line);color:#c0392b;border-radius:8px;width:28px;height:28px;cursor:pointer;font-weight:800;flex:none}
+  .addrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}.addrow select,.addrow input{border:1px solid #b8c6d5;border-radius:10px;padding:10px 12px;font-size:13px}
+  .addrow select{max-width:280px}
+  .reconfig{background:#fff8e8;border:1px solid #f0d69a;border-radius:11px;padding:13px 15px;margin-top:13px;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .reconfig p{margin:0;font-size:13.5px;color:#7a5a10;flex:1;min-width:220px}
+  .pkgs{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-top:18px}
+  .pkg{border:2px solid var(--line);border-radius:15px;padding:20px;background:#fff;cursor:pointer;position:relative}
+  .pkg:hover{border-color:#b9d0f5}.pkg.on{border-color:var(--blue);box-shadow:0 10px 24px rgba(31,99,174,.16)}
+  .pkg .flag{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--accent);color:#3a2600;font-size:10.5px;font-weight:800;padding:5px 13px;border-radius:999px;text-transform:uppercase}
+  .pkg .pn{font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:1px;font-size:13px}
+  .pkg .pp{font-size:28px;font-weight:800;margin:6px 0 0}.pkg .pp small{font-size:13px;color:var(--muted);font-weight:600}
+  .pkg .ptot{font-size:12px;color:var(--muted);margin-bottom:9px}
+  .pkg .roi{background:#eaf6ef;color:#137a4e;font-weight:800;border-radius:7px;padding:5px 9px;font-size:12.5px;display:inline-block;margin-bottom:9px}
+  .pkg ul{list-style:none;padding:0;margin:0}
+  .pkg li{font-size:12.5px;padding:5px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;color:#33415C}
+  .pkg li b{color:var(--navy)}
+  .navbar{position:fixed;bottom:0;left:0;right:0;background:rgba(255,255,255,.95);border-top:1px solid var(--line);z-index:60}
+  .navbar .wrap{max-width:940px;margin:0 auto;padding:13px 22px;display:flex;justify-content:space-between;gap:12px}
+  .btn{border:0;cursor:pointer;font-weight:700;font-size:15px;padding:12px 24px;border-radius:11px;display:inline-flex;align-items:center;gap:7px}
+  .btn-primary{background:var(--blue);color:#fff}.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+  .btn-back{background:#fff;border:1px solid var(--line);color:var(--muted)}.btn-accept{background:var(--good);color:#fff}.btn-line{background:var(--sky);color:var(--navy)}
+  .btn:disabled{opacity:.6;cursor:progress}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #c3d4ea;border-top-color:var(--blue);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .est.loading b{color:#9fb2cc}
+  .kv{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.tag{background:var(--sky);color:var(--navy);font-weight:700;font-size:12px;padding:5px 11px;border-radius:999px}
+  pre{background:#0d1b2f;color:#cfe0f7;padding:16px;border-radius:12px;overflow:auto;font-size:11.5px;line-height:1.5;max-height:340px}
+  @media(max-width:720px){.cards,.cards.c3,.estgrid,.pkgs,.two,.three{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="dot">S1</span> PROPOSAL BUILDER</div>
+    <div style="display:flex;align-items:center;gap:12px"><button class="btn btn-line" style="padding:6px 12px;font-size:12px" onclick="setApiBase()">⚙ AI endpoint</button><div class="stepLabel" id="stepLabel"></div></div>
+  </div>
+  <div class="progress"><i id="bar"></i></div>
+</div>
+<div class="stage" id="stage"></div>
+<div id="toast" style="position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:#0d1b2f;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);display:none;z-index:80;max-width:540px;text-align:center"></div>
+<div class="navbar"><div class="wrap">
+  <button class="btn btn-back" id="backBtn" onclick="prev()">← Back</button>
+  <button class="btn btn-primary" id="nextBtn" onclick="next()">Continue →</button>
+</div></div>
+
+<script>
+/* ============================================================
+   REAL SMART 1 DATA MODEL (mirrors the IO builder index.html)
+   ============================================================ */
+const objectiveKPIs={
+ "Brand Awareness":["Impressions","Reach","Frequency","Video Completion Rate","Audio Completion Rate"],
+ "Lead Generation":["Form Submissions","Cost Per Lead","Conversion Rate"],
+ "Website Traffic":["Clicks","CTR","Sessions","Cost Per Click"],
+ "Store Visits":["Store Visits","Directions Clicks","Foot Traffic Lift"],
+ "Phone Calls":["Phone Calls","Call Conversion Rate","Cost Per Call"],
+ "Conversions":["Purchases","Leads","Conversion Rate","Cost Per Acquisition"],
+ "Recruitment":["Applications","Apply Clicks","Cost Per Application"],
+ "Event Promotion":["Registrations","Ticket Sales","RSVP Conversions","Event Page Visits"]
+};
+const GOAL_META={
+ "Brand Awareness":{em:"📣",d:"Get known in a market or category"},
+ "Lead Generation":{em:"📥",d:"Fill the funnel with qualified inquiries"},
+ "Website Traffic":{em:"🖱",d:"Drive visitors to the site"},
+ "Store Visits":{em:"📍",d:"Bring people into a location"},
+ "Phone Calls":{em:"📞",d:"Generate inbound calls"},
+ "Conversions":{em:"🛒",d:"Grow sales and purchases"},
+ "Recruitment":{em:"🧑‍💼",d:"Drive job applications"},
+ "Event Promotion":{em:"🎟",d:"Fill an event or launch"}
+};
+/* Recommend product CATEGORIES (renamed names) by objective */
+const GOAL_CATEGORIES={
+ "Brand Awareness":["OTT","DISPLAY","DIGITAL RADIO","YOUTUBE"],
+ "Lead Generation":["SEARCH ENGINE MARKETING / PAY PER CLICK","META","RETARGETING","DATA TARGETED DISPLAY"],
+ "Website Traffic":["SEARCH ENGINE MARKETING / PAY PER CLICK","DISPLAY","META","RETARGETING"],
+ "Store Visits":["MOBILE ONLY","LOCATION LOOKBACK","SEARCH ENGINE MARKETING / PAY PER CLICK","OTT"],
+ "Phone Calls":["SEARCH ENGINE MARKETING / PAY PER CLICK","MOBILE ONLY","META"],
+ "Conversions":["SEARCH ENGINE MARKETING / PAY PER CLICK","RETARGETING","DATA TARGETED DISPLAY","META"],
+ "Recruitment":["SOCIAL ADS","DISPLAY","SEARCH ENGINE MARKETING / PAY PER CLICK"],
+ "Event Promotion":["META","SOCIAL ADS","DISPLAY","DIGITAL RADIO"]
+};
+const industryIdeas={
+ automotive:{behavioral:["In-market vehicle buyers","Auto-intenders","Vehicle owners","Lease expiration audiences"],contextual:["Automotive research","Vehicle reviews","Financing and leasing","Local dealerships"]},
+ healthcare:{behavioral:["Health-conscious consumers","Caregivers","Parents","Condition or service intenders"],contextual:["Health and wellness","Medical services","Insurance and benefits","Local healthcare resources"]},
+ restaurant:{behavioral:["Dining enthusiasts","Food delivery users","Families","Event and celebration planners"],contextual:["Restaurants and dining","Local entertainment","Food and recipes","Events and nightlife"]},
+ home:{behavioral:["Homeowners","Home improvement intenders","Recent movers","High-value property owners"],contextual:["Home improvement","Real estate","DIY and renovation","Energy and utilities"]},
+ legal:{behavioral:["Legal-service intenders","Business owners","Homeowners","Life-event audiences"],contextual:["Legal information","Business resources","Personal finance","Local services"]},
+ retail:{behavioral:["Frequent shoppers","Category purchasers","Deal seekers","Loyalty-program users"],contextual:["Shopping and retail","Product reviews","Lifestyle interests","Local events"]},
+ general:{behavioral:["Category intenders","Recent purchasers","Engaged website visitors","Lookalike audiences"],contextual:["Industry-related content","Local news and lifestyle","Product research","Relevant professional content"]}
+};
+const INDUSTRY_KEYS={"Healthcare / Dental":"healthcare","Automotive":"automotive","Restaurant / Hospitality":"restaurant","Home Services":"home","Legal":"legal","Retail / E-comm":"retail"};
+const incomeOptions=["No income targeting","Under $50,000","$50,000–$74,999","$75,000–$99,999","$100,000–$149,999","$150,000–$199,999","$200,000+"];
+const INDUSTRIES=["Healthcare / Dental","Home Services","Legal","Automotive","Real Estate","Retail / E-comm","Restaurant / Hospitality","Financial Services","Fitness / Wellness","Education","B2B / Professional","Other"];
+
+/* ---- REAL rate card (verbatim subset of fields used here) ---- */
+const rateCard=[
+ {category:"PROGRAMMATIC CAMPAIGN",product:"Select Tactics - Comes with Retargeting",listedRate:"5.50 /CPM",rateType:"CPM",rateValue:5.5},
+ {category:"OUTREACH",product:"RON (Run of Network)",listedRate:"$3.50 / CPM",rateType:"CPM",rateValue:3.5},
+ {category:"OUTREACH",product:"Category",listedRate:"$4.25 / CPM",rateType:"CPM",rateValue:4.25},
+ {category:"OUTREACH",product:"Demographic",listedRate:"$4.25 / CPM",rateType:"CPM",rateValue:4.25},
+ {category:"OUTREACH",product:"Behavioral",listedRate:"$4.25 / CPM",rateType:"CPM",rateValue:4.25},
+ {category:"OUTREACH",product:"Advanced Audience",listedRate:"$5.50 / CPM",rateType:"CPM",rateValue:5.5},
+ {category:"OUTREACH",product:"Native Display",listedRate:"$13.20 / CPM",rateType:"CPM",rateValue:13.2},
+ {category:"OUTREACH",product:"Job Title",listedRate:"$7.00 / CPM",rateType:"CPM",rateValue:7.0},
+ {category:"RETARGETING",product:"Website Retargeting",listedRate:"$4.75 / CPM",rateType:"CPM",rateValue:4.75},
+ {category:"RETARGETING",product:"Facebook / Instagram Retargeting",listedRate:"25% Mgmt Fee",rateType:null,rateValue:null},
+ {category:"MOBILE ONLY",product:"RON (Run of Network)",listedRate:"$3.50 / CPM",rateType:"CPM",rateValue:3.5},
+ {category:"MOBILE ONLY",product:"In-Store Visits",listedRate:"$9.00 / CPM",rateType:"CPM",rateValue:9.0},
+ {category:"MOBILE ONLY",product:"Geo-Fence",listedRate:"$5.00 / CPM",rateType:"CPM",rateValue:5.0},
+ {category:"MOBILE ONLY",product:"Geo-Fence :: Targeted",listedRate:"$5.75 / CPM",rateType:"CPM",rateValue:5.75},
+ {category:"LOCATION LOOKBACK",product:"Demographic",listedRate:"$7.50 / CPM",rateType:"CPM",rateValue:7.5},
+ {category:"LOCATION LOOKBACK",product:"Behavioral",listedRate:"$7.50 / CPM",rateType:"CPM",rateValue:7.5},
+ {category:"OUTREACH",product:"Programmatic - RON (Run of Network)",listedRate:"$14.00 / CPM",rateType:"CPM",rateValue:14.0},
+ {category:"OUTREACH",product:"Programmatic - Targeted",listedRate:"$17.00 / CPM",rateType:"CPM",rateValue:17.0},
+ {category:"OUTREACH",product:"Premium: Non-Skippable",listedRate:"$23.00 / CPM",rateType:"CPM",rateValue:23.0},
+ {category:"YOUTUBE",product:"TrueView",listedRate:"$0.20 / CPV",rateType:"CPV",rateValue:0.2},
+ {category:"YOUTUBE",product:"TrueView - Targeted",listedRate:"$0.25 / CPV",rateType:"CPV",rateValue:0.25},
+ {category:"YOUTUBE",product:"Bumpers",listedRate:"$15.00 / CPM",rateType:"CPM",rateValue:15.0},
+ {category:"SEARCH ENGINE MARKETING / PAY PER CLICK",product:"Pay Per Click",listedRate:"15% Mgmt from Retail Cost",rateType:null,rateValue:null},
+ {category:"SEARCH ENGINE MARKETING / PAY PER CLICK",product:"Local Service Ads (LSA)",listedRate:"15% Mgmt fee monthly",rateType:null,rateValue:null},
+ {category:"SEARCH ENGINE MARKETING / PAY PER CLICK",product:"Pay Per Click - Shopping",listedRate:"15% Mgmt from Retail Cost",rateType:null,rateValue:null},
+ {category:"SEARCH ENGINE OPTIMIZATION",product:"Search Engine Optimization",listedRate:"50% of Retail / Custom Quote",rateType:null,rateValue:null},
+ {category:"SEARCH ENGINE OPTIMIZATION",product:"Local Business Boost",listedRate:"$75 Per Location / Month",rateType:null,rateValue:75.0},
+ {category:"DISPLAY",product:"Facebook | Instagram - Awareness Paid Social",listedRate:"25% Mgmt Fee",rateType:null,rateValue:null},
+ {category:"DISPLAY",product:"Facebook | Instagram - Targeted Paid Social",listedRate:"25% Mgmt Fee",rateType:null,rateValue:null},
+ {category:"DISPLAY",product:"Facebook - Leads",listedRate:"25% Mgmt Fee",rateType:null,rateValue:null},
+ {category:"VIDEO",product:"Facebook | Instagram - Paid Social Video",listedRate:"25% Mgmt Fee",rateType:null,rateValue:null},
+ {category:"VIDEO",product:"LinkedIn - Display & Text Ads",listedRate:"25% Mgmt Fee",rateType:null,rateValue:null},
+ {category:"VIDEO",product:"Tik Tok - Paid Social Media Advertising",listedRate:"25% Mgmt Fee",rateType:null,rateValue:null},
+ {category:"SOCIAL MEDIA MANAGEMENT",product:"Social Media Management",listedRate:"$199 / Month",rateType:null,rateValue:199.0},
+ {category:"DISPLAY & VIDEO",product:"IP Targeted Display",listedRate:"$18 / CPM",rateType:"CPM",rateValue:18.0},
+ {category:"DISPLAY & VIDEO",product:"IP Targeted Display - New Movers",listedRate:"$25 / CPM",rateType:"CPM",rateValue:25.0},
+ {category:"DISPLAY & VIDEO",product:"IP Targeted Video",listedRate:"$31 / CPM",rateType:"CPM",rateValue:31.0},
+ {category:"DIGITAL RADIO",product:"Programmatic - Targeted (iHeart, Pandora, Spotify…)",listedRate:"$18 / CPM",rateType:"CPM",rateValue:18.0},
+ {category:"DIGITAL RADIO",product:"Programmatic - Run of Site (ROS)",listedRate:"$13.50 / CPM",rateType:"CPM",rateValue:13.5},
+ {category:"DIGITAL RADIO",product:"Podcasts - Targeted",listedRate:"$18 / CPM",rateType:"CPM",rateValue:18.0},
+ {category:"OTT",product:"Connected TV - Targeted",listedRate:"$35 / CPM",rateType:"CPM",rateValue:35.0},
+ {category:"OTT",product:"Advanced TV - Targeted (all streaming/devices)",listedRate:"$25 / CPM",rateType:"CPM",rateValue:25.0},
+ {category:"EMAIL MARKETING",product:"List Provided Email",listedRate:"$100 / Send",rateType:null,rateValue:100.0},
+ {category:"EMAIL MARKETING",product:"Behavioral Targeted Email",listedRate:"$20 / CPM",rateType:"CPM",rateValue:20.0},
+ {category:"WEB DEVELOPMENT",product:"Landing Page",listedRate:"$100 one-time or $19/mo",rateType:null,rateValue:100.0},
+ {category:"CREATIVE / DESIGN SERVICES",product:"Standard Set of 6 Ad Creation",listedRate:"$250",rateType:null,rateValue:250.0}
+];
+/* taxonomy renames from the IO builder */
+const CATEGORY_RENAME={"PROGRAMMATIC CAMPAIGN":"DATA TARGETED DISPLAY","OUTREACH":"DISPLAY","DISPLAY":"META","VIDEO":"SOCIAL ADS","DISPLAY & VIDEO":"IP TARGETS"};
+const PRODUCT_RENAME={"PROGRAMMATIC CAMPAIGN|Select Tactics - Comes with Retargeting":"Programmatic Campaign with Retargeting"};
+rateCard.forEach(x=>{const oc=x.category||"";const k=oc+"|"+(x.product||"");if(PRODUCT_RENAME[k])x.product=PRODUCT_RENAME[k];if(CATEGORY_RENAME[oc])x.category=CATEGORY_RENAME[oc];x.label=x.category+" — "+x.product;});
+const CATEGORY_EM={"DATA TARGETED DISPLAY":"🎯","DISPLAY":"🖼","META":"📱","SOCIAL ADS":"🎬","IP TARGETS":"📡","RETARGETING":"🔁","MOBILE ONLY":"📶","LOCATION LOOKBACK":"🕓","YOUTUBE":"▶","SEARCH ENGINE MARKETING / PAY PER CLICK":"🔍","SEARCH ENGINE OPTIMIZATION":"📈","SOCIAL MEDIA MANAGEMENT":"💬","DIGITAL RADIO":"🎧","OTT":"📺","EMAIL MARKETING":"✉","WEB DEVELOPMENT":"🖥","CREATIVE / DESIGN SERVICES":"🎨"};
+const CATEGORY_ROI={"SEARCH ENGINE MARKETING / PAY PER CLICK":"4–6× ROAS","META":"3–4× ROAS","SOCIAL ADS":"3–4× ROAS","RETARGETING":"5–8× ROAS","DATA TARGETED DISPLAY":"2–3× ROAS","DISPLAY":"2–3× ROAS","OTT":"Brand lift + recall","YOUTUBE":"View-through lift","DIGITAL RADIO":"Reach + frequency","MOBILE ONLY":"Store-visit lift","LOCATION LOOKBACK":"Conquest lift","IP TARGETS":"Household match","EMAIL MARKETING":"5–8× ROAS","SEARCH ENGINE OPTIMIZATION":"Compounding","SOCIAL MEDIA MANAGEMENT":"Engagement","WEB DEVELOPMENT":"Conversion foundation","CREATIVE / DESIGN SERVICES":"Enables performance"};
+const productCategories=[...new Set(rateCard.map(x=>x.category))];
+function em(cat){return CATEGORY_EM[cat]||"•";}
+function findProduct(cat){return rateCard.find(x=>x.category===cat);}
+
+/* ============================================================
+   STATE (field names aligned to the IO webhook payload)
+   ============================================================ */
+const S={
+ client:"",url:"",industry:"",descriptionMode:"Build one for me",description:"",
+ objectives:[],kpis:[],
+ exclusions:[],
+ geoType:"City/ZIP + Radius",geo:"",radius:10,population:0,ages:["25-34","35-44","45-54"],gender:"Both",income:["No income targeting"],
+ audiences:[],
+ budgetMode:"range",budget:8000,months:3,
+ items:[],           // {label,category,product,rate,rateValue,budget,pctSeed}
+ landingMode:"One landing page",landingUrl:"",landing:"",
+ packages:[],selPkg:1,aiEst:null,aiLoading:false,descLoading:false,
+ dirty:false,keepAsIs:false,configured:false
+};
+let step=0,STEPS=[];
+/* ---- AI backend config (CORS is open on /api/* in app.py) ---- */
+let API_BASE="https://insertionordersmart.onrender.com"; // set to "" if this page is served from the same Flask app
+function setApiBase(){const v=prompt("API base URL for the Smart 1 AI backend (leave blank = same origin):",API_BASE);if(v!==null){API_BASE=v.trim();flashNote("AI endpoint set to "+(API_BASE||"same origin"));}}
+let _toastT=null;
+function flashNote(msg){const t=document.getElementById('toast');if(!t)return;t.textContent=msg;t.style.display='block';clearTimeout(_toastT);_toastT=setTimeout(()=>{t.style.display='none';},4600);}
+
+/* estimator */
+function ageF(a){const map={"18-24":.11,"25-34":.18,"35-44":.17,"45-54":.16,"55-64":.14,"65+":.13};return S.ages.length?S.ages.reduce((s,x)=>s+(map[x]||0),0):.78;}
+function incF(){const has=S.income.filter(x=>x!=="No income targeting");if(!has.length)return 1;const m={"Under $50,000":.4,"$50,000–$74,999":.22,"$75,000–$99,999":.16,"$100,000–$149,999":.15,"$150,000–$199,999":.06,"$200,000+":.05};return Math.min(1,has.reduce((s,x)=>s+(m[x]||0),0))||.5;}
+function computePopulation(){
+ switch(S.geoType){
+  case "City/ZIP + Radius":{const r=Math.max(1,+S.radius||10);return Math.round(Math.PI*r*r*900);} // ~900 people/sq mi
+  case "DMA":return 1200000;
+  case "Statewide":return 6500000;
+  case "National":return 335000000;
+  default:return +S.population||250000;
+ }
+}
+function estimates(){
+ if(S.aiEst){const a=S.aiEst;const pop=+a.population||computePopulation();const aud=+a.addressable_audience||Math.round(pop*.85*ageF()*incF());return{pop,aud,hh:+a.households||Math.round(aud/1.9),dev:+a.devices||Math.round(aud*2.3),ai:true,rationale:a.rationale||""};}
+ const pop=(S.geoType==="Other"&&S.population)?+S.population:computePopulation();const aud=Math.round(pop*.85*ageF()*incF());return{pop,aud,hh:Math.round(aud/1.9),dev:Math.round(aud*2.3),ai:false};
+}
+function popExplain(){switch(S.geoType){
+ case "City/ZIP + Radius":return `AI-estimated from a ${S.radius}-mile radius (~900 people/sq mi). In production, AI + mapping data size the exact area.`;
+ case "DMA":return "AI-estimated from a typical U.S. media market — refined to the named DMA in production.";
+ case "Statewide":return "AI-estimated from an average U.S. state — refined to the named state in production.";
+ case "National":return "Based on the U.S. adult population; the filters below narrow it to the addressable audience.";
+ default:return "Using your entered estimate; AI can size it from the described area in production.";}}
+function fmt(n){n=+n||0;if(n>=1e6)return(n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'M';if(n>=1e3)return Math.round(n/1e3)+'k';return String(Math.round(n));}
+function money(n){return (+n||0).toLocaleString('en-US');}
+
+/* impressions from REAL rates */
+function productDelivery(rateValue,rateType,dollars){
+ if(rateType==="CPM"&&rateValue>0)return{unit:"impr",val:Math.round(dollars/rateValue*1000)};
+ if(rateType==="CPV"&&rateValue>0)return{unit:"views",val:Math.round(dollars/rateValue)};
+ return{unit:"managed",val:0};
+}
+
+/* packages built from budget + selected items, using real rates */
+function buildPackages(){
+ const tiers=[{k:"Essential",mult:.7},{k:"Recommended",mult:1,rec:true},{k:"Accelerated",mult:1.5}];
+ const seed=S.items.reduce((s,i)=>s+(i.pctSeed||0),0)||1;
+ S.packages=tiers.map(t=>{
+  const monthly=Math.round(S.budget*t.mult/250)*250;
+  const lines=S.items.map(i=>{
+   const dollars=Math.round(monthly*(i.pctSeed/seed)/50)*50;
+   const d=productDelivery(i.rateValue,i.rate,dollars*S.months);
+   return{name:i.product,cat:i.category,amt:dollars,unit:d.unit,val:d.val};
+  });
+  const impr=lines.filter(l=>l.unit==="impr").reduce((s,l)=>s+l.val,0);
+  const views=lines.filter(l=>l.unit==="views").reduce((s,l)=>s+l.val,0);
+  const total=monthly*S.months;
+  const roi=t.mult<1?"2–3×":t.mult>1?"4–6×":"3–5×";
+  return{name:t.k,rec:!!t.rec,monthly,total,lines,impr,views,roi};
+ });
+ S.configured=true;
+}
+
+/* recommend items from goals */
+function recommendItems(){
+ const cats=[];
+ S.objectives.forEach(o=>(GOAL_CATEGORIES[o]||[]).forEach(c=>{if(!cats.includes(c))cats.push(c);}));
+ const chosen=cats.slice(0,4);
+ const seeds=[40,30,20,10];
+ S.items=chosen.map((c,i)=>{const p=findProduct(c)||{};return{label:p.label,category:c,product:p.product||c,rate:p.rateType,rateValue:p.rateValue,budget:0,pctSeed:seeds[i]||10};});
+}
+
+/* helpers */
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function toggle(a,v){const i=a.indexOf(v);if(i>=0)a.splice(i,1);else a.push(v);}
+function card(em2,t,d,on,click){return `<div class="choice${on?' on':''}" onclick="${click}"><div class="em">${em2}</div><div><h3>${t}</h3><p>${d}</p></div><div class="tick"></div></div>`;}
+function pillRow(list,arr,kind){return '<div>'+list.map(v=>`<span class="pill${arr.includes(v)?' on':''}" onclick="pill('${kind}',this.dataset.v)" data-v="${esc(v)}">${esc(v)}</span>`).join('')+'</div>';}
+function opt(list,cur){return list.map(x=>`<option ${cur===x?'selected':''}>${esc(x)}</option>`).join('');}
+
+/* ============================================================ STEPS ============================================================ */
+STEPS=[
+ ()=>({eyebrow:"The Goal",title:"What are we trying to accomplish?",sub:"Pick one or more. This drives the recommended products, KPIs, and audience — using your real Smart 1 catalog.",
+   html:'<div class="cards">'+Object.keys(objectiveKPIs).map(k=>card(GOAL_META[k].em,k,GOAL_META[k].d,S.objectives.includes(k),`goal('${k}')`)).join('')+'</div>',
+   valid:()=>S.objectives.length>0}),
+
+ ()=>({eyebrow:"Customer & Industry",title:"Tell us about the customer",sub:"Context tailors the audience library and benchmarks. Smart 1 can build the business description from the website via your AI route.",
+   html:`<div class="fld"><label>Client / business name</label><input value="${esc(S.client)}" oninput="S.client=this.value;syncNext()" placeholder="Riverstone Dental Group"></div>
+   <div class="two"><div class="fld"><label>Website</label><input value="${esc(S.url)}" oninput="S.url=this.value" placeholder="riverstonedental.com"></div>
+   <div class="fld"><label>Industry</label><select onchange="S.industry=this.value;render()"><option value="">Select…</option>${opt(INDUSTRIES,S.industry)}</select></div></div>
+   <div class="panel"><div class="ttl">Business description</div>
+    <div class="cards" style="margin-top:6px">
+     ${card("✨","Build one for me","AI writes it from the website",S.descriptionMode==="Build one for me",`S.descriptionMode='Build one for me';render()`)}
+     ${card("📝","I already have one","Paste or type it",S.descriptionMode==="I have one",`S.descriptionMode='I have one';render()`)}
+    </div>
+    ${S.descriptionMode==="Build one for me"
+     ? `<div style="margin-top:12px"><button class="btn btn-line" onclick="generateDesc()" ${S.descLoading?'disabled':''}>${S.descLoading?'<span class="spin"></span>Generating…':'✨ Generate description'}</button>
+        <div class="fld"><label>Generated (editable)</label><textarea oninput="S.description=this.value" placeholder="Click Generate — or type here.">${esc(S.description)}</textarea></div>
+        <div class="note">In production this calls /api/generate-business-description (Brandfetch + OpenAI) to research the site and write a Google-Business-Profile-style description.</div></div>`
+     : `<div class="fld" style="margin-top:12px"><label>Business description</label><textarea oninput="S.description=this.value" placeholder="Family & cosmetic dentistry, 4.8 stars, opening a 2nd location…">${esc(S.description)}</textarea></div>`}
+   </div>`,
+   valid:()=>S.client.trim().length>0}),
+
+ ()=>({eyebrow:"Guardrails",title:"Objectives met — anything to avoid?",sub:"Flag exclusions, negative keywords, or restricted audiences up front (feeds the IO's exclusions field).",
+   html:'<div class="panel"><div class="ttl">🚫 Exclusions / things to avoid</div>'+
+     pillRow(["Exclude current customers","Exclude competitor staff","No off-hours delivery","Brand-safety sensitive","Avoid certain keywords","Sensitive category (health/legal)","Competitor conquesting OK"],S.exclusions,'exc')+
+     '<div class="addpill"><input id="excIn" placeholder="Add an exclusion…" onkeydown="if(event.key===\'Enter\'){addCustom(\'exc\',\'excIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'exc\',\'excIn\')">+ Add</button></div></div>',
+   valid:()=>true}),
+
+ ()=>({eyebrow:"Target Area",title:"Where should we run it?",sub:"Pick the geography — we AI-estimate the population so the salesperson doesn't have to know it, then size the reachable audience.",
+   html:`<div class="two"><div class="fld"><label>Geo type</label><select onchange="S.geoType=this.value;S.aiEst=null;render()">${opt(["City/ZIP + Radius","DMA","Statewide","National","Other"],S.geoType)}</select></div>
+   <div class="fld"><label>Area label (city, ZIPs, DMA, state…)</label><input value="${esc(S.geo)}" oninput="S.geo=this.value;S.aiEst=null" placeholder="e.g. Springfield, IL"></div></div>
+   ${S.geoType==="City/ZIP + Radius"?`<div class="fld"><label>Radius (miles)</label><input type="number" min="1" value="${S.radius}" oninput="S.radius=Math.max(1,+this.value);S.aiEst=null;drawEst()" style="max-width:160px"></div>`:''}
+   ${S.geoType==="Other"?`<div class="fld"><label>Approx. population (optional — else we estimate)</label><input type="number" value="${S.population||''}" oninput="S.population=+this.value;S.aiEst=null;drawEst()" style="max-width:220px"></div>`:''}
+   <div class="two"><div class="fld"><label>Gender</label><select onchange="S.gender=this.value;S.aiEst=null;drawEst()">${opt(["Both","Male","Female"],S.gender)}</select></div><div></div></div>
+   <div class="panel"><div class="ttl">Age ranges</div>${pillRow(["18-24","25-34","35-44","45-54","55-64","65+"],S.ages,'age')}</div>
+   <div class="panel"><div class="ttl">Household income</div>${pillRow(incomeOptions,S.income,'inc')}</div>
+   <div class="panel"><div class="ttl">📊 AI-estimated reach for this area</div>
+   <button id="aiBtn" class="btn btn-line" style="margin-bottom:6px" onclick="estimateAudienceAI()">✨ AI-estimate this area</button>
+   <div class="estgrid" id="estGrid"></div><div class="note" id="popNote"></div></div>`,
+   valid:()=>true,after:drawEst}),
+
+ ()=>({eyebrow:"Audience Strategy",title:"Who we target",sub:"Pulled from your industry audience library. Adjust as needed.",
+   html:(()=>{const key=INDUSTRY_KEYS[S.industry]||'general';const lib=industryIdeas[key]||industryIdeas.general;const list=[...(lib.behavioral||[]),...(lib.contextual||[]),"Website retargeting","Lookalike / CRM match"];return '<div class="panel"><div class="ttl">🎯 Recommended audience layers — '+esc(key)+'</div>'+pillRow(list,S.audiences,'aud')+'<div class="addpill"><input id="audIn" placeholder="Add a custom audience…" onkeydown="if(event.key===\'Enter\'){addCustom(\'aud\',\'audIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'aud\',\'audIn\')">+ Add</button></div></div>';})(),
+   valid:()=>true}),
+
+ ()=>({eyebrow:"Budget",title:"What's the working budget?",sub:"Monthly media budget. Three packages build around it and reconfigure if you change it.",
+   html:'<div class="cards">'+
+     card("🧭","Help me choose","Show budget ranges by goal",S.budgetMode==="range",`S.budgetMode='range';render()`)+
+     card("✍️","I know the budget","Enter an exact monthly amount",S.budgetMode==="exact",`S.budgetMode='exact';render()`)+
+   '</div>'+
+   (S.budgetMode==="range"
+     ? '<div class="cards c3" style="margin-top:14px">'+[[1750,"$1k–2.5k","Entry / very local"],[3500,"$2.5k–5k","Testing a market"],[8000,"$5k–10k","Steady local growth"],[15000,"$10k–20k","Aggressive share gain"],[28000,"$20k–40k","Multi-market push"],[50000,"$40k+","Regional dominance"]].map(b=>card("💰",b[1],b[2],S.budget===b[0],`setBudget(${b[0]})`)).join('')+'</div>'
+     : `<div class="fld" style="margin-top:14px"><label>Exact monthly budget ($)</label><input type="number" value="${S.budget}" oninput="setBudget(+this.value)" placeholder="e.g. 6500" style="max-width:260px"></div>`)+
+   `<div class="fld"><label>Campaign length (months)</label><input type="number" min="1" value="${S.months}" oninput="S.months=Math.max(1,+this.value)" style="max-width:200px"></div>`,
+   valid:()=>S.budget>0}),
+
+ ()=>{ if(S.items.length===0)recommendItems(); return{eyebrow:"The Media Mix",title:"Recommended products",sub:"From your goal, using real catalog products & rates. Add or remove — you'll be asked whether to reconfigure the packages.",
+   html:'<div id="prodList"></div>'+
+    '<div class="addrow"><select id="addCat">'+productCategories.map(c=>`<option value="${esc(c)}">${em(c)} ${esc(c)}</option>`).join('')+'</select><button class="btn btn-line" onclick="addItem()">+ Add product</button></div>'+
+    '<div id="reconfigWrap"></div>'+
+    '<div class="panel"><div class="ttl">💡 Sample ROI by product (internal only)</div><div class="kv" id="roiTags"></div><div class="note">Illustrative category benchmarks for the salesperson — not shown to the client unless you choose to include them.</div></div>',
+   valid:()=>S.items.length>0,after:()=>{drawItems();drawRoi();}};},
+
+ ()=>{ if(S.kpis.length===0)S.kpis=[...new Set(S.objectives.flatMap(o=>objectiveKPIs[o]||[]))].slice(0,6); if(!S.landing)S.landing=landingRec();
+   return{eyebrow:"Measurement",title:"KPI framework & landing page",sub:"KPIs come straight from your objective→KPI map. Tune them; edit the landing-page recommendation.",
+   html:'<div class="panel"><div class="ttl">📐 KPIs</div>'+pillRow([...new Set(S.objectives.flatMap(o=>objectiveKPIs[o]||[]))],S.kpis,'kpi')+
+     '<div class="addpill"><input id="kpiIn" placeholder="Add a KPI…" onkeydown="if(event.key===\'Enter\'){addCustom(\'kpi\',\'kpiIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'kpi\',\'kpiIn\')">+ Add</button></div></div>'+
+     `<div class="panel"><div class="ttl">🖥 Landing page recommendation</div><div class="fld" style="margin-top:6px"><textarea oninput="S.landing=this.value" style="min-height:92px">${esc(S.landing)}</textarea></div>
+     <div class="two"><div class="fld"><label>Landing mode</label><select onchange="S.landingMode=this.value">${opt(["One landing page","Multiple landing pages by product"],S.landingMode)}</select></div>
+     <div class="fld"><label>Landing URL</label><input value="${esc(S.landingUrl)}" oninput="S.landingUrl=this.value" placeholder="riverstonedental.com/new-patients"></div></div></div>`,
+   valid:()=>S.kpis.length>0};},
+
+ ()=>{ buildPackages(); return{eyebrow:"Investment Options",title:"Three package recommendations",sub:"Built from your $"+money(S.budget)+"/mo budget and product mix, using real rates for delivery. Pick the featured one.",
+   html:'<div class="pkgs" id="pkgWrap"></div><div class="note">Essential ≈ 70%, Recommended = 100%, Accelerated ≈ 150% of budget. Change the budget or products and these rebuild.</div>',
+   valid:()=>true,after:drawPkgs};},
+
+ ()=>({eyebrow:"Review",title:"Ready to build the proposal",sub:"Campaign at a glance, plus the IO-compatible payload this produces. Generate hands it to the proposal renderer.",
+   html:summaryHtml(),valid:()=>true,isLast:true})
+];
+
+/* interactions */
+function goal(k){toggle(S.objectives,k);S.items=[];S.kpis=[];render();syncNext();}
+function pill(kind,v){const m={exc:S.exclusions,age:S.ages,inc:S.income,aud:S.audiences,kpi:S.kpis};toggle(m[kind],v);if(kind==='age'||kind==='inc')S.aiEst=null;render();if(kind==='age'||kind==='inc')drawEst();syncNext();}
+function addCustom(kind,id){const el=document.getElementById(id);const v=(el.value||'').trim();if(!v)return;const m={exc:S.exclusions,aud:S.audiences,kpi:S.kpis};if(!m[kind].includes(v))m[kind].push(v);el.value='';render();}
+function setBudget(v){S.budget=v;S.configured=false;render();syncNext();}
+function drawEst(){const e=estimates();const g=document.getElementById('estGrid');if(!g)return;
+ const L=S.aiLoading?' loading':'';
+ g.innerHTML=`<div class="est${L}"><b>${S.aiLoading?'—':fmt(e.pop)}</b><span>Est. population</span></div><div class="est${L}"><b>${S.aiLoading?'—':fmt(e.aud)}</b><span>Addressable audience</span></div><div class="est${L}"><b>${S.aiLoading?'—':fmt(e.hh)}</b><span>Households</span></div><div class="est${L}"><b>${S.aiLoading?'—':fmt(e.dev)}</b><span>Devices</span></div>`;
+ const b=document.getElementById('aiBtn');if(b){b.disabled=S.aiLoading;b.innerHTML=S.aiLoading?'<span class="spin"></span>Estimating…':'✨ AI-estimate this area';}
+ const n=document.getElementById('popNote');
+ if(n){ if(S.aiLoading)n.innerHTML='<span class="spin"></span>Asking AI to size this area…'; else if(e.ai)n.textContent="✨ AI estimate. "+(e.rationale||""); else n.textContent=popExplain()+"  Click ‘AI-estimate this area’ for a live figure."; }
+}
+async function estimateAudienceAI(){
+ if(!S.geo){flashNote("Enter an area label first (city, ZIPs, DMA, or state).");return;}
+ S.aiLoading=true;drawEst();
+ try{
+  const r=await fetch(API_BASE+"/api/estimate-audience",{method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({geoType:S.geoType,area:S.geo,radius:S.radius,industry:S.industry,gender:S.gender,ages:S.ages,income:S.income})});
+  const d=await r.json();
+  if(d&&d.ok&&d.estimate){S.aiEst=d.estimate;S.aiLoading=false;drawEst();flashNote("✨ AI sized this area.");return;}
+  throw new Error((d&&(d.error||d.detail))||("HTTP "+r.status));
+ }catch(e){S.aiEst=null;S.aiLoading=false;drawEst();flashNote("Couldn't reach the AI ("+e.message+"). Showing the built-in estimate — check ⚙ AI endpoint.");}
+}
+async function generateDesc(){
+ S.descLoading=true;render();
+ try{
+  const r=await fetch(API_BASE+"/api/generate-business-description",{method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({urls:[S.url].filter(Boolean),client:S.client,industry:S.industry,geo:S.geo,brandfetch:{}})});
+  const d=await r.json();
+  if(d&&d.description){S.description=d.description;S.descLoading=false;render();flashNote("✨ Description generated.");return;}
+  throw new Error((d&&(d.error||d.detail))||("HTTP "+r.status));
+ }catch(e){S.descLoading=false;fallbackDesc();render();flashNote("Couldn't reach the AI ("+e.message+"). Used a placeholder — check ⚙ AI endpoint.");}
+}
+function fallbackDesc(){const c=S.client||'The business';const ind=(S.industry||'local').toLowerCase();const g=S.geo||'its service area';S.description=`${c} is a ${ind} business serving customers in ${g}. It provides products and services designed to meet the needs of customers researching solutions in this category, with a focus on quality, responsiveness, and local expertise.`;}
+
+function drawItems(){const host=document.getElementById('prodList');if(!host)return;const seed=S.items.reduce((s,i)=>s+i.pctSeed,0)||1;
+ host.innerHTML=S.items.map((i,ix)=>{const pct=Math.round(i.pctSeed/seed*100);const dollars=Math.round(S.budget*pct/100/50)*50;const rateLabel=i.rate?(i.rate+' '+(i.rateValue||'')):'Mgmt/flat';
+  return `<div class="prod"><div class="pi">${em(i.category)}</div><div class="grow"><h4>${esc(i.product)}</h4><div class="meta">${esc(i.category)} · ${esc(rateLabel)} · ROI ${esc(CATEGORY_ROI[i.category]||'—')}</div></div><div class="alloc">${pct}%<small>$${money(dollars)}/mo</small></div><button class="x" onclick="rmItem(${ix})">✕</button></div>`;}).join('');}
+function drawRoi(){const h=document.getElementById('roiTags');if(!h)return;h.innerHTML=S.items.map(i=>`<span class="tag">${em(i.category)} ${esc(i.category)}: ${esc(CATEGORY_ROI[i.category]||'—')}</span>`).join('');}
+function addItem(){const cat=document.getElementById('addCat').value;const p=findProduct(cat)||{};if(S.items.some(i=>i.category===cat)){flagDirty();return;}S.items.push({label:p.label,category:cat,product:p.product||cat,rate:p.rateType,rateValue:p.rateValue,budget:0,pctSeed:15});flagDirty();drawItems();drawRoi();}
+function rmItem(i){S.items.splice(i,1);flagDirty();drawItems();drawRoi();}
+function flagDirty(){if(!S.configured)return;S.dirty=true;S.keepAsIs=false;drawReconfig();}
+function drawReconfig(){const w=document.getElementById('reconfigWrap');if(!w)return;w.innerHTML=(S.dirty&&!S.keepAsIs)?`<div class="reconfig"><p>🔄 You changed the product mix. Reconfigure the three packages to match — or keep the current numbers as-is?</p><button class="btn btn-primary" onclick="doReconfig()">Reconfigure</button><button class="btn btn-back" onclick="keepAsIs()">Keep as is</button></div>`:'';}
+function doReconfig(){buildPackages();S.dirty=false;S.keepAsIs=false;drawReconfig();}
+function keepAsIs(){S.keepAsIs=true;S.dirty=false;drawReconfig();}
+
+function drawPkgs(){const w=document.getElementById('pkgWrap');if(!w)return;w.innerHTML=S.packages.map((p,i)=>`<div class="pkg${i===S.selPkg?' on':''}" onclick="S.selPkg=${i};drawPkgs()">${p.rec?'<div class="flag">Recommended</div>':''}<div class="pn">${p.name}</div><div class="pp">$${money(p.monthly)}<small>/mo</small></div><div class="ptot">$${money(p.total)} over ${S.months} mo</div><div class="roi">Sample ROI ${p.roi}</div><ul>${p.lines.map(l=>`<li>${esc(l.name)}<b>$${money(l.amt)}</b></li>`).join('')}<li>Est. impressions<b>${fmt(p.impr)}</b></li>${p.views?`<li>Est. video views<b>${fmt(p.views)}</b></li>`:''}</ul></div>`).join('');}
+
+function landingRec(){const g=S.objectives;
+ if(g.includes("Lead Generation")||g.includes("Phone Calls"))return "A dedicated landing page with one clear offer, a short lead form, click-to-call, and trust signals (reviews, credentials). Keep navigation minimal so every visitor converts or calls.";
+ if(g.includes("Conversions"))return "Send paid traffic to fast product/category pages with the retargeting pixel installed, clear pricing, and prominent CTAs. Add abandoned-cart retargeting.";
+ if(g.includes("Store Visits"))return "A location page with map, hours, click-to-call, and Get Directions. Ensure the Google Business Profile is claimed and consistent.";
+ return "A focused landing page aligned to the offer with a single primary CTA and a retargeting pixel installed.";}
+
+function ioPayload(){const sel=S.packages[S.selPkg]||{};const seed=S.items.reduce((s,i)=>s+i.pctSeed,0)||1;
+ return{
+  io_type:"Proposal",client_name:S.client,client_website:S.url,industry:S.industry,
+  campaign_goals:S.objectives,kpis:S.kpis,
+  geographic_target:S.geo,geo_type:S.geoType,geo_radius:(S.geoType==="City/ZIP + Radius"?S.radius:""),geo_population_estimate:estimates().pop,
+  description_mode:S.descriptionMode,business_description:S.description,
+  gender:S.gender,ages:S.ages,income_targets:S.income,
+  audiences:S.audiences,exclusions_negative_keywords:S.exclusions.join(', '),
+  landing_page_mode:S.landingMode,shared_landing_page:S.landingUrl,landing_recommendation:S.landing,
+  monthly_budget:sel.monthly,total_campaign_budget:sel.total,months:S.months,
+  selected_package:sel.name,
+  products:S.items.map(i=>({product:i.product,category:i.category,rate:i.rate,budget:Math.round(sel.monthly*(i.pctSeed/seed)/50)*50})),
+  estimated_impressions:sel.impr
+ };}
+
+function summaryHtml(){const e=estimates();const sel=S.packages[S.selPkg]||{};
+ const row=(l,v)=>`<li style="display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line);gap:12px"><span style="color:var(--muted)">${l}</span><b style="color:var(--navy);text-align:right">${v}</b></li>`;
+ return `<div class="panel"><ul style="list-style:none;padding:0;margin:0">
+  ${row('Client',esc(S.client||'—'))}${row('Goals',esc(S.objectives.join(', ')||'—'))}${row('Industry',esc(S.industry||'—'))}
+  ${row('Target area',esc(S.geo||S.geoType))}${row('Est. audience / households',fmt(e.aud)+' / '+fmt(e.hh))}
+  ${row('Audience layers',esc(S.audiences.join(', ')||'—'))}${row('Products',esc(S.items.map(i=>i.product).join(', ')))}
+  ${row('KPIs',esc(S.kpis.join(', ')))}${row('Featured package',(esc(sel.name||'—'))+' · $'+money(sel.monthly||0)+'/mo')}
+  ${row('Campaign total','$'+money(sel.total||0)+' over '+S.months+' months')}${row('Est. impressions',fmt(sel.impr||0))}</ul></div>
+  <div class="panel"><div class="ttl">🔗 IO-compatible payload (what feeds /api → GoHighLevel)</div><pre>${esc(JSON.stringify(ioPayload(),null,2))}</pre></div>
+  <div style="text-align:center;margin-top:18px"><button class="btn btn-accept" style="padding:14px 32px;font-size:16px" onclick="generate()">✨ Generate the proposal</button>
+  <div class="note">Opens the client-facing proposal (the format you approved) from this data; on client approval it posts to your IO/GHL flow.</div></div>`;}
+function generate(){alert("In the full build this hands the IO-compatible payload above to the proposal renderer (interactive proposal + PDF), and on client approval POSTs to /api/submit-io to create the IO + GoHighLevel opportunity.\n\nEvery field already matches your IO webhook keys.");}
+
+/* engine */
+function render(){const d=STEPS[step]();const st=document.getElementById('stage');st.innerHTML=`<div class="eyebrow">${d.eyebrow}</div><h1 class="q">${d.title}</h1><div class="sub">${d.sub}</div>${d.html}`;
+ document.getElementById('stepLabel').textContent='Step '+(step+1)+' of '+STEPS.length;document.getElementById('bar').style.width=((step+1)/STEPS.length*100)+'%';
+ document.getElementById('backBtn').style.visibility=step===0?'hidden':'visible';document.getElementById('nextBtn').textContent=d.isLast?'Finish':'Continue →';
+ if(d.after)d.after();window._valid=d.valid;syncNext();window.scrollTo(0,0);}
+function syncNext(){document.getElementById('nextBtn').disabled=window._valid?!window._valid():false;}
+function next(){const d=STEPS[step]();if(d.valid&&!d.valid())return;if(step<STEPS.length-1){step++;render();}else generate();}
+function prev(){if(step>0){step--;render();}}
+render();
+</script>
+</body>
+</html>
