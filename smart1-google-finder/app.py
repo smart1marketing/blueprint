@@ -1,12 +1,14 @@
 import json
 import os
 import secrets
+import sqlite3
 import time
 from urllib.parse import urlencode
 
 import requests
 from flask import Flask, redirect, render_template, request, session, url_for, jsonify
 from flask_session import Session
+from cryptography.fernet import Fernet, InvalidToken
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
@@ -25,6 +27,9 @@ Session(app)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 CACHE_SECONDS = int(os.environ.get("CACHE_SECONDS", "900"))
+TOKEN_DB_PATH = os.environ.get("TOKEN_DB_PATH", "/var/data/google_tokens.db")
+TOKEN_ENCRYPTION_KEY = os.environ.get("TOKEN_ENCRYPTION_KEY", "")
+
 ALLOWED_EMAILS = {
     x.strip().lower()
     for x in os.environ.get("ALLOWED_EMAILS", "").split(",")
@@ -52,13 +57,75 @@ def load_aliases():
         return {}
 
 
+def _fernet():
+    if not TOKEN_ENCRYPTION_KEY:
+        raise RuntimeError("TOKEN_ENCRYPTION_KEY is not configured.")
+    try:
+        return Fernet(TOKEN_ENCRYPTION_KEY.encode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError("TOKEN_ENCRYPTION_KEY must be a valid Fernet key.") from exc
+
+
+def _db():
+    db_dir = os.path.dirname(TOKEN_DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+    conn = sqlite3.connect(TOKEN_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS google_accounts (
+            email TEXT PRIMARY KEY,
+            refresh_token_enc TEXT NOT NULL,
+            connected_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        """
+    )
+    conn.commit()
+    return conn
+
+
 def connected_accounts():
-    return session.get("google_accounts", [])
+    try:
+        with _db() as conn:
+            rows = conn.execute(
+                "SELECT email, refresh_token_enc FROM google_accounts ORDER BY email"
+            ).fetchall()
+        f = _fernet()
+        accounts = []
+        for row in rows:
+            try:
+                token = f.decrypt(row["refresh_token_enc"].encode("utf-8")).decode("utf-8")
+            except InvalidToken:
+                continue
+            accounts.append({"email": row["email"], "refresh_token": token})
+        return accounts
+    except Exception:
+        return []
 
 
-def save_accounts(accounts):
-    session["google_accounts"] = accounts
-    session.modified = True
+def save_account(email, refresh_token):
+    now = int(time.time())
+    token_enc = _fernet().encrypt(refresh_token.encode("utf-8")).decode("utf-8")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO google_accounts (email, refresh_token_enc, connected_at, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET
+                refresh_token_enc=excluded.refresh_token_enc,
+                updated_at=excluded.updated_at
+            """,
+            (email.lower(), token_enc, now, now),
+        )
+        conn.commit()
+
+
+def delete_account(email):
+    with _db() as conn:
+        conn.execute("DELETE FROM google_accounts WHERE email = ?", (email.lower(),))
+        conn.commit()
 
 
 def is_allowed(email):
@@ -282,18 +349,13 @@ def oauth_callback():
     if not email or not is_allowed(email):
         return "This Google account is not allowed to connect to this finder.", 403
 
-    accounts = connected_accounts()
-    existing = next((a for a in accounts if a.get("email", "").lower() == email), None)
+    existing = next((a for a in connected_accounts() if a.get("email", "").lower() == email), None)
 
-    if existing:
-        if refresh_token:
-            existing["refresh_token"] = refresh_token
-    else:
-        if not refresh_token:
-            return "Google did not return a refresh token. Remove this app from your Google account permissions, then reconnect.", 400
-        accounts.append({"email": email, "refresh_token": refresh_token})
+    if not refresh_token and not existing:
+        return "Google did not return a refresh token. Remove this app from your Google account permissions, then reconnect.", 400
 
-    save_accounts(accounts)
+    if refresh_token:
+        save_account(email, refresh_token)
     CACHE.pop(email, None)
     return redirect(url_for("index"))
 
@@ -301,16 +363,15 @@ def oauth_callback():
 @app.route("/disconnect/<path:email>", methods=["POST"])
 def disconnect(email):
     email = email.lower()
-    accounts = [a for a in connected_accounts() if a.get("email", "").lower() != email]
-    save_accounts(accounts)
+    delete_account(email)
     CACHE.pop(email, None)
     return jsonify({"ok": True})
 
 
 @app.route("/logout")
 def logout():
-    for account in connected_accounts():
-        CACHE.pop(account.get("email", "").lower(), None)
+    # Clears only the browser session/OAuth state. Connected Google accounts remain
+    # stored on the persistent disk until explicitly disconnected.
     session.clear()
     return redirect(url_for("index"))
 

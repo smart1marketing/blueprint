@@ -75,3 +75,31 @@ OAuth refresh tokens are stored in a server-side filesystem session under `/tmp`
 ```
 
 Google OAuth itself is best completed by opening the Render app directly in a browser tab. Once the accounts are connected, test the iframe in Smart 1 Suite/Simvoly.
+
+## Persistent Google account connections
+
+This version stores connected Google refresh tokens in an encrypted SQLite database. To keep the database across Render restarts/redeploys, attach a Render Persistent Disk and mount it at `/var/data`.
+
+Add these environment variables in Render:
+
+- `GOOGLE_CLIENT_ID` - Google OAuth Web Client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth Web Client Secret
+- `FLASK_SECRET_KEY` - long random application secret
+- `CACHE_SECONDS` - `900`
+- `ALLOWED_EMAILS` - `adops@smart1marketing.com,smartadops@gmail.com,smart1sites@gmail.com`
+- `TOKEN_DB_PATH` - `/var/data/google_tokens.db`
+- `TOKEN_ENCRYPTION_KEY` - a Fernet encryption key generated once and kept unchanged
+
+Generate `TOKEN_ENCRYPTION_KEY` locally with:
+
+`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+
+IMPORTANT: Do not change `TOKEN_ENCRYPTION_KEY` after accounts have been connected. Existing stored tokens cannot be decrypted with a different key.
+
+### Render persistent disk
+
+In the Render service, add a Persistent Disk with mount path:
+
+`/var/data`
+
+1 GB is more than enough for this app. Once the disk and environment variables are configured, redeploy the service, then connect each Google account once. The connections will remain available across normal restarts and redeploys as long as the persistent disk and encryption key remain in place.
