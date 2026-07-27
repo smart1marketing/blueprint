@@ -5,6 +5,12 @@ import requests
 
 from config import SETTINGS
 
+# Simvoly's API docs require every client to identify itself with a User-Agent.
+# Without it, white-label CDN/WAF layers (e.g. Cloudflare) frequently answer the
+# default "python-requests/x.y" agent with an HTML block/challenge page under a
+# 200 status, which is what surfaced as "Simvoly returned a non-JSON response".
+USER_AGENT = "Smart1SitesAdmin/3.0 (+https://smart1sites.com)"
+
 
 class SimvolyError(RuntimeError):
     pass
@@ -16,12 +22,26 @@ def unwrap_data(payload):
     return payload
 
 
+def _summarize_response(response) -> str:
+    """Build a short, secret-free description of a response for error messages."""
+    content_type = response.headers.get("Content-Type", "unknown")
+    snippet = (response.text or "")[:300].replace("\n", " ").strip()
+    redirected = ""
+    if getattr(response, "history", None):
+        redirected = f" (redirected to {response.url})"
+    return (
+        f"HTTP {response.status_code} {content_type}{redirected} "
+        f"from {response.url} — body starts: {snippet!r}"
+    )
+
+
 class SimvolyClient:
     """Official Simvoly Platform Management API client for Smart 1 Sites.
 
     Normal /api/v1 endpoints authenticate with X-CLIENT-KEY.
     The SSO /api/platform/session endpoint authenticates with Bearer.
     POST bodies are application/x-www-form-urlencoded per Simvoly's docs.
+    Every request sends a User-Agent, which Simvoly's docs require.
     """
 
     def __init__(self):
@@ -38,6 +58,7 @@ class SimvolyClient:
         self._require_key()
         return {
             "Accept": "application/json",
+            "User-Agent": USER_AGENT,
             "X-CLIENT-KEY": self.s.api_key,
         }
 
@@ -45,6 +66,7 @@ class SimvolyClient:
         self._require_key()
         return {
             "Accept": "application/json",
+            "User-Agent": USER_AGENT,
             "Authorization": f"Bearer {self.s.api_key}",
         }
 
@@ -64,16 +86,38 @@ class SimvolyClient:
         except requests.RequestException as exc:
             raise SimvolyError(f"Could not reach Simvoly: {exc}") from exc
 
+        content_type = (response.headers.get("Content-Type") or "").lower()
+        looks_like_json = "json" in content_type
+
         if not response.ok:
-            body = response.text[:1200]
-            raise SimvolyError(f"Simvoly HTTP {response.status_code}: {body}")
+            # Give the operator the status, content type, final URL and a body
+            # snippet so a 401 (bad key) is not confused with an HTML block page.
+            hint = ""
+            if response.status_code in (401, 403):
+                hint = " — check that SIMVOLY_API_KEY is the valid Platform API key (X-CLIENT-KEY)."
+            elif not looks_like_json:
+                hint = (
+                    " — an HTML/error page usually means SIMVOLY_API_BASE_URL is pointing "
+                    "at the wrong host (it must be https://api.<white-label-domain>) or a "
+                    "CDN/WAF blocked the request."
+                )
+            raise SimvolyError(f"Simvoly {_summarize_response(response)}{hint}")
 
         if not response.content:
             return {}
+
         try:
             return response.json()
         except ValueError as exc:
-            raise SimvolyError("Simvoly returned a non-JSON response.") from exc
+            # 2xx but not JSON: almost always a wrong base URL (SPA/login/landing
+            # page returned with 200) or a WAF challenge page.
+            raise SimvolyError(
+                "Simvoly returned a non-JSON response. This is a 2xx response whose body "
+                "is not JSON, which almost always means SIMVOLY_API_BASE_URL is pointing at "
+                "the wrong host (it must be https://api.<white-label-domain>, e.g. "
+                "https://api.smart1sites.com) or a CDN/WAF returned a challenge page. "
+                f"Details: {_summarize_response(response)}"
+            ) from exc
 
     # ---------- Read-only catalog / project endpoints ----------
     def list_plans(self) -> List[Dict[str, Any]]:
