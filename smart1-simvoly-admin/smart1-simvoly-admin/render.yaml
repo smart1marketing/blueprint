@@ -2,9 +2,11 @@ databases:
   - name: smart1-sites-db
     databaseName: smart1_sites
     user: smart1
-    plan: free            # upgrade to a paid plan for a permanent production database
+    plan: free            # IMPORTANT: change to your PAID plan (e.g. basic-256mb) so the
+                          # database — and your imported portfolio — is not deleted after 30 days.
 
 services:
+  # ---- Web app (unchanged) ----
   - type: web
     name: smart-1-sites-admin
     runtime: python
@@ -20,9 +22,40 @@ services:
         value: false
       - key: SIMVOLY_API_BASE_URL
         value: https://api.smart1sites.com
+      - key: SIMVOLY_API_KEY
+        sync: false          # set in the Render dashboard; never commit the key
       - key: DATABASE_URL
         fromDatabase:
           name: smart1-sites-db
           property: connectionString
       - key: SECRET_KEY
         generateValue: true
+
+  # ---- Nightly auto-refresh of known projects (NEW) ----
+  # Re-pulls live details for every project already in the registry from the
+  # official Platform API. Read-only; no write actions. Render evaluates the
+  # schedule in UTC. 07:00 UTC = 3:00 AM America/New_York during EDT.
+  - type: cron
+    name: smart1-refresh-known-projects
+    runtime: python
+    schedule: "0 7 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python refresh_cron.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: MOCK_MODE
+        value: false
+      - key: ENABLE_WRITE_ACTIONS
+        value: false
+      - key: SIMVOLY_API_BASE_URL
+        value: https://api.smart1sites.com
+      - key: SIMVOLY_API_KEY
+        sync: false          # set to the SAME value as the web service, in the dashboard
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smart1-sites-db
+          property: connectionString
+      # Optional: refresh in batches instead of the whole portfolio each night.
+      # - key: REFRESH_LIMIT
+      #   value: "300"
