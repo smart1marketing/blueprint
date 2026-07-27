@@ -1,35 +1,116 @@
-# Smart 1 Sites Admin v2
+# Smart 1 Sites Admin v3
 
-## What changed
-- Local SQLite cache so the dashboard does not make 21 Simvoly calls every page load.
-- Project + plan synchronization with pagination.
-- Search by project name, domain, project ID, website ID.
-- Filters by status, plan and partner.
-- Active / Trial / Expired metrics and alerts.
-- On-demand project-detail refresh for website ID, domain and subdomain.
-- Real plan catalog fields: monthly, annual, base plan, pages, storage, bandwidth, contributors and products.
-- Smart 1 client price, actual platform cost, partner, internal client name and notes.
-- Add / Suspend / Reactivate / Cancel routes behind a safety switch.
+Admin portal for Smart 1 Sites / Simvoly reseller management using the official Platform Management API.
 
-## Render
-Build: `pip install -r requirements.txt`
+## What changed from v2
 
-Start: `gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60`
+- Official API base defaults to `https://api.smart1sites.com`.
+- `/api/v1/*` calls authenticate with `X-CLIENT-KEY`.
+- SSO uses `Authorization: Bearer <Platform API Key>` as documented.
+- POST bodies are form-encoded, not JSON.
+- Endpoint paths are built into the application instead of being Render environment variables.
+- Plans and templates sync directly from the official Platform API.
+- Project details and project websites refresh through official endpoints.
+- Add Site supports template, branding, personalization tags, and optional plan activation.
+- Suspend / reactivate / cancel use the official project status endpoint.
+- Domain connect/disconnect and personalization tag updates are supported.
+- SSO can open a customer's builder session.
+- Existing reseller-wide inventory can be imported from the reseller management-panel `list-projects` JSON without storing browser cookies.
+- Customer-specific project discovery uses the official `/api/v1/projects` endpoint.
 
-Health: `/health`
+## Important API limitation
 
-Disk mount: `/var/data`
+The supplied Simvoly documentation defines `GET /api/v1/projects` as **customer-scoped** and requires `externalCustomerId`, `userId`, or `customerEmail`. It does not document a reseller-wide endpoint that lists every existing project.
 
-## Upgrade safely
-The app upgrades the original prototype metadata table in place, so you can keep `DATABASE_PATH=/var/data/smart1_sites.sqlite3`. Back up the disk/database before the first v2 deploy.
-Keep `MOCK_MODE=true` and `ENABLE_WRITE_ACTIONS=false`, deploy, log in, and click **Sync Simvoly** to seed the realistic demo data.
+For the existing Smart 1 portfolio, use **Inventory → Import Existing Portfolio** to seed project IDs from the reseller management-panel JSON response. Once a project ID is in the local registry, Smart 1 Sites Admin uses the official Platform API for project details, websites, lifecycle actions, domain actions, etc.
 
-For live read-only use, rotate any API credentials previously pasted/shared, place the replacement only in Render, then fill the verified White Label Platform API base URL and endpoint paths. The JSON defaults already match the responses you captured: plans at `data`, projects at `data.items`, and page count at `data.pagesCount`.
+## Render settings
 
-The captured management-panel URLs are session/CSRF authenticated. Do not copy browser cookies into Render. Use the Platform API key and documented Platform API paths.
+Build command:
 
-## Write actions
-Only after create/suspend/reactivate/cancel endpoint paths and payloads are verified, populate their environment variables and set `ENABLE_WRITE_ACTIONS=true`.
+```bash
+pip install -r requirements.txt
+```
 
-## Pricing note
-`monthlyPrice` / `yearlyPrice` are catalog pricing. `bgMonthlyPrice` is displayed as a reference only. The app does not assume it is wholesale cost unless you explicitly set `USE_BG_AS_PLATFORM_COST=true`.
+Start command:
+
+```bash
+gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
+```
+
+Health check:
+
+```text
+/health
+```
+
+Persistent disk mount:
+
+```text
+/opt/render/project/src/data
+```
+
+Database environment variable:
+
+```text
+DATABASE_PATH=/opt/render/project/src/data/smart1_sites.sqlite3
+```
+
+## Required Render environment variables
+
+```text
+PYTHON_VERSION=3.12.8
+SECRET_KEY=<long random secret>
+ADMIN_USERNAME=smart1admin
+ADMIN_PASSWORD=<strong password>
+FLASK_ENV=production
+DATABASE_PATH=/opt/render/project/src/data/smart1_sites.sqlite3
+SIMVOLY_API_BASE_URL=https://api.smart1sites.com
+SIMVOLY_API_KEY=<your platform API key>
+MOCK_MODE=false
+ENABLE_WRITE_ACTIONS=false
+USE_BG_AS_PLATFORM_COST=false
+```
+
+Do not put the API key in GitHub.
+
+## Safe launch sequence
+
+1. Deploy with `ENABLE_WRITE_ACTIONS=false`.
+2. Log in and press **Sync Platform Catalog**. Plans/templates should populate.
+3. Import existing project inventory or use customer discovery.
+4. Open a project and press **Refresh from Simvoly** to verify project/site details.
+5. Only after read-only behavior is confirmed, set `ENABLE_WRITE_ACTIONS=true`.
+
+## Official endpoints implemented
+
+Read/catalog:
+- `GET /api/v1/plans`
+- `GET /api/v1/templates`
+- `GET /api/v1/projects?customerEmail=...` (or `userId` / `externalCustomerId`)
+- `GET /api/v1/projects/{projectId}`
+- `GET /api/v1/projects/{projectId}/websites`
+- `GET /api/v1/projects/{projectId}/websites/{websiteId}`
+- `GET /api/v1/website/{websiteId}/check-limits?planId=...`
+
+Provisioning / users:
+- `POST /api/v1/website`
+- `POST /api/v1/website/add`
+- `POST /api/v1/website/assign`
+- `POST /api/v1/website/unassign`
+- `POST /api/v1/users`
+- `POST /api/v1/users/search`
+- `GET /api/v1/users/{userId}`
+- `DELETE /api/v1/users/{userId}`
+
+Lifecycle / domains / personalization:
+- `POST /api/v1/projects/{id}/set-status`
+- `POST /api/v1/projects/{id}/activate`
+- `POST /api/v1/projects/{id}/set-addon`
+- `POST /api/v1/website/{id}/set-status`
+- `POST /api/v1/website/{id}/connect-domain`
+- `POST /api/v1/website/{id}/disconnect-domain`
+- `POST /api/v1/website/{id}/set-personalization-tags`
+
+SSO:
+- `POST /api/platform/session`

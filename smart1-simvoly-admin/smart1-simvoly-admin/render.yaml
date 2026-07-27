@@ -9,14 +9,16 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.8
       - key: MOCK_MODE
-        value: true
+        value: false
       - key: ENABLE_WRITE_ACTIONS
         value: false
+      - key: SIMVOLY_API_BASE_URL
+        value: https://api.smart1sites.com
       - key: DATABASE_PATH
-        value: /var/data/smart1_sites.sqlite3
+        value: /opt/render/project/src/data/smart1_sites.sqlite3
       - key: SECRET_KEY
         generateValue: true
     disk:
       name: smart1-sites-data
-      mountPath: /var/data
+      mountPath: /opt/render/project/src/data
       sizeGB: 1

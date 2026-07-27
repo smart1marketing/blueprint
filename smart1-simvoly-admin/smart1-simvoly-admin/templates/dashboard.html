@@ -1,1 +1,90 @@
-{% extends 'base.html' %}{% block content %}<div class="titlebar"><div><h1>Account Management</h1><p>Simvoly projects, pricing, billing, partner groups and account health.</p></div><form method="post" action="{{url_for('sync')}}"><input type="hidden" name="csrf_token" value="{{session.csrf}}"><button class="primary">Sync Simvoly</button></form></div>{% if last %}<div class="syncnote">Last sync: {{last.completed_at or last.started_at}} · {{last.status}} · {{last.projects_count}} projects · {{last.plans_count}} plans</div>{% endif %}<div class="metrics"><div class="metric"><b>{{total}}</b><span>Total Projects</span></div><div class="metric"><b>{{statuses.get('ACTIVE',0)}}</b><span>Active</span></div><div class="metric"><b>{{statuses.get('TRIAL',0)}}</b><span>Trials</span></div><div class="metric"><b>{{statuses.get('EXPIRED',0)}}</b><span>Expired</span></div><div class="metric"><b>{{money(revenue)}}</b><span>Active MRR</span></div><div class="metric"><b>{{money(cost)}}</b><span>Platform Cost*</span></div><div class="metric"><b>{{money(margin)}}</b><span>Gross Margin*</span></div></div><p class="fine">*Platform cost uses your account override. BG price is used only if USE_BG_AS_PLATFORM_COST=true.</p><div class="grid2"><section class="card"><h2>Needs Attention</h2>{% for a in alerts %}<a class="alertrow" href="{{url_for('project_detail',pid=a.project_id)}}"><span>{{a.name}}</span><strong>{{a.alert}}</strong></a>{% else %}<p>No alerts.</p>{% endfor %}</section><section class="card"><h2>Partner Groups</h2>{% for p,n in partners %}<div class="pair"><span>{{p}}</span><b>{{n}}</b></div>{% endfor %}</section></div><form class="filters card" method="get"><input name="q" value="{{q}}" placeholder="Search name, domain, project ID, website ID"><select name="status"><option value="">All statuses</option>{% for s in ['ACTIVE','TRIAL','EXPIRED'] %}<option value="{{s}}" {{'selected' if status==s}}>{{s}}</option>{% endfor %}</select><select name="plan"><option value="">All plans</option>{% for x in plans %}<option value="{{x.plan_id}}" {{'selected' if plan==x.plan_id}}>{{x.name}}</option>{% endfor %}</select><input name="partner" value="{{partner}}" placeholder="Partner"><button>Filter</button><a href="{{url_for('dashboard')}}">Clear</a></form><div class="tablewrap"><table><thead><tr><th>Account</th><th>Status</th><th>Plan</th><th>Domain</th><th>Partner</th><th>Last Bill</th><th>Next Bill</th><th>Client Price</th></tr></thead><tbody>{% for r in rows %}<tr><td><a href="{{url_for('project_detail',pid=r.project_id)}}"><b>{{r.name}}</b><small>#{{r.project_id}}</small></a></td><td><span class="pill {{status_class(r.status)}}">{{r.status}}</span></td><td>{{r.plan_name}}</td><td>{{r.domain or '—'}}</td><td>{{r.partner_display}}</td><td>{{r.last_billing_date or '—'}}</td><td>{{r.next_billing_date or '—'}}</td><td>{{money(r.client_price if r.client_price is not none else r.monthly_price)}}</td></tr>{% else %}<tr><td colspan="8">No matching projects.</td></tr>{% endfor %}</tbody></table></div><div class="pager">{% if page>1 %}<a href="?q={{q}}&status={{status}}&plan={{plan}}&partner={{partner}}&page={{page-1}}">← Previous</a>{% endif %}<span>Page {{page}} of {{pages}} · {{count}} matches</span>{% if page<pages %}<a href="?q={{q}}&status={{status}}&plan={{plan}}&partner={{partner}}&page={{page+1}}">Next →</a>{% endif %}</div>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<div class="titlebar">
+  <div>
+    <h1>Account Management</h1>
+    <p>{{total}} projects in the local registry · {{template_count}} templates cached.</p>
+  </div>
+  <div class="actions">
+    <form method="post" action="{{url_for('sync')}}">
+      <input type="hidden" name="csrf_token" value="{{session.csrf}}">
+      <button class="primary">Sync Platform Catalog</button>
+    </form>
+    <a class="button" href="{{url_for('inventory')}}">Import / Discover Projects</a>
+  </div>
+</div>
+
+{% if not settings.mock_mode %}
+<div class="info">The official Platform API exposes plans, project details, websites, templates and lifecycle actions, but its documented project list is customer-scoped. Existing reseller-wide inventory is seeded through <b>Inventory Import</b> or <b>Discover Customer</b>, then refreshed with official API calls.</div>
+{% endif %}
+
+<div class="metrics">
+  <div class="metric"><b>{{total}}</b><span>Total projects</span></div>
+  <div class="metric"><b>{{statuses.get('ACTIVE',0)}}</b><span>Active</span></div>
+  <div class="metric"><b>{{statuses.get('TRIAL',0)}}</b><span>Trial</span></div>
+  <div class="metric"><b>{{statuses.get('EXPIRED',0)}}</b><span>Expired</span></div>
+  <div class="metric"><b>{{money(revenue)}}</b><span>Active client MRR</span></div>
+  <div class="metric"><b>{{money(cost)}}</b><span>Platform cost</span></div>
+  <div class="metric"><b>{{money(margin)}}</b><span>Gross margin</span></div>
+</div>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Needs Attention</h2>
+    {% for a in alerts %}
+      <a class="alertrow" href="{{url_for('project_detail',pid=a.project_id)}}">
+        <span>{{a.name}}<small>#{{a.project_id}}</small></span>
+        <strong>{{a.alert_kind}}</strong>
+      </a>
+    {% else %}<p>No current alerts.</p>{% endfor %}
+  </section>
+  <section class="card">
+    <h2>Partner Portfolio</h2>
+    {% for name,n in partners %}
+      <div class="pair"><span>{{name}}</span><b>{{n}}</b></div>
+    {% else %}<p>No partner data yet.</p>{% endfor %}
+  </section>
+</div>
+
+<form class="filters" method="get">
+  <input name="q" value="{{q}}" placeholder="Search account, domain, project ID, website ID">
+  <select name="status">
+    <option value="">All statuses</option>
+    {% for s in ['ACTIVE','TRIAL','EXPIRED'] %}<option value="{{s}}" {{'selected' if status==s}}>{{s}}</option>{% endfor %}
+  </select>
+  <select name="plan">
+    <option value="">All plans</option>
+    {% for p in plans %}<option value="{{p.plan_id}}" {{'selected' if plan==p.plan_id}}>{{p.name}}</option>{% endfor %}
+  </select>
+  <input name="partner" value="{{partner}}" placeholder="Partner">
+  <button>Filter</button>
+  <a href="{{url_for('dashboard')}}">Clear</a>
+</form>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Account</th><th>Status</th><th>Plan</th><th>Domain</th><th>Next Billing</th><th>Client Price</th><th>Partner</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><a href="{{url_for('project_detail',pid=r.project_id)}}"><b>{{r.internal_client_name or r.name}}</b><small>Project #{{r.project_id}}</small></a></td>
+      <td><span class="pill {{status_class(r.status)}}">{{r.lifecycle_state or r.status or 'UNKNOWN'}}</span></td>
+      <td>{{r.plan_name or '—'}}<small>{{money(r.monthly_price)}} catalog</small></td>
+      <td>{{r.domain or '—'}}</td>
+      <td>{{r.next_billing_date or '—'}}</td>
+      <td>{{money(r.client_price if r.client_price is not none else r.monthly_price)}}</td>
+      <td>{{r.partner_display}}</td>
+    </tr>
+  {% else %}<tr><td colspan="7">No projects match the current filters.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+
+<div class="pager">
+  {% if page>1 %}<a href="?q={{q}}&status={{status}}&plan={{plan}}&partner={{partner}}&page={{page-1}}">← Previous</a>{% endif %}
+  <span>Page {{page}} of {{pages}} · {{count}} result(s)</span>
+  {% if page<pages %}<a href="?q={{q}}&status={{status}}&plan={{plan}}&partner={{partner}}&page={{page+1}}">Next →</a>{% endif %}
+</div>
+
+{% if last %}<p class="syncnote">Last sync: {{last.status}} · {{last.completed_at or last.started_at}} · {{last.details or ''}}</p>{% endif %}
+{% endblock %}
