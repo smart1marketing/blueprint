@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import math
 import os
@@ -12,6 +14,7 @@ import requests
 
 from flask import (
     Flask,
+    Response,
     abort,
     flash,
     redirect,
@@ -269,14 +272,12 @@ def dashboard():
             if row["client_price"] is not None
             else (row["monthly_price"] or 0)
         )
+        # Platform cost defaults to the plan's BG (wholesale) monthly price when
+        # no manual per-account cost has been entered.
         platform_cost = (
             row["platform_cost"]
             if row["platform_cost"] is not None
-            else (
-                (row["bg_monthly_price"] or 0)
-                if SETTINGS.use_bg_as_platform_cost
-                else 0
-            )
+            else (row["bg_monthly_price"] or 0)
         )
         if row["status"] == "ACTIVE":
             revenue += client_price or 0
@@ -303,7 +304,86 @@ def dashboard():
         cost=cost,
         margin=revenue - cost,
         alerts=alert_rows(8),
-        partners=sorted(partner_counts.items(), key=lambda x: -x[1])[:15],
+        partners=sorted(partner_counts.items(), key=lambda x: -x[1]),
+    )
+
+
+def _effective_platform_cost(row):
+    """Manual per-account cost if set, otherwise the plan's BG (wholesale) price."""
+    if row.get("platform_cost") is not None:
+        return row["platform_cost"] or 0
+    return row.get("bg_monthly_price") or 0
+
+
+def _effective_client_price(row):
+    """Manual client price if set, otherwise the plan's catalog monthly price."""
+    if row.get("client_price") is not None:
+        return row["client_price"] or 0
+    return row.get("monthly_price") or 0
+
+
+@app.get("/export.csv")
+@login_required
+def export_csv():
+    q = request.args.get("q", "").strip()
+    status = request.args.get("status", "").strip()
+    plan = request.args.get("plan", "").strip()
+    partner = request.args.get("partner", "").strip()
+    # Pull every matching row (no pagination) for the export.
+    rows, _ = query_projects(q, status, plan, partner, page=1, per_page=1_000_000)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "Project ID",
+            "Account",
+            "Internal Client Name",
+            "Partner",
+            "Status",
+            "Lifecycle",
+            "Plan",
+            "Plan ID",
+            "Domain",
+            "Created",
+            "Billing Period",
+            "Next Billing",
+            "Client Price",
+            "Platform Cost",
+            "Margin",
+            "Notes",
+        ]
+    )
+    for r in rows:
+        client_price = _effective_client_price(r)
+        platform_cost = _effective_platform_cost(r)
+        writer.writerow(
+            [
+                r.get("project_id", ""),
+                r.get("name", ""),
+                r.get("internal_client_name", "") or "",
+                r.get("partner_display") or r.get("partner") or "",
+                r.get("status", "") or "",
+                r.get("lifecycle_state", "") or "",
+                r.get("plan_name", "") or "",
+                r.get("plan_id", "") or "",
+                r.get("domain", "") or "",
+                r.get("created", "") or "",
+                r.get("billing_period", "") or "",
+                r.get("next_billing_date", "") or "",
+                f"{client_price:.2f}",
+                f"{platform_cost:.2f}",
+                f"{client_price - platform_cost:.2f}",
+                (r.get("notes", "") or "").replace("\n", " "),
+            ]
+        )
+
+    safe_partner = "".join(ch for ch in partner if ch.isalnum() or ch in "-_") or "all"
+    filename = f"smart1-clients-{safe_partner}.csv"
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
