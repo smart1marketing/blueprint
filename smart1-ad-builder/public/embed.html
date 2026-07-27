@@ -62,6 +62,52 @@
     border-radius: 5px; font-family: ui-monospace, Menlo, monospace; font-size: 14px;
   }
   .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+  /* brand discovery card */
+  .brandcard { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; background: var(--card); }
+  .brandcard h3 { margin: 0 0 12px; font-size: 15px; }
+  .brandrow { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .logopick { display: flex; gap: 10px; flex-wrap: wrap; }
+  .logopick label {
+    border: 2px solid var(--line); border-radius: 6px; padding: 8px; cursor: pointer;
+    background: #fff; display: flex; align-items: center; justify-content: center;
+    min-width: 96px; min-height: 54px; margin: 0;
+  }
+  .logopick label.on { border-color: var(--accent); }
+  .logopick img { max-width: 110px; max-height: 46px; display: block; }
+  .logopick input { position: absolute; opacity: 0; pointer-events: none; }
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sw { text-align: center; font-size: 11px; color: var(--muted); }
+  .sw i { display: block; width: 46px; height: 34px; border-radius: 4px; border: 1px solid rgba(0,0,0,.12); }
+  .warn { background: #fdf1dc; color: #8a5600; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-top: 12px; }
+  .warn ul { margin: 6px 0 0; padding-left: 18px; }
+  .muted-btn {
+    background: transparent; color: var(--accent); border: 1px solid var(--line);
+    padding: 9px 14px; font-size: 14px;
+  }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(0,0,0,.15);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* upload dropzones */
+  .drop {
+    border: 2px dashed var(--line); border-radius: 8px; padding: 16px; text-align: center;
+    color: var(--muted); font-size: 13.5px; cursor: pointer; background: #fbfcfe;
+  }
+  .drop.over { border-color: var(--accent); background: #f2f7fd; }
+  .drop strong { color: var(--ink); display: block; font-size: 14px; margin-bottom: 3px; }
+  .drop input[type=file] { display: none; }
+  .files { list-style: none; margin: 10px 0 0; padding: 0; }
+  .files li {
+    display: flex; align-items: center; gap: 10px; padding: 7px 9px; border: 1px solid var(--line);
+    border-radius: 6px; margin-bottom: 6px; font-size: 13px; background: #fff;
+  }
+  .files img { width: 40px; height: 30px; object-fit: contain; background: #f2f5f9; border-radius: 3px; }
+  .files .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .files .st { font-size: 12px; color: var(--muted); }
+  .files .st.ok { color: var(--ok); }
+  .files .st.bad { color: var(--err); }
+  .files button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; padding: 0 4px; }
 </style>
 </head>
 <body>
@@ -179,6 +225,44 @@
       </div>
     </fieldset>
 
+    <fieldset id="brandSection" style="display:none">
+      <legend>Your brand</legend>
+      <div id="brandCard"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Logo and images</legend>
+
+      <div class="field">
+        <label for="logoDrop">Logo</label>
+        <div class="drop" id="logoDrop" tabindex="0" role="button">
+          <strong>Upload your logo</strong>
+          SVG, EPS or a PNG with a transparent background works best.
+          <input type="file" id="logoInput" accept=".png,.jpg,.jpeg,.svg,.webp">
+        </div>
+        <ul class="files" id="logoFiles"></ul>
+        <div class="hint">If we found your logo above, you can skip this.</div>
+      </div>
+
+      <div class="field">
+        <label for="imageDrop">Product, location or background photos</label>
+        <div class="drop" id="imageDrop" tabindex="0" role="button">
+          <strong>Upload photos</strong>
+          Originals at the highest resolution you have. Avoid screenshots or
+          images that already have text on them.
+          <input type="file" id="imageInput" multiple accept=".png,.jpg,.jpeg,.webp">
+        </div>
+        <ul class="files" id="imageFiles"></ul>
+      </div>
+
+      <div class="field">
+        <label class="check" style="font-weight:400">
+          <input type="checkbox" id="stockOk" name="stockOk" checked>
+          If I do not provide photos, Smart 1 may use stock or generated imagery.
+        </label>
+      </div>
+    </fieldset>
+
     <fieldset>
       <legend>Where the ads run</legend>
       <div class="field">
@@ -254,6 +338,193 @@
     return /^https?:\/\//i.test(v) ? v : 'https://' + v;
   }
 
+
+  /* ------------------------------------------------- brand discovery */
+  var website = form.elements.website;
+  var brandSection = document.getElementById('brandSection');
+  var brandCard = document.getElementById('brandCard');
+  var discovered = null;
+  var lastLookedUp = '';
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function renderBrand(d) {
+    if (!d || !d.brand) {
+      brandSection.style.display = '';
+      brandCard.innerHTML =
+        '<div class="brandcard"><h3>We could not find your brand automatically</h3>' +
+        '<p style="margin:0;color:#5b6b7f;font-size:13.5px">No problem — upload your logo below and we will take the colours from it.</p></div>';
+      reportHeight();
+      return;
+    }
+    var b = d.brand;
+    var logos = (d.logoOptions || []).slice(0, 4);
+    var html = '<div class="brandcard"><h3>We found ' + esc(b.name) + '</h3><div class="brandrow">';
+
+    if (logos.length) {
+      html += '<div><div style="font-size:12px;color:#5b6b7f;margin-bottom:6px">Choose a logo</div><div class="logopick">';
+      logos.forEach(function (l, i) {
+        html += '<label class="' + (i === 0 ? 'on' : '') + '">' +
+          '<input type="radio" name="pickedLogo" value="' + esc(l.url) + '"' + (i === 0 ? ' checked' : '') + '>' +
+          '<img src="' + esc(l.url) + '" alt="' + esc(l.kind) + '" ' +
+          'onerror="this.parentNode.style.display=\'none\'"></label>';
+      });
+      html += '</div></div>';
+    }
+
+    html += '<div><div style="font-size:12px;color:#5b6b7f;margin-bottom:6px">Colours</div><div class="swatches">';
+    ['primary', 'secondary', 'accent'].forEach(function (k) {
+      html += '<div class="sw"><i style="background:' + esc(b.colors[k]) + '"></i>' + esc(b.colors[k]) + '</div>';
+    });
+    html += '</div></div>';
+
+    html += '<div><div style="font-size:12px;color:#5b6b7f;margin-bottom:6px">Type</div>' +
+      '<div style="font-size:13.5px">' + esc(b.fonts.headline) + '<br>' + esc(b.fonts.body) + '</div></div>';
+    html += '</div>';
+
+    if (d.warnings && d.warnings.length) {
+      html += '<div class="warn">A few things to check:<ul>';
+      d.warnings.forEach(function (w) { html += '<li>' + esc(w) + '</li>'; });
+      html += '</ul></div>';
+    }
+
+    html += '<div style="margin-top:14px"><button type="button" class="muted-btn" id="rejectBrand">' +
+      'This is not my brand</button></div></div>';
+
+    brandSection.style.display = '';
+    brandCard.innerHTML = html;
+
+    var picks = brandCard.querySelectorAll('.logopick label');
+    for (var i = 0; i < picks.length; i++) {
+      picks[i].addEventListener('click', function () {
+        for (var j = 0; j < picks.length; j++) picks[j].classList.remove('on');
+        this.classList.add('on');
+      });
+    }
+    var reject = document.getElementById('rejectBrand');
+    if (reject) reject.addEventListener('click', function () {
+      discovered = null;
+      brandCard.innerHTML = '<div class="brandcard"><h3>No problem</h3>' +
+        '<p style="margin:0;color:#5b6b7f;font-size:13.5px">Upload your logo below and we will work from that.</p></div>';
+      reportHeight();
+    });
+    reportHeight();
+  }
+
+  function lookupBrand() {
+    var v = (website.value || '').trim();
+    if (!v || v === lastLookedUp || v.indexOf('.') < 0) return;
+    lastLookedUp = v;
+    brandSection.style.display = '';
+    brandCard.innerHTML = '<div class="brandcard"><span class="spinner"></span> Looking up your brand…</div>';
+    reportHeight();
+
+    fetch(API + '/api/brand/discover', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ domain: v })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { discovered = d && d.brand ? d : null; renderBrand(d); })
+      .catch(function () { renderBrand(null); });
+  }
+  website.addEventListener('blur', lookupBrand);
+  website.addEventListener('change', lookupBrand);
+
+  /* -------------------------------------------------------- uploads */
+  // Files go straight from the browser to Cloudinary using a signature this
+  // server generates. Nothing large passes through the web service.
+  var uploaded = { logo: [], image: [] };
+
+  function bindDrop(dropId, inputId, listId, kindFor) {
+    var drop = document.getElementById(dropId);
+    var input = document.getElementById(inputId);
+    var list = document.getElementById(listId);
+
+    drop.addEventListener('click', function () { input.click(); });
+    drop.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+    });
+    drop.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) handle(e.dataTransfer.files);
+    });
+    input.addEventListener('change', function () { handle(input.files); input.value = ''; });
+
+    function handle(files) {
+      for (var i = 0; i < files.length; i++) queue(files[i]);
+    }
+
+    function queue(file) {
+      if (file.size > 25 * 1024 * 1024) { addRow(file, 'bad', 'Too large (25 MB max)'); return; }
+      var row = addRow(file, '', 'Uploading…');
+      var client = (form.elements.business.value || 'unknown').trim();
+      var campaign = (form.elements.campaignName.value || 'untitled').trim();
+
+      fetch(API + '/api/assets/upload-signature', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ client: client, campaign: campaign, kind: kindFor, filename: file.name })
+      })
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.b.error || 'Could not prepare upload');
+          var s = res.b;
+          var fd = new FormData();
+          fd.append('file', file);
+          fd.append('api_key', s.apiKey);
+          fd.append('timestamp', s.timestamp);
+          fd.append('signature', s.signature);
+          fd.append('folder', s.folder);
+          fd.append('tags', s.tags);
+          return fetch(s.uploadUrl, { method: 'POST', body: fd }).then(function (r) { return r.json(); });
+        })
+        .then(function (out) {
+          if (!out || !out.public_id) throw new Error((out && out.error && out.error.message) || 'Upload rejected');
+          uploaded[kindFor === 'logo' ? 'logo' : 'image'].push({
+            publicId: out.public_id, url: out.secure_url, name: file.name
+          });
+          setRow(row, 'ok', 'Uploaded');
+        })
+        .catch(function (err) { setRow(row, 'bad', err.message || 'Upload failed'); });
+    }
+
+    function addRow(file, cls, text) {
+      var li = document.createElement('li');
+      var thumb = '';
+      if (/^image\//.test(file.type) && file.type !== 'image/svg+xml') {
+        thumb = '<img src="' + URL.createObjectURL(file) + '" alt="">';
+      }
+      li.innerHTML = thumb + '<span class="nm">' + esc(file.name) + '</span>' +
+        '<span class="st ' + cls + '">' + esc(text) + '</span>' +
+        '<button type="button" title="Remove">&times;</button>';
+      li.querySelector('button').addEventListener('click', function () {
+        li.remove(); reportHeight();
+      });
+      list.appendChild(li);
+      reportHeight();
+      return li;
+    }
+    function setRow(li, cls, text) {
+      var st = li.querySelector('.st');
+      st.className = 'st ' + cls;
+      st.textContent = text;
+      reportHeight();
+    }
+  }
+
+  bindDrop('logoDrop', 'logoInput', 'logoFiles', 'logo');
+  bindDrop('imageDrop', 'imageInput', 'imageFiles', 'product');
+
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
     clearErrors();
@@ -303,6 +574,15 @@
     data.audience = form.elements.audience.value.trim();
     data.geography = form.elements.geography.value.trim();
     data.notes = form.elements.notes.value.trim();
+    data.stockOk = document.getElementById('stockOk').checked;
+    data.uploads = uploaded;
+    if (discovered && discovered.brand) {
+      var picked = form.querySelector('input[name=pickedLogo]:checked');
+      data.brand = discovered.brand;
+      data.brandSource = discovered.source;
+      data.brandWarnings = discovered.warnings || [];
+      data.pickedLogoUrl = picked ? picked.value : ((discovered.logoOptions || [])[0] || {}).url;
+    }
     data.honeypot = form.elements.company_url_confirm.value;
     data.pageUrl = document.referrer || '';
 

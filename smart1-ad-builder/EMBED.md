@@ -105,3 +105,26 @@ the iframe alone still works, just at a fixed height:
 
 1600px fits the current form on desktop. It will be too tall on mobile and needs
 revisiting whenever fields are added, which is why the script version is better.
+
+
+## Monorepo notes
+
+This project is one folder inside a repo that holds several Smart 1 projects.
+That has three consequences worth knowing.
+
+**Set Root Directory to `smart1-ad-builder`** in the Render service settings.
+Without it, Render builds against the repo-root `package.json`, which belongs to
+a different project.
+
+**`smart1-ad-builder/render.yaml` is not read by Render.** Blueprints are only
+loaded from the repository root. The live configuration is whatever is in the
+Render dashboard; this file is a written record of it, nothing more.
+
+**Do not sync the Blueprint from the repo root.** The root `render.yaml`
+describes a different service. Syncing it can reconfigure or replace settings
+you set by hand — including `ALLOWED_FRAME_ANCESTORS`, which would take the
+embed down again.
+
+**Build command:** use `npm install --include=dev && npm run build` unless
+`package-lock.json` is committed. `npm ci` requires the lockfile and fails
+without it.

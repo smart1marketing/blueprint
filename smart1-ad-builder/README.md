@@ -258,11 +258,55 @@ silently returns whole-canvas statistics. The crop has to be materialised to a
 buffer first. This produced phantom contrast warnings until it was caught by
 onboarding a second brand whose page average differed from its copy area.
 
+## Brand discovery and asset uploads
+
+`POST /api/brand/discover` takes a domain and returns a `Brand` mapped from
+Brandfetch, plus logo choices, colour swatches and warnings. The embed form
+calls it when the website field loses focus and shows a confirmation card.
+
+Two mismatches are handled explicitly rather than papered over:
+
+**Fonts.** Brandfetch returns font *names*; the renderer can only use families
+whose files are in the registry. An unregistered family maps to the nearest
+registered one **and produces a visible warning** — the customer is told their
+ads will not be in their brand face until the font is vendored in. Never let
+this one pass silently.
+
+**Colours.** Templates need five roles, and `light`/`dark` must contrast or QA
+fails on every creative. Brandfetch sometimes reports a near-white as "dark";
+when the pair falls below 7:1 the code substitutes white and near-black and
+says so.
+
+Discovery failing is not an error. Small businesses often have no public brand
+record, so the endpoint returns 200 with `brand: null` and the form falls back
+to "upload your logo".
+
+Set `BRANDFETCH_API_KEY`, or `BRANDFETCH_MOCK=1` to work from
+`src/examples/brandfetch-sample.json` without a key. The fixture is
+deliberately imperfect — unregistered fonts, a bad colour pair — so the
+warning paths get exercised rather than a happy path that proves nothing.
+
+### Uploads
+
+`POST /api/assets/upload-signature` returns Cloudinary signed upload params.
+The browser then posts the file **directly to Cloudinary**, so nothing large
+passes through the Render service. Signed rather than unsigned, so the folder,
+tags and allowed formats are fixed server-side and cannot be rewritten by the
+page.
+
+Uploads land in `<project>/source/brand` or `<project>/source/<kind>`.
+
+`src/assets.ts` also handles the other direction: `resolveAsset()` turns a
+local path, an https URL, or `cloudinary:<publicId>` into a local file the
+renderer can read, with caching. `prepareLogo()` rasterises SVG logos, which
+sharp cannot composite directly. `validateAsset()` rejects unreadable files and
+anything under 200px before it reaches a creative.
+
 ## What this does not do yet
 
-Everything upstream and downstream of the renderer:
-
-- the multi-step form and Brandfetch discovery
+- **The form does not trigger a render.** `POST /api/requests` writes the
+  submission to disk; nothing consumes it. Bridging intake to a campaign JSON
+  is the next piece.
 - OpenAI creative-plan generation and image generation
 - Cloudinary smart cropping (upload, folders and search are done)
 - the proof screen, natural-language revisions, approval flow

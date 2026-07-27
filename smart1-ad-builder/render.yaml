@@ -1,5 +1,10 @@
 # Render blueprint.
 #
+# NOTE: this file lives in a subdirectory of a monorepo. Render only reads
+# render.yaml at the REPOSITORY ROOT, so this file is documentation, not live
+# configuration — the service is configured in the Render dashboard. Keep the
+# two in sync by hand, and set the service's Root Directory to this folder.
+#
 # The worker is commented out on purpose. The job queue is currently in-memory,
 # so a separate worker process cannot see jobs enqueued by the web service —
 # they would be two independent queues. Run single-process (WORKER_MODE unset)

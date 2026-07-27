@@ -17,6 +17,9 @@ import * as path from 'node:path';
 import type { Campaign } from './types';
 import { validateCampaign } from './validate';
 import { enqueue, getJob, listJobs, startWorkerLoop } from './jobs';
+import { discoverBrand, normalizeDomain } from './brandfetch';
+import { ALLOWED_FORMATS, folderFor, signUpload, type AssetKind } from './assets';
+import { CloudinaryService, slug } from './cloudinary';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.OUTPUT_DIR ?? path.join(ROOT, 'out');
@@ -176,6 +179,86 @@ const server = http.createServer(async (req, res) => {
       // TODO: push to HighLevel as a Creative Request custom object, kick off
       // Brandfetch discovery, and send the confirmation email.
       return json(res, 201, { requestId, status: 'received' }, cors);
+    }
+
+    /* --------------------------------------------------- brand discovery */
+    if (route === 'POST /api/brand/discover') {
+      const cors = corsHeaders(req.headers.origin);
+      const body = JSON.parse(await readBody(req, 20_000)) as { domain?: string };
+      const domain = normalizeDomain(body.domain ?? '');
+      if (!domain || !domain.includes('.')) {
+        return json(res, 400, { error: 'Provide a website domain' }, cors);
+      }
+      try {
+        const found = await discoverBrand(domain);
+        return json(res, 200, found, cors);
+      } catch (e: any) {
+        // Discovery failing is normal for small businesses with no public
+        // brand record. It must not block the request — the customer just
+        // fills the details in and uploads a logo.
+        console.log(`[brand] lookup failed for ${domain}: ${e?.message ?? e}`);
+        return json(
+          res,
+          200,
+          {
+            brand: null,
+            found: false,
+            reason: e?.message ?? 'Lookup failed',
+            warnings: ['We could not find your brand automatically. Please enter your details and upload your logo.'],
+            needsReview: true,
+            source: 'fallback',
+          },
+          cors,
+        );
+      }
+    }
+
+    /* ------------------------------------------------------ upload signing */
+    if (route === 'POST /api/assets/upload-signature') {
+      const cors = corsHeaders(req.headers.origin);
+      const body = JSON.parse(await readBody(req, 20_000)) as {
+        client?: string;
+        campaign?: string;
+        kind?: AssetKind;
+        filename?: string;
+      };
+      const { client, campaign, kind } = body;
+      if (!client || !campaign || !kind) {
+        return json(res, 400, { error: 'client, campaign and kind are required' }, cors);
+      }
+      const ext = path.extname(body.filename ?? '').replace('.', '').toLowerCase();
+      if (ext && !(ALLOWED_FORMATS as readonly string[]).includes(ext)) {
+        return json(
+          res,
+          400,
+          { error: `Unsupported file type ".${ext}". Accepted: ${ALLOWED_FORMATS.join(', ')}` },
+          cors,
+        );
+      }
+
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const apiKey = process.env.CLOUDINARY_API_KEY;
+      const apiSecret = process.env.CLOUDINARY_API_SECRET;
+      if (!cloudName || !apiKey || !apiSecret) {
+        return json(res, 503, { error: 'Asset storage is not configured on the server.' }, cors);
+      }
+
+      const cld = new CloudinaryService();
+      const signed = signUpload({
+        folder: folderFor(cld, client, campaign, kind),
+        // Slugged, because Cloudinary tags are comma-delimited and a client
+        // name containing a comma would split into bogus tags.
+        tags: [
+          `client:${slug(client)}`,
+          `campaign:${slug(campaign)}`,
+          `kind:${slug(kind)}`,
+          'source:customer-upload',
+        ],
+        apiKey,
+        apiSecret,
+        cloudName,
+      });
+      return json(res, 200, signed, cors);
     }
 
     if (route === 'POST /api/render') {
