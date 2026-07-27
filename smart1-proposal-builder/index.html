@@ -209,7 +209,7 @@ const S={
  budgetMode:"range",budget:8000,months:3,
  items:[],           // {label,category,product,rate,rateValue,budget,pctSeed}
  landingMode:"One landing page",landingUrl:"",landing:"",
- packages:[],selPkg:1,aiEst:null,aiLoading:false,descLoading:false,
+ packages:[],selPkg:1,aiEst:null,aiLoading:false,descLoading:false,landingReview:"",landingReviewLoading:false,mkt:{seo:"",paidSearch:"",socialPosting:"",paidSocial:""},
  dirty:false,keepAsIs:false,configured:false
 };
 let step=0,STEPS=[];
@@ -310,13 +310,33 @@ STEPS=[
    </div>`,
    valid:()=>S.client.trim().length>0}),
 
- ()=>({eyebrow:"Guardrails",title:"Objectives met — anything to avoid?",sub:"Flag exclusions, negative keywords, or restricted audiences up front (feeds the IO's exclusions field).",
+ ()=>{ if(!S.landing)S.landing=landingRec();
+   return{eyebrow:"Landing Page",title:"Where does the traffic land?",sub:"Enter the landing page early so Smart 1 can review it and suggest fixes before you price the campaign.",
+   html:`<div class="two"><div class="fld"><label>Landing mode</label><select onchange="S.landingMode=this.value">${opt(["One landing page","Multiple landing pages by product"],S.landingMode)}</select></div>
+   <div class="fld"><label>Landing page URL</label><input value="${esc(S.landingUrl)}" oninput="S.landingUrl=this.value;S.landingReview=''" placeholder="riverstonedental.com/new-patients"></div></div>
+   <div class="panel"><div class="ttl">🔍 Smart 1 landing page review</div>
+    <button id="lpBtn" class="btn btn-line" onclick="reviewLandingAI()">🔍 Review landing page</button>
+    <div id="lpReview"></div></div>
+   <div class="panel"><div class="ttl">🖥 Recommended landing setup (editable)</div>
+    <div class="fld" style="margin-top:6px"><textarea oninput="S.landing=this.value" style="min-height:80px">${esc(S.landing)}</textarea></div></div>`,
+   valid:()=>true,after:()=>{ if(window._entering&&S.landingUrl&&!S.landingReview&&!S.landingReviewLoading){reviewLandingAI();} else {drawLanding();} }};},
+
+ ()=>({eyebrow:"Current Marketing",title:"What are they already doing?",sub:"Knowing what's running today shows where the gaps and quick wins are.",
+   html:`<div class="panel">
+     ${seg("Doing SEO / local listings?","seo")}
+     ${seg("Running paid search (Google / Bing)?","paidSearch")}
+     ${seg("Posting on social media regularly?","socialPosting")}
+     ${seg("Running paid social media ads?","paidSocial")}
+   </div>`,
+   valid:()=>true}),
+
+ ()=>({eyebrow:"Guardrails",title:"Anything to avoid?",sub:"Flag exclusions, negative keywords, or restricted audiences up front (feeds the IO's exclusions field).",
    html:'<div class="panel"><div class="ttl">🚫 Exclusions / things to avoid</div>'+
      pillRow(["Exclude current customers","Exclude competitor staff","No off-hours delivery","Brand-safety sensitive","Avoid certain keywords","Sensitive category (health/legal)","Competitor conquesting OK"],S.exclusions,'exc')+
      '<div class="addpill"><input id="excIn" placeholder="Add an exclusion…" onkeydown="if(event.key===\'Enter\'){addCustom(\'exc\',\'excIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'exc\',\'excIn\')">+ Add</button></div></div>',
    valid:()=>true}),
 
- ()=>({eyebrow:"Target Area",title:"Where should we run it?",sub:"Pick the geography — we AI-estimate the population so the salesperson doesn't have to know it, then size the reachable audience.",
+ ()=>({eyebrow:"Target Area",title:"Where should we run it?",sub:"Pick the geography — Smart 1 estimates the reach automatically so the salesperson doesn't have to know the population.",
    html:`<div class="two"><div class="fld"><label>Geo type</label><select onchange="S.geoType=this.value;S.aiEst=null;render()">${opt(["City/ZIP + Radius","DMA","Statewide","National","Other"],S.geoType)}</select></div>
    <div class="fld"><label>Area label (city, ZIPs, DMA, state…)</label><input value="${esc(S.geo)}" oninput="S.geo=this.value;S.aiEst=null" placeholder="e.g. Springfield, IL"></div></div>
    ${S.geoType==="City/ZIP + Radius"?`<div class="fld"><label>Radius (miles)</label><input type="number" min="1" value="${S.radius}" oninput="S.radius=Math.max(1,+this.value);S.aiEst=null;drawEst()" style="max-width:160px"></div>`:''}
@@ -324,13 +344,13 @@ STEPS=[
    <div class="two"><div class="fld"><label>Gender</label><select onchange="S.gender=this.value;S.aiEst=null;drawEst()">${opt(["Both","Male","Female"],S.gender)}</select></div><div></div></div>
    <div class="panel"><div class="ttl">Age ranges</div>${pillRow(["18-24","25-34","35-44","45-54","55-64","65+"],S.ages,'age')}</div>
    <div class="panel"><div class="ttl">Household income</div>${pillRow(incomeOptions,S.income,'inc')}</div>
-   <div class="panel"><div class="ttl">📊 AI-estimated reach for this area</div>
-   <button id="aiBtn" class="btn btn-line" style="margin-bottom:6px" onclick="estimateAudienceAI()">✨ AI-estimate this area</button>
-   <div class="estgrid" id="estGrid"></div><div class="note" id="popNote"></div></div>`,
-   valid:()=>true,after:drawEst}),
+   <div class="panel"><div class="ttl">📊 Smart 1 Estimated reach for this area</div>
+   <div class="estgrid" id="estGrid"></div><div class="note" id="popNote"></div>
+   <div style="margin-top:8px"><a id="estRefresh" onclick="estimateAudienceAI()" style="cursor:pointer;color:var(--blue);font-weight:700;font-size:13px">↻ Re-estimate with Smart 1</a></div></div>`,
+   valid:()=>true,after:()=>{ if(window._entering&&S.geo&&!S.aiEst&&!S.aiLoading){estimateAudienceAI();} else {drawEst();} }}),
 
  ()=>({eyebrow:"Audience Strategy",title:"Who we target",sub:"Pulled from your industry audience library. Adjust as needed.",
-   html:(()=>{const key=INDUSTRY_KEYS[S.industry]||'general';const lib=industryIdeas[key]||industryIdeas.general;const list=[...(lib.behavioral||[]),...(lib.contextual||[]),"Website retargeting","Lookalike / CRM match"];return '<div class="panel"><div class="ttl">🎯 Recommended audience layers — '+esc(key)+'</div>'+pillRow(list,S.audiences,'aud')+'<div class="addpill"><input id="audIn" placeholder="Add a custom audience…" onkeydown="if(event.key===\'Enter\'){addCustom(\'aud\',\'audIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'aud\',\'audIn\')">+ Add</button></div></div>';})(),
+   html:(()=>{const key=INDUSTRY_KEYS[S.industry]||'general';const lib=industryIdeas[key]||industryIdeas.general;const list=[...(lib.behavioral||[]),...(lib.contextual||[]),"Website retargeting","Lookalike / CRM match","Competitor physical locations","Competitor conquesting"];return '<div class="panel"><div class="ttl">🎯 Recommended audience layers — '+esc(key)+'</div>'+pillRow(list,S.audiences,'aud')+'<div class="addpill"><input id="audIn" placeholder="Add a custom audience…" onkeydown="if(event.key===\'Enter\'){addCustom(\'aud\',\'audIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'aud\',\'audIn\')">+ Add</button></div></div>';})(),
    valid:()=>true}),
 
  ()=>({eyebrow:"Budget",title:"What's the working budget?",sub:"Monthly media budget. Three packages build around it and reconfigure if you change it.",
@@ -351,13 +371,10 @@ STEPS=[
     '<div class="panel"><div class="ttl">💡 Sample ROI by product (internal only)</div><div class="kv" id="roiTags"></div><div class="note">Illustrative category benchmarks for the salesperson — not shown to the client unless you choose to include them.</div></div>',
    valid:()=>S.items.length>0,after:()=>{drawItems();drawRoi();}};},
 
- ()=>{ if(S.kpis.length===0)S.kpis=[...new Set(S.objectives.flatMap(o=>objectiveKPIs[o]||[]))].slice(0,6); if(!S.landing)S.landing=landingRec();
-   return{eyebrow:"Measurement",title:"KPI framework & landing page",sub:"KPIs come straight from your objective→KPI map. Tune them; edit the landing-page recommendation.",
+ ()=>{ if(S.kpis.length===0)S.kpis=[...new Set(S.objectives.flatMap(o=>objectiveKPIs[o]||[]))].slice(0,6);
+   return{eyebrow:"Measurement",title:"KPI framework",sub:"KPIs come straight from your objective→KPI map. Tune them as needed.",
    html:'<div class="panel"><div class="ttl">📐 KPIs</div>'+pillRow([...new Set(S.objectives.flatMap(o=>objectiveKPIs[o]||[]))],S.kpis,'kpi')+
-     '<div class="addpill"><input id="kpiIn" placeholder="Add a KPI…" onkeydown="if(event.key===\'Enter\'){addCustom(\'kpi\',\'kpiIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'kpi\',\'kpiIn\')">+ Add</button></div></div>'+
-     `<div class="panel"><div class="ttl">🖥 Landing page recommendation</div><div class="fld" style="margin-top:6px"><textarea oninput="S.landing=this.value" style="min-height:92px">${esc(S.landing)}</textarea></div>
-     <div class="two"><div class="fld"><label>Landing mode</label><select onchange="S.landingMode=this.value">${opt(["One landing page","Multiple landing pages by product"],S.landingMode)}</select></div>
-     <div class="fld"><label>Landing URL</label><input value="${esc(S.landingUrl)}" oninput="S.landingUrl=this.value" placeholder="riverstonedental.com/new-patients"></div></div></div>`,
+     '<div class="addpill"><input id="kpiIn" placeholder="Add a KPI…" onkeydown="if(event.key===\'Enter\'){addCustom(\'kpi\',\'kpiIn\');event.preventDefault();}"><button class="btn btn-line" onclick="addCustom(\'kpi\',\'kpiIn\')">+ Add</button></div></div>',
    valid:()=>S.kpis.length>0};},
 
  ()=>{ buildPackages(); return{eyebrow:"Investment Options",title:"Three package recommendations",sub:"Built from your $"+money(S.budget)+"/mo budget and product mix, using real rates for delivery. Pick the featured one.",
@@ -376,9 +393,28 @@ function setBudget(v){S.budget=v;S.configured=false;render();syncNext();}
 function drawEst(){const e=estimates();const g=document.getElementById('estGrid');if(!g)return;
  const L=S.aiLoading?' loading':'';
  g.innerHTML=`<div class="est${L}"><b>${S.aiLoading?'—':fmt(e.pop)}</b><span>Est. population</span></div><div class="est${L}"><b>${S.aiLoading?'—':fmt(e.aud)}</b><span>Addressable audience</span></div><div class="est${L}"><b>${S.aiLoading?'—':fmt(e.hh)}</b><span>Households</span></div><div class="est${L}"><b>${S.aiLoading?'—':fmt(e.dev)}</b><span>Devices</span></div>`;
- const b=document.getElementById('aiBtn');if(b){b.disabled=S.aiLoading;b.innerHTML=S.aiLoading?'<span class="spin"></span>Estimating…':'✨ AI-estimate this area';}
  const n=document.getElementById('popNote');
- if(n){ if(S.aiLoading)n.innerHTML='<span class="spin"></span>Asking AI to size this area…'; else if(e.ai)n.textContent="✨ AI estimate. "+(e.rationale||""); else n.textContent=popExplain()+"  Click ‘AI-estimate this area’ for a live figure."; }
+ if(n){ if(S.aiLoading)n.innerHTML='<span class="spin"></span>Smart 1 is sizing this area…'; else if(e.ai)n.textContent="✨ Smart 1 estimate. "+(e.rationale||""); else n.textContent="Smart 1 estimate — adjust the filters and it updates. "+popExplain(); }
+}
+function seg(label,key){return `<div class="fld"><label>${label}</label><div>`+["Yes","No","Unknown"].map(o=>`<span class="pill${S.mkt[key]===o?' on':''}" onclick="S.mkt['${key}']='${o}';render()">${o}</span>`).join('')+`</div></div>`;}
+async function reviewLandingAI(){
+ if(!S.landingUrl){flashNote("Enter a landing page URL first.");return;}
+ S.landingReviewLoading=true;drawLanding();
+ try{
+  const r=await fetch(API_BASE+"/api/review-landing-page",{method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({url:S.landingUrl,client:S.client,product:"Campaign landing page",objectives:S.objectives})});
+  const d=await r.json();
+  if(d&&d.review){S.landingReview=d.review;S.landingReviewLoading=false;drawLanding();flashNote("✨ Landing page reviewed.");return;}
+  throw new Error((d&&(d.error||d.detail))||("HTTP "+r.status));
+ }catch(e){S.landingReviewLoading=false;drawLanding();flashNote("Couldn't review the page ("+e.message+"). Check ⚙ AI endpoint.");}
+}
+function drawLanding(){
+ const b=document.getElementById('lpBtn');if(b){b.disabled=S.landingReviewLoading;b.innerHTML=S.landingReviewLoading?'<span class="spin"></span>Reviewing…':'🔍 Review landing page';}
+ const box=document.getElementById('lpReview');if(!box)return;
+ if(S.landingReviewLoading){box.innerHTML='<div class="note" style="margin-top:10px"><span class="spin"></span>Smart 1 is reviewing the landing page…</div>';return;}
+ box.innerHTML=S.landingReview
+  ? `<div style="margin-top:12px;background:#f6faff;border:1px solid var(--line);border-radius:10px;padding:14px;white-space:pre-wrap;font-size:13px;color:#33415C">${esc(S.landingReview)}</div>`
+  : '<div class="note" style="margin-top:8px">Add a URL and click Review — Smart 1 checks the CTA, conversion readiness, and suggests fixes before launch.</div>';
 }
 async function estimateAudienceAI(){
  if(!S.geo){flashNote("Enter an area label first (city, ZIPs, DMA, or state).");return;}
@@ -430,7 +466,8 @@ function ioPayload(){const sel=S.packages[S.selPkg]||{};const seed=S.items.reduc
   description_mode:S.descriptionMode,business_description:S.description,
   gender:S.gender,ages:S.ages,income_targets:S.income,
   audiences:S.audiences,exclusions_negative_keywords:S.exclusions.join(', '),
-  landing_page_mode:S.landingMode,shared_landing_page:S.landingUrl,landing_recommendation:S.landing,
+  landing_page_mode:S.landingMode,shared_landing_page:S.landingUrl,landing_recommendation:S.landing,landing_review:S.landingReview,
+  current_marketing:S.mkt,
   monthly_budget:sel.monthly,total_campaign_budget:sel.total,months:S.months,
   selected_package:sel.name,
   products:S.items.map(i=>({product:i.product,category:i.category,rate:i.rate,budget:Math.round(sel.monthly*(i.pctSeed/seed)/50)*50})),
@@ -442,6 +479,7 @@ function summaryHtml(){const e=estimates();const sel=S.packages[S.selPkg]||{};
  return `<div class="panel"><ul style="list-style:none;padding:0;margin:0">
   ${row('Client',esc(S.client||'—'))}${row('Goals',esc(S.objectives.join(', ')||'—'))}${row('Industry',esc(S.industry||'—'))}
   ${row('Target area',esc(S.geo||S.geoType))}${row('Est. audience / households',fmt(e.aud)+' / '+fmt(e.hh))}
+  ${row('Landing page',esc(S.landingUrl||'—'))}${row('Currently doing',esc([S.mkt.seo==='Yes'?'SEO':'',S.mkt.paidSearch==='Yes'?'Paid search':'',S.mkt.socialPosting==='Yes'?'Social posting':'',S.mkt.paidSocial==='Yes'?'Paid social':''].filter(Boolean).join(', ')||'—'))}
   ${row('Audience layers',esc(S.audiences.join(', ')||'—'))}${row('Products',esc(S.items.map(i=>i.product).join(', ')))}
   ${row('KPIs',esc(S.kpis.join(', ')))}${row('Featured package',(esc(sel.name||'—'))+' · $'+money(sel.monthly||0)+'/mo')}
   ${row('Campaign total','$'+money(sel.total||0)+' over '+S.months+' months')}${row('Est. impressions',fmt(sel.impr||0))}</ul></div>
@@ -451,7 +489,7 @@ function summaryHtml(){const e=estimates();const sel=S.packages[S.selPkg]||{};
 function generate(){alert("In the full build this hands the IO-compatible payload above to the proposal renderer (interactive proposal + PDF), and on client approval POSTs to /api/submit-io to create the IO + GoHighLevel opportunity.\n\nEvery field already matches your IO webhook keys.");}
 
 /* engine */
-function render(){const d=STEPS[step]();const st=document.getElementById('stage');st.innerHTML=`<div class="eyebrow">${d.eyebrow}</div><h1 class="q">${d.title}</h1><div class="sub">${d.sub}</div>${d.html}`;
+function render(){const d=STEPS[step]();window._entering=(window._lastStep!==step);window._lastStep=step;const st=document.getElementById('stage');st.innerHTML=`<div class="eyebrow">${d.eyebrow}</div><h1 class="q">${d.title}</h1><div class="sub">${d.sub}</div>${d.html}`;
  document.getElementById('stepLabel').textContent='Step '+(step+1)+' of '+STEPS.length;document.getElementById('bar').style.width=((step+1)/STEPS.length*100)+'%';
  document.getElementById('backBtn').style.visibility=step===0?'hidden':'visible';document.getElementById('nextBtn').textContent=d.isLast?'Finish':'Continue →';
  if(d.after)d.after();window._valid=d.valid;syncNext();window.scrollTo(0,0);}
