@@ -5,7 +5,7 @@ let platform = 'all';
 let timer;
 
 function esc(v='') {
-  return v.replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 }
 
 function draw(items) {
@@ -18,6 +18,7 @@ function draw(items) {
       <div class="badge ${x.platform.includes('Tag') ? 'gtm' : 'ga'}">${esc(x.platform)}</div>
       <div class="main">
         <h3>${esc(x.name || '(unnamed)')}</h3>
+        <div class="login"><b>Google Login:</b> ${esc(x.google_login)}</div>
         <div class="meta"><b>Account:</b> ${esc(x.account_name)} <span>${esc(x.account_id)}</span></div>
         <div class="meta"><b>${esc(x.type)}:</b> ${esc(x.resource_id)}</div>
       </div>
@@ -31,15 +32,20 @@ async function search() {
   const value = q.value.trim();
   if (!value) {
     results.innerHTML = '';
-    statusEl.textContent = 'Start typing to search.';
+    statusEl.textContent = 'Start typing to search all connected accounts.';
     return;
   }
-  statusEl.textContent = 'Searching…';
+  statusEl.textContent = 'Searching all connected Google accounts…';
   const r = await fetch(`/api/search?q=${encodeURIComponent(value)}&platform=${encodeURIComponent(platform)}`);
-  if (r.redirected) { window.location = r.url; return; }
   const data = await r.json();
-  statusEl.textContent = `${data.length} match${data.length === 1 ? '' : 'es'}`;
-  draw(data);
+  if (!r.ok) {
+    statusEl.textContent = data.error || 'Search failed.';
+    return;
+  }
+  const items = data.results || [];
+  const problemCount = (data.errors || []).length;
+  statusEl.textContent = `${items.length} match${items.length === 1 ? '' : 'es'}${problemCount ? ` · ${problemCount} account refresh error${problemCount === 1 ? '' : 's'}` : ''}`;
+  draw(items);
 }
 
 if (q) q.addEventListener('input', () => {
@@ -64,3 +70,9 @@ if (refresh) refresh.addEventListener('click', async () => {
   setTimeout(() => { refresh.textContent = 'Refresh Google data'; refresh.disabled = false; }, 1800);
   search();
 });
+
+document.querySelectorAll('.disconnect').forEach(btn => btn.addEventListener('click', async () => {
+  const email = btn.dataset.email;
+  const r = await fetch(`/disconnect/${encodeURIComponent(email)}`, {method:'POST'});
+  if (r.ok) window.location.reload();
+}));

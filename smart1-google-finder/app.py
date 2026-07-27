@@ -2,21 +2,34 @@ import json
 import os
 import secrets
 import time
-from functools import wraps
 from urllib.parse import urlencode
 
 import requests
 from flask import Flask, redirect, render_template, request, session, url_for, jsonify
+from flask_session import Session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
+# Keep OAuth refresh tokens server-side instead of inside Flask's signed browser cookie.
+app.config.update(
+    SESSION_TYPE="filesystem",
+    SESSION_FILE_DIR=os.environ.get("SESSION_FILE_DIR", "/tmp/smart1-google-finder-sessions"),
+    SESSION_PERMANENT=False,
+    SESSION_USE_SIGNER=True,
+)
+Session(app)
+
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-ALLOWED_EMAIL_DOMAIN = os.environ.get("ALLOWED_EMAIL_DOMAIN", "")
 CACHE_SECONDS = int(os.environ.get("CACHE_SECONDS", "900"))
+ALLOWED_EMAILS = {
+    x.strip().lower()
+    for x in os.environ.get("ALLOWED_EMAILS", "").split(",")
+    if x.strip()
+}
 
 SCOPES = [
     "openid",
@@ -26,7 +39,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/tagmanager.readonly",
 ]
 
-CACHE = {"expires": 0, "items": []}
+# Cache is keyed by Google login so each account can refresh independently.
+CACHE = {}
 
 
 def load_aliases():
@@ -38,33 +52,46 @@ def load_aliases():
         return {}
 
 
-def logged_in(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not session.get("access_token"):
-            return redirect(url_for("login"))
-        if ALLOWED_EMAIL_DOMAIN:
-            email = (session.get("user_email") or "").lower()
-            if not email.endswith("@" + ALLOWED_EMAIL_DOMAIN.lower().lstrip("@")):
-                session.clear()
-                return "Access denied for this Google account.", 403
-        return fn(*args, **kwargs)
-    return wrapper
+def connected_accounts():
+    return session.get("google_accounts", [])
 
 
-def auth_headers():
-    return {"Authorization": f"Bearer {session['access_token']}"}
+def save_accounts(accounts):
+    session["google_accounts"] = accounts
+    session.modified = True
 
 
-def google_get(url, params=None):
-    r = requests.get(url, headers=auth_headers(), params=params or {}, timeout=30)
-    if r.status_code == 401:
-        session.clear()
+def is_allowed(email):
+    return not ALLOWED_EMAILS or email.lower() in ALLOWED_EMAILS
+
+
+def refresh_access_token(refresh_token):
+    r = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        },
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+def google_get(access_token, url, params=None):
+    r = requests.get(
+        url,
+        headers={"Authorization": f"Bearer {access_token}"},
+        params=params or {},
+        timeout=30,
+    )
     r.raise_for_status()
     return r.json()
 
 
-def fetch_ga_items():
+def fetch_ga_items(access_token, google_login):
     items = []
     token = None
     while True:
@@ -72,6 +99,7 @@ def fetch_ga_items():
         if token:
             params["pageToken"] = token
         data = google_get(
+            access_token,
             "https://analyticsadmin.googleapis.com/v1beta/accountSummaries",
             params=params,
         )
@@ -91,6 +119,7 @@ def fetch_ga_items():
                     "account_id": account_id,
                     "resource_id": property_id,
                     "search_extra": "",
+                    "google_login": google_login,
                     "open_url": f"https://analytics.google.com/analytics/web/#/p{property_id}" if property_id else "",
                 })
         token = data.get("nextPageToken")
@@ -99,7 +128,7 @@ def fetch_ga_items():
     return items
 
 
-def fetch_gtm_items():
+def fetch_gtm_items(access_token, google_login):
     items = []
     token = None
     accounts = []
@@ -107,7 +136,7 @@ def fetch_gtm_items():
         params = {}
         if token:
             params["pageToken"] = token
-        data = google_get("https://tagmanager.googleapis.com/tagmanager/v2/accounts", params=params)
+        data = google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts", params=params)
         accounts.extend(data.get("account", []))
         token = data.get("nextPageToken")
         if not token:
@@ -123,6 +152,7 @@ def fetch_gtm_items():
             if ctoken:
                 params["pageToken"] = ctoken
             data = google_get(
+                access_token,
                 f"https://tagmanager.googleapis.com/tagmanager/v2/{parent}/containers",
                 params=params,
             )
@@ -139,6 +169,7 @@ def fetch_gtm_items():
                     "account_id": account_id,
                     "resource_id": public_id or container_id,
                     "search_extra": domains,
+                    "google_login": google_login,
                     "open_url": f"https://tagmanager.google.com/#/container/accounts/{account_id}/containers/{container_id}" if account_id and container_id else "",
                 })
             ctoken = data.get("nextPageToken")
@@ -159,25 +190,43 @@ def client_alias_tokens(query):
     return tokens
 
 
-def get_index(force=False):
+def get_account_index(account, force=False):
+    email = account["email"].lower()
+    cached = CACHE.get(email, {"expires": 0, "items": []})
     now = time.time()
-    if not force and CACHE["expires"] > now:
-        return CACHE["items"]
-    items = fetch_ga_items() + fetch_gtm_items()
-    CACHE["items"] = items
-    CACHE["expires"] = now + CACHE_SECONDS
+    if not force and cached["expires"] > now:
+        return cached["items"]
+
+    access_token = refresh_access_token(account["refresh_token"])
+    items = fetch_ga_items(access_token, email) + fetch_gtm_items(access_token, email)
+    CACHE[email] = {"expires": now + CACHE_SECONDS, "items": items}
     return items
+
+
+def get_index(force=False):
+    items = []
+    errors = []
+    for account in connected_accounts():
+        try:
+            items.extend(get_account_index(account, force=force))
+        except Exception as exc:
+            errors.append({"email": account.get("email", "unknown"), "error": str(exc)})
+    return items, errors
 
 
 @app.route("/")
 def index():
-    return render_template("index.html", user_email=session.get("user_email"))
+    return render_template(
+        "index.html",
+        accounts=[a.get("email", "") for a in connected_accounts()],
+    )
 
 
 @app.route("/login")
 def login():
-    if not GOOGLE_CLIENT_ID:
-        return "GOOGLE_CLIENT_ID is not configured.", 500
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        return "Google OAuth environment variables are not configured.", 500
+
     state = secrets.token_urlsafe(24)
     session["oauth_state"] = state
     redirect_uri = url_for("oauth_callback", _external=True, _scheme="https")
@@ -187,7 +236,7 @@ def login():
         "response_type": "code",
         "scope": " ".join(SCOPES),
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": "consent select_account",
         "include_granted_scopes": "true",
         "state": state,
     }
@@ -201,6 +250,7 @@ def oauth_callback():
     code = request.args.get("code")
     if not code:
         return "Google authorization failed.", 400
+
     redirect_uri = url_for("oauth_callback", _external=True, _scheme="https")
     token_resp = requests.post(
         "https://oauth2.googleapis.com/token",
@@ -215,55 +265,98 @@ def oauth_callback():
     )
     token_resp.raise_for_status()
     token = token_resp.json()
-    session["access_token"] = token["access_token"]
+
+    access_token = token.get("access_token")
+    refresh_token = token.get("refresh_token")
+    if not access_token:
+        return "Google did not return an access token.", 400
+
     userinfo = requests.get(
         "https://openidconnect.googleapis.com/v1/userinfo",
-        headers={"Authorization": f"Bearer {token['access_token']}"},
+        headers={"Authorization": f"Bearer {access_token}"},
         timeout=30,
     )
     userinfo.raise_for_status()
-    info = userinfo.json()
-    session["user_email"] = info.get("email", "")
-    if ALLOWED_EMAIL_DOMAIN and not session["user_email"].lower().endswith("@" + ALLOWED_EMAIL_DOMAIN.lower().lstrip("@")):
-        session.clear()
-        return "Access denied for this Google account.", 403
+    email = userinfo.json().get("email", "").lower()
+
+    if not email or not is_allowed(email):
+        return "This Google account is not allowed to connect to this finder.", 403
+
+    accounts = connected_accounts()
+    existing = next((a for a in accounts if a.get("email", "").lower() == email), None)
+
+    if existing:
+        if refresh_token:
+            existing["refresh_token"] = refresh_token
+    else:
+        if not refresh_token:
+            return "Google did not return a refresh token. Remove this app from your Google account permissions, then reconnect.", 400
+        accounts.append({"email": email, "refresh_token": refresh_token})
+
+    save_accounts(accounts)
+    CACHE.pop(email, None)
     return redirect(url_for("index"))
+
+
+@app.route("/disconnect/<path:email>", methods=["POST"])
+def disconnect(email):
+    email = email.lower()
+    accounts = [a for a in connected_accounts() if a.get("email", "").lower() != email]
+    save_accounts(accounts)
+    CACHE.pop(email, None)
+    return jsonify({"ok": True})
 
 
 @app.route("/logout")
 def logout():
+    for account in connected_accounts():
+        CACHE.pop(account.get("email", "").lower(), None)
     session.clear()
     return redirect(url_for("index"))
 
 
 @app.route("/api/search")
-@logged_in
 def api_search():
+    if not connected_accounts():
+        return jsonify({"error": "No Google accounts connected."}), 401
+
     q = (request.args.get("q") or "").strip()
     platform = (request.args.get("platform") or "all").lower()
     if not q:
-        return jsonify([])
+        return jsonify({"results": [], "errors": []})
+
     tokens = client_alias_tokens(q)
+    indexed, errors = get_index()
     results = []
-    for item in get_index():
+    seen = set()
+
+    for item in indexed:
         if platform == "analytics" and item["platform"] != "Google Analytics":
             continue
         if platform == "gtm" and item["platform"] != "Google Tag Manager":
             continue
+
         haystack = " ".join([
             item.get("name", ""), item.get("account_name", ""), item.get("account_id", ""),
-            item.get("resource_id", ""), item.get("search_extra", "")
+            item.get("resource_id", ""), item.get("search_extra", ""), item.get("google_login", "")
         ]).lower()
         if any(t and t in haystack for t in tokens):
-            results.append(item)
-    return jsonify(results[:100])
+            # If the exact same property/container is visible to multiple logins, keep each login visible.
+            key = (item.get("platform"), item.get("account_id"), item.get("resource_id"), item.get("google_login"))
+            if key not in seen:
+                seen.add(key)
+                results.append(item)
+
+    results.sort(key=lambda x: (x.get("name", "").lower(), x.get("google_login", "")))
+    return jsonify({"results": results[:200], "errors": errors})
 
 
 @app.route("/api/refresh", methods=["POST"])
-@logged_in
 def api_refresh():
-    items = get_index(force=True)
-    return jsonify({"ok": True, "count": len(items)})
+    if not connected_accounts():
+        return jsonify({"error": "No Google accounts connected."}), 401
+    items, errors = get_index(force=True)
+    return jsonify({"ok": not errors, "count": len(items), "errors": errors})
 
 
 @app.route("/health")
