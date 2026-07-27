@@ -10,6 +10,7 @@
       <input type="hidden" name="csrf_token" value="{{session.csrf}}">
       <button class="primary">Sync Platform Catalog</button>
     </form>
+    <a class="button" href="{{url_for('export_csv', q=q, status=status, plan=plan, partner=partner)}}">Export CSV</a>
     <a class="button" href="{{url_for('inventory')}}">Import / Discover Projects</a>
   </div>
 </div>
@@ -40,8 +41,12 @@
   </section>
   <section class="card">
     <h2>Partner Portfolio</h2>
+    <p class="hint">Click a partner to view their accounts, or download a CSV of that partner's client details.</p>
     {% for name,n in partners %}
-      <div class="pair"><span>{{name}}</span><b>{{n}}</b></div>
+      <div class="pair">
+        <a href="{{url_for('dashboard', partner=name)}}">{{name}}</a>
+        <span><b>{{n}}</b> · <a href="{{url_for('export_csv', partner=name)}}">CSV</a></span>
+      </div>
     {% else %}<p>No partner data yet.</p>{% endfor %}
   </section>
 </div>
@@ -59,6 +64,7 @@
   <input name="partner" value="{{partner}}" placeholder="Partner">
   <button>Filter</button>
   <a href="{{url_for('dashboard')}}">Clear</a>
+  <a class="button" href="{{url_for('export_csv', q=q, status=status, plan=plan, partner=partner)}}">Download CSV of results</a>
 </form>
 
 <div class="tablewrap">
@@ -73,7 +79,7 @@
       <td>{{r.domain or '—'}}</td>
       <td>{{r.next_billing_date or '—'}}</td>
       <td>{{money(r.client_price if r.client_price is not none else r.monthly_price)}}</td>
-      <td>{{r.partner_display}}</td>
+      <td><a href="{{url_for('dashboard', partner=r.partner_display)}}">{{r.partner_display}}</a></td>
     </tr>
   {% else %}<tr><td colspan="7">No projects match the current filters.</td></tr>{% endfor %}
   </tbody>
