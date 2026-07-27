@@ -3,6 +3,8 @@ import os
 import secrets
 import sqlite3
 import time
+import logging
+import traceback
 from urllib.parse import urlencode
 
 import requests
@@ -10,6 +12,9 @@ from flask import Flask, redirect, render_template, request, session, url_for, j
 from flask_session import Session
 from cryptography.fernet import Fernet, InvalidToken
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("google-account-finder")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
@@ -312,52 +317,94 @@ def login():
 
 @app.route("/oauth2callback")
 def oauth_callback():
-    if request.args.get("state") != session.get("oauth_state"):
-        return "Invalid OAuth state.", 400
-    code = request.args.get("code")
-    if not code:
-        return "Google authorization failed.", 400
+    # Keep this route deliberately verbose on failure so Render does not appear to
+    # "hang" with an empty callback page. Secrets and authorization codes are never shown.
+    try:
+        google_error = request.args.get("error")
+        if google_error:
+            desc = request.args.get("error_description", "Google declined authorization.")
+            logger.error("OAuth callback returned Google error: %s - %s", google_error, desc)
+            return f"OAuth authorization failed: {google_error}. {desc}", 400
 
-    redirect_uri = url_for("oauth_callback", _external=True, _scheme="https")
-    token_resp = requests.post(
-        "https://oauth2.googleapis.com/token",
-        data={
-            "code": code,
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-        },
-        timeout=30,
-    )
-    token_resp.raise_for_status()
-    token = token_resp.json()
+        expected_state = session.get("oauth_state")
+        received_state = request.args.get("state")
+        if not expected_state or received_state != expected_state:
+            logger.error("OAuth state mismatch. expected_present=%s received_present=%s", bool(expected_state), bool(received_state))
+            return "OAuth state validation failed. Start again from Connect Google Account. If this repeats, check Render session storage/cookies.", 400
 
-    access_token = token.get("access_token")
-    refresh_token = token.get("refresh_token")
-    if not access_token:
-        return "Google did not return an access token.", 400
+        code = request.args.get("code")
+        if not code:
+            return "Google returned to the callback without an authorization code.", 400
 
-    userinfo = requests.get(
-        "https://openidconnect.googleapis.com/v1/userinfo",
-        headers={"Authorization": f"Bearer {access_token}"},
-        timeout=30,
-    )
-    userinfo.raise_for_status()
-    email = userinfo.json().get("email", "").lower()
+        redirect_uri = url_for("oauth_callback", _external=True, _scheme="https")
+        logger.info("OAuth callback reached; exchanging code. redirect_uri=%s", redirect_uri)
+        token_resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            timeout=30,
+        )
+        if not token_resp.ok:
+            try:
+                detail = token_resp.json()
+                safe_detail = {k: v for k, v in detail.items() if k not in {"access_token", "refresh_token", "id_token"}}
+            except Exception:
+                safe_detail = {"body": token_resp.text[:500]}
+            logger.error("Token exchange failed: status=%s detail=%s", token_resp.status_code, safe_detail)
+            return f"Google token exchange failed (HTTP {token_resp.status_code}). Check Render GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and the exact redirect URI. Details: {safe_detail}", 500
 
-    if not email or not is_allowed(email):
-        return "This Google account is not allowed to connect to this finder.", 403
+        token = token_resp.json()
+        access_token = token.get("access_token")
+        refresh_token = token.get("refresh_token")
+        if not access_token:
+            logger.error("Token exchange succeeded but access_token was absent")
+            return "Google did not return an access token.", 500
 
-    existing = next((a for a in connected_accounts() if a.get("email", "").lower() == email), None)
+        userinfo = requests.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30,
+        )
+        if not userinfo.ok:
+            logger.error("Userinfo lookup failed: status=%s body=%s", userinfo.status_code, userinfo.text[:500])
+            return f"Google login succeeded, but user profile lookup failed (HTTP {userinfo.status_code}).", 500
 
-    if not refresh_token and not existing:
-        return "Google did not return a refresh token. Remove this app from your Google account permissions, then reconnect.", 400
+        email = userinfo.json().get("email", "").lower()
+        if not email or not is_allowed(email):
+            logger.warning("OAuth login rejected by allow-list: %s", email or "<missing email>")
+            return "This Google account is not allowed to connect to this finder.", 403
 
-    if refresh_token:
-        save_account(email, refresh_token)
-    CACHE.pop(email, None)
-    return redirect(url_for("index"))
+        existing = next((a for a in connected_accounts() if a.get("email", "").lower() == email), None)
+        if not refresh_token and not existing:
+            return "Google authenticated the account but did not issue a refresh token. Remove this app from that Google account's connected apps, then reconnect and approve access.", 400
+
+        if refresh_token:
+            try:
+                save_account(email, refresh_token)
+            except Exception as exc:
+                logger.exception("Failed to persist OAuth token for %s", email)
+                return (
+                    "Google login succeeded, but the app could not save the refresh token. "
+                    f"Check TOKEN_DB_PATH, the Render persistent disk mount, and TOKEN_ENCRYPTION_KEY. Error: {type(exc).__name__}: {exc}",
+                    500,
+                )
+
+        session.pop("oauth_state", None)
+        CACHE.pop(email, None)
+        logger.info("OAuth account connected successfully: %s", email)
+        return redirect(url_for("index"))
+    except Exception as exc:
+        logger.exception("Unhandled OAuth callback error")
+        return (
+            "Authentication failed inside the OAuth callback. "
+            f"Error: {type(exc).__name__}: {exc}. Check the Render logs for the full traceback.",
+            500,
+        )
 
 
 @app.route("/disconnect/<path:email>", methods=["POST"])
@@ -422,7 +469,20 @@ def api_refresh():
 
 @app.route("/health")
 def health():
-    return {"ok": True}
+    checks = {
+        "google_client_id_configured": bool(GOOGLE_CLIENT_ID),
+        "google_client_secret_configured": bool(GOOGLE_CLIENT_SECRET),
+        "token_encryption_key_configured": bool(TOKEN_ENCRYPTION_KEY),
+        "token_db_path": TOKEN_DB_PATH,
+        "token_db_directory_exists": os.path.isdir(os.path.dirname(TOKEN_DB_PATH) or "."),
+        "connected_account_count": len(connected_accounts()),
+    }
+    checks["ok"] = all([
+        checks["google_client_id_configured"],
+        checks["google_client_secret_configured"],
+        checks["token_encryption_key_configured"],
+    ])
+    return checks, (200 if checks["ok"] else 500)
 
 
 if __name__ == "__main__":
