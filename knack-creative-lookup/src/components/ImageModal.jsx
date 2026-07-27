@@ -2,8 +2,6 @@ import React from 'react';
 import './ImageModal.css';
 
 const ImageModal = ({ creative, isOpen, onClose }) => {
-  if (!isOpen) return null;
-
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) {
       onClose();
@@ -17,9 +15,13 @@ const ImageModal = ({ creative, isOpen, onClose }) => {
   };
 
   React.useEffect(() => {
+    if (!isOpen) return;
+    
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="modal-backdrop" onClick={handleBackdropClick}>
@@ -67,7 +69,7 @@ const ImageModal = ({ creative, isOpen, onClose }) => {
             </div>
 
             <div className="modal-actions">
-              <a
+              
                 href={creative.imageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
