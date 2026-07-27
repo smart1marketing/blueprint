@@ -116,6 +116,14 @@ const server = http.createServer(async (req, res) => {
         service: 'smart1-ad-builder',
         uptime: Math.round(process.uptime()),
         queued: listJobs().filter((j) => j.status === 'queued').length,
+        embed: {
+          path: '/embed',
+          available: fs.existsSync(path.join(PUBLIC, 'embed.html')),
+          // The commonest embed failure is this being left at the default,
+          // which permits only same-origin framing. Show it plainly.
+          frameAncestors: FRAME_ANCESTORS,
+          configured: Boolean(process.env.ALLOWED_FRAME_ANCESTORS),
+        },
       });
     }
 
@@ -229,6 +237,16 @@ server.listen(PORT, HOST, () => {
   console.log(`smart1-ad-builder listening on ${HOST}:${PORT}`);
   console.log(`  output dir: ${OUT}`);
   console.log(`  worker:     ${process.env.WORKER_MODE === 'external' ? 'external' : 'in-process'}`);
+  console.log(`  embed page: ${fs.existsSync(path.join(PUBLIC, 'embed.html')) ? 'present' : 'MISSING'}`);
+  console.log(`  frame-ancestors: ${FRAME_ANCESTORS}`);
+  if (!process.env.ALLOWED_FRAME_ANCESTORS) {
+    console.warn(
+      "  WARNING: ALLOWED_FRAME_ANCESTORS is not set, so frame-ancestors is 'self'. " +
+        'Any other site embedding /embed will get a blank box and a CSP error in the ' +
+        "browser console. Set it to the embedding site's origin, e.g. " +
+        "\"'self' https://smart1marketing.com\".",
+    );
+  }
 });
 
 // Render sends SIGTERM on deploy and scale-down; finish cleanly.

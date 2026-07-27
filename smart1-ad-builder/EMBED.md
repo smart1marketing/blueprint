@@ -33,6 +33,24 @@ Paste this into a **Custom Code / HTML** element on the Simvoly page.
 </script>
 ```
 
+## If the embed is blank or 404s
+
+Load `https://adbuilder.onrender.com/healthz` in a browser. It answers both
+questions at once:
+
+```json
+"embed": {
+  "available": true,          // false or 404 = deployed code predates /embed; redeploy
+  "frameAncestors": "'self'", // must contain your site's origin
+  "configured": false         // false = ALLOWED_FRAME_ANCESTORS was never set
+}
+```
+
+- `available: false`, or the whole `embed` key missing, or `/healthz` 404s
+  → Render is running an older commit. Push and redeploy.
+- `configured: false` → the default only allows same-origin framing, so
+  smart1marketing.com gets a blank box. Set the env var below and redeploy.
+
 ## Before it will work
 
 **1. Allow the Simvoly domain to frame it.** Set this on the Render service, or
