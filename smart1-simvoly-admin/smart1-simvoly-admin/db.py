@@ -1,8 +1,11 @@
 import json
 import os
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlparse
+
+import psycopg2
+import psycopg2.extras
 
 from config import SETTINGS
 
@@ -11,44 +14,72 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _dsn():
+    url = SETTINGS.database_url
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Create a Render Postgres database and add its "
+            "Internal Database URL as the DATABASE_URL environment variable."
+        )
+    return url
+
+
 def db_path():
-    path = SETTINGS.database_path
-    folder = os.path.dirname(path)
+    """A non-secret label describing the database, for /health display."""
+    url = SETTINGS.database_url or ""
+    if not url:
+        return "postgres (DATABASE_URL not set)"
     try:
-        if folder:
-            os.makedirs(folder, exist_ok=True)
-        # Test write access without altering an existing DB.
-        probe_dir = folder or "."
-        probe = os.path.join(probe_dir, ".smart1_write_test")
-        with open(probe, "w", encoding="utf-8") as f:
-            f.write("ok")
-        os.remove(probe)
-        return path
-    except OSError:
-        fallback = "/tmp/smart1_sites.sqlite3"
-        os.makedirs(os.path.dirname(fallback), exist_ok=True)
-        return fallback
+        u = urlparse(url)
+        return f"postgres://{u.hostname or '?'}{u.path or ''}"
+    except Exception:
+        return "postgres"
+
+
+class _Cursor:
+    """Adapter so call sites written for sqlite3 keep working on psycopg2:
+
+    - translates '?' placeholders to '%s'
+    - .execute() returns the underlying cursor, which is iterable and has
+      fetchone()/fetchall(), matching sqlite3's execute() behaviour.
+    """
+
+    def __init__(self, cur):
+        self._cur = cur
+
+    def execute(self, sql, params=None):
+        self._cur.execute(sql.replace("?", "%s"), params or ())
+        return self._cur
+
+    def __getattr__(self, name):
+        return getattr(self._cur, name)
 
 
 @contextmanager
 def connection():
-    con = sqlite3.connect(db_path())
-    con.row_factory = sqlite3.Row
+    conn = psycopg2.connect(_dsn())
     try:
-        yield con
-        con.commit()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        yield _Cursor(cur)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
-        con.close()
+        conn.close()
 
 
 def _columns(c, table):
-    return {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+    rows = c.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name=?",
+        (table,),
+    ).fetchall()
+    return {r["column_name"] for r in rows}
 
 
 def _add_column(c, table, definition):
-    name = definition.split()[0]
-    if name not in _columns(c, table):
-        c.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+    # Postgres supports ADD COLUMN IF NOT EXISTS, so this is idempotent.
+    c.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {definition}")
 
 
 def init_db():
@@ -172,7 +203,7 @@ def init_db():
 
         c.execute(
             """CREATE TABLE IF NOT EXISTS sync_runs(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 started_at TEXT,
                 completed_at TEXT,
                 status TEXT,
@@ -497,7 +528,10 @@ def list_templates_for_ui():
 
 def known_project_ids():
     with connection() as c:
-        return [r[0] for r in c.execute("SELECT project_id FROM projects ORDER BY project_id")]
+        return [
+            r["project_id"]
+            for r in c.execute("SELECT project_id FROM projects ORDER BY project_id")
+        ]
 
 
 def query_projects(q="", status="", plan="", partner="", page=1, per_page=50):
@@ -506,7 +540,7 @@ def query_projects(q="", status="", plan="", partner="", page=1, per_page=50):
     if q:
         like = f"%{q}%"
         where.append(
-            "(p.name LIKE ? OR w.domain LIKE ? OR p.project_id LIKE ? OR w.website_id LIKE ?)"
+            "(p.name ILIKE ? OR w.domain ILIKE ? OR p.project_id ILIKE ? OR w.website_id ILIKE ?)"
         )
         args += [like, like, like, like]
     if status:
@@ -516,7 +550,7 @@ def query_projects(q="", status="", plan="", partner="", page=1, per_page=50):
         where.append("p.plan_id=?")
         args.append(plan)
     if partner:
-        where.append("(m.partner=? OR p.name LIKE ?)")
+        where.append("(m.partner=? OR p.name ILIKE ?)")
         args += [partner, partner + " - %"]
     wc = "WHERE " + " AND ".join(where) if where else ""
     off = (page - 1) * per_page
@@ -528,25 +562,26 @@ def query_projects(q="", status="", plan="", partner="", page=1, per_page=50):
                             pl.monthly_price,pl.yearly_price,pl.bg_monthly_price,pl.bg_yearly_price,
                             m.client_price,m.platform_cost,m.partner,m.notes,m.internal_client_name,
                             m.lifecycle_state,m.cancelled_at,
-                            (SELECT domain FROM websites ww WHERE ww.project_id=p.project_id LIMIT 1) domain
+                            (SELECT domain FROM websites ww WHERE ww.project_id=p.project_id LIMIT 1) AS domain,
+                            (CASE WHEN p.project_id ~ '^[0-9]+$' THEN CAST(p.project_id AS BIGINT) ELSE 0 END) AS _ord
                      FROM projects p
                      LEFT JOIN plans pl ON pl.plan_id=p.plan_id
                      LEFT JOIN project_meta m ON m.project_id=p.project_id
                      LEFT JOIN websites w ON w.project_id=p.project_id
                      {wc}
-                     ORDER BY CAST(p.project_id AS INTEGER) DESC
+                     ORDER BY _ord DESC
                      LIMIT ? OFFSET ?""",
                 args + [per_page, off],
             )
         ]
         count = c.execute(
-            f"""SELECT COUNT(DISTINCT p.project_id)
+            f"""SELECT COUNT(DISTINCT p.project_id) AS n
                 FROM projects p
                 LEFT JOIN project_meta m ON m.project_id=p.project_id
                 LEFT JOIN websites w ON w.project_id=p.project_id
                 {wc}""",
             args,
-        ).fetchone()[0]
+        ).fetchone()["n"]
     for r in rows:
         r["partner_display"] = r.get("partner") or infer_partner(r.get("name"))
     return rows, count
@@ -556,9 +591,9 @@ def metrics():
     with connection() as c:
         statuses = {
             r["status"]: r["n"]
-            for r in c.execute("SELECT status,COUNT(*) n FROM projects GROUP BY status")
+            for r in c.execute("SELECT status,COUNT(*) AS n FROM projects GROUP BY status")
         }
-        total = c.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        total = c.execute("SELECT COUNT(*) AS n FROM projects").fetchone()["n"]
         plans = [
             dict(r)
             for r in c.execute(
@@ -577,7 +612,7 @@ def metrics():
             )
         ]
         last = c.execute("SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1").fetchone()
-        template_count = c.execute("SELECT COUNT(*) FROM templates").fetchone()[0]
+        template_count = c.execute("SELECT COUNT(*) AS n FROM templates").fetchone()["n"]
     return total, statuses, plans, meta, (dict(last) if last else None), template_count
 
 
@@ -585,7 +620,12 @@ def alert_rows(limit=100):
     today = datetime.now().date()
     soon = today + timedelta(days=7)
     with connection() as c:
-        rows = [dict(r) for r in c.execute("SELECT * FROM projects ORDER BY CAST(project_id AS INTEGER) DESC")]
+        rows = [
+            dict(r)
+            for r in c.execute(
+                "SELECT * FROM projects ORDER BY CASE WHEN project_id ~ '^[0-9]+$' THEN CAST(project_id AS BIGINT) ELSE 0 END DESC"
+            )
+        ]
     out = []
     for r in rows:
         kind = None
@@ -614,11 +654,11 @@ def alert_rows(limit=100):
 
 def start_sync():
     with connection() as c:
-        cur = c.execute(
-            "INSERT INTO sync_runs(started_at,status,projects_count,plans_count,templates_count,details) VALUES(?,?,?,?,?,?)",
+        row = c.execute(
+            "INSERT INTO sync_runs(started_at,status,projects_count,plans_count,templates_count,details) VALUES(?,?,?,?,?,?) RETURNING id",
             (now_iso(), "RUNNING", 0, 0, 0, ""),
-        )
-        return cur.lastrowid
+        ).fetchone()
+        return row["id"]
 
 
 def finish_sync(run_id, status, projects_count=0, plans_count=0, templates_count=0, details=""):
