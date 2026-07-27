@@ -1,25 +1,22 @@
 services:
   - type: web
-    name: smart1-simvoly-admin
+    name: smart-1-sites-admin
     runtime: python
-    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: MOCK_MODE
+        value: true
+      - key: ENABLE_WRITE_ACTIONS
+        value: false
+      - key: DATABASE_PATH
+        value: /var/data/smart1_sites.sqlite3
       - key: SECRET_KEY
         generateValue: true
-      - key: ADMIN_USERNAME
-        value: admin
-      - key: ADMIN_PASSWORD
-        sync: false
-      - key: MOCK_MODE
-        value: "true"
-      - key: SIMVOLY_WL_TIER
-        value: advanced
     disk:
-      name: smart1-simvoly-data
+      name: smart1-sites-data
       mountPath: /var/data
       sizeGB: 1

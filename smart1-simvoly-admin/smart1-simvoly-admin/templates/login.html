@@ -1,15 +1,1 @@
-{% extends "base.html" %}
-{% block title %}Login · Smart 1 Sites Admin{% endblock %}
-{% block content %}
-<div class="login-wrap">
-  <section class="card login-card">
-    <h1>Site Administration</h1>
-    <p class="muted">Manage Smart 1's Simvoly reseller projects.</p>
-    <form method="post" class="stack">
-      <label>Username<input name="username" autocomplete="username" required></label>
-      <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
-      <button class="btn primary" type="submit">Sign in</button>
-    </form>
-  </section>
-</div>
-{% endblock %}
+{% extends 'base.html' %}{% block content %}<div class="login card"><h1>Admin Login</h1><form method="post"><label>Username<input name="username" required autofocus></label><label>Password<input name="password" type="password" required></label><button class="primary">Log in</button></form></div>{% endblock %}

@@ -1,187 +1,82 @@
-import json
-import os
-from dataclasses import dataclass
-from typing import Any
-
-import requests
-
+import json, os, requests
 from config import SETTINGS
-
-
-class SimvolyConfigError(RuntimeError):
-    pass
-
-
-class SimvolyAPIError(RuntimeError):
-    pass
-
-
-def get_nested(obj: Any, path: str, default=None):
-    if not path:
-        return obj
-    cur = obj
-    for part in path.split("."):
-        if isinstance(cur, dict):
-            cur = cur.get(part, default)
-        else:
-            return default
+class SimvolyError(RuntimeError): pass
+def nested(obj,path,default=None):
+    cur=obj
+    if not path: return obj
+    for part in path.split('.'):
+        if not isinstance(cur,dict): return default
+        cur=cur.get(part,default)
     return cur
-
-
-def render_template_json(template: str, values: dict[str, Any]) -> dict:
-    # JSON encode values first, then substitute string placeholders safely.
-    # Templates are meant to be simple JSON objects from environment variables.
-    rendered = template
-    for key, value in values.items():
-        token = "{" + key + "}"
-        if token in rendered:
-            # Most env templates wrap placeholders in quotes. Escape the inserted value.
-            escaped = str(value if value is not None else "").replace("\\", "\\\\").replace('"', '\\"')
-            rendered = rendered.replace(token, escaped)
-    try:
-        result = json.loads(rendered or "{}")
-    except json.JSONDecodeError as exc:
-        raise SimvolyConfigError(f"Invalid JSON body template: {exc}") from exc
-    if not isinstance(result, dict):
-        raise SimvolyConfigError("Body template must decode to a JSON object.")
-    return result
-
-
-@dataclass
-class Project:
-    id: str
-    name: str
-    status: str
-    plan: str
-    domain: str
-    owner_email: str
-    created_at: str
-    raw: dict
-
-
 class SimvolyClient:
-    def __init__(self):
-        self.s = SETTINGS
-
-    def _headers(self) -> dict[str, str]:
-        if not self.s.api_key:
-            return {"Accept": "application/json", "Content-Type": "application/json"}
-        token = f"{self.s.auth_prefix} {self.s.api_key}".strip()
-        return {
-            self.s.auth_header: token,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-
-    def _request(self, method: str, path: str, *, json_body: dict | None = None) -> Any:
-        if not self.s.api_base_url:
-            raise SimvolyConfigError("SIMVOLY_API_BASE_URL is not configured.")
-        if not path:
-            raise SimvolyConfigError("The required Simvoly endpoint path is not configured.")
-        url = f"{self.s.api_base_url}/{path.lstrip('/')}"
-        try:
-            resp = requests.request(
-                method.upper(),
-                url,
-                headers=self._headers(),
-                json=json_body,
-                timeout=self.s.timeout_seconds,
-                verify=self.s.verify_ssl,
-            )
-        except requests.RequestException as exc:
-            raise SimvolyAPIError(f"Could not reach Simvoly: {exc}") from exc
-        if not resp.ok:
-            detail = resp.text[:1200]
-            raise SimvolyAPIError(f"Simvoly returned HTTP {resp.status_code}: {detail}")
-        if not resp.content:
-            return {}
-        try:
-            return resp.json()
-        except ValueError:
-            return {"raw_text": resp.text}
-
-    def list_projects(self) -> list[Project]:
-        if self.s.mock_mode:
-            return self._mock_projects()
-        data = self._request(
-            os.getenv("SIMVOLY_LIST_PROJECTS_METHOD", "GET"),
-            os.getenv("SIMVOLY_LIST_PROJECTS_PATH", ""),
-        )
-        records = get_nested(data, os.getenv("SIMVOLY_PROJECTS_JSON_PATH", ""), data)
-        if isinstance(records, dict):
-            # Common fallback containers.
-            for key in ("projects", "data", "items", "results"):
-                if isinstance(records.get(key), list):
-                    records = records[key]
-                    break
-        if not isinstance(records, list):
-            raise SimvolyAPIError("List-projects response did not resolve to a list. Check SIMVOLY_PROJECTS_JSON_PATH.")
-        return [self._map_project(r) for r in records if isinstance(r, dict)]
-
-    def _map_project(self, raw: dict) -> Project:
-        def f(env_name: str, default_path: str, default=""):
-            path = os.getenv(env_name, default_path)
-            value = get_nested(raw, path, default)
-            return "" if value is None else str(value)
-        return Project(
-            id=f("SIMVOLY_PROJECT_ID_FIELD", "id"),
-            name=f("SIMVOLY_PROJECT_NAME_FIELD", "name", "Unnamed site"),
-            status=f("SIMVOLY_PROJECT_STATUS_FIELD", "status", "unknown"),
-            plan=f("SIMVOLY_PROJECT_PLAN_FIELD", "plan", "starter"),
-            domain=f("SIMVOLY_PROJECT_DOMAIN_FIELD", "domain"),
-            owner_email=f("SIMVOLY_PROJECT_OWNER_EMAIL_FIELD", "owner.email"),
-            created_at=f("SIMVOLY_PROJECT_CREATED_FIELD", "created_at"),
-            raw=raw,
-        )
-
-    def create_site(self, values: dict[str, str]) -> dict:
-        if self.s.mock_mode:
-            return {"id": f"demo-{values['subdomain']}", "status": "active", "mock": True}
-
-        user_template = os.getenv(
-            "SIMVOLY_CREATE_USER_BODY",
-            '{"email":"{email}","first_name":"{first_name}","last_name":"{last_name}"}',
-        )
-        project_template = os.getenv(
-            "SIMVOLY_CREATE_PROJECT_BODY",
-            '{"name":"{site_name}","owner_email":"{email}","plan":"{plan}","subdomain":"{subdomain}"}',
-        )
-        user_result = self._request(
-            os.getenv("SIMVOLY_CREATE_USER_METHOD", "POST"),
-            os.getenv("SIMVOLY_CREATE_USER_PATH", ""),
-            json_body=render_template_json(user_template, values),
-        )
-        project_values = dict(values)
-        # Allow project body template to reference returned user id when present.
-        if isinstance(user_result, dict):
-            project_values["user_id"] = user_result.get("id") or get_nested(user_result, "data.id", "")
-        project_result = self._request(
-            os.getenv("SIMVOLY_CREATE_PROJECT_METHOD", "POST"),
-            os.getenv("SIMVOLY_CREATE_PROJECT_PATH", ""),
-            json_body=render_template_json(project_template, project_values),
-        )
-        return {"user": user_result, "project": project_result}
-
-    def project_action(self, project_id: str, action: str) -> Any:
-        if action not in {"suspend", "reactivate", "cancel"}:
-            raise ValueError("Unsupported action")
-        if self.s.mock_mode:
-            return {"id": project_id, "action": action, "mock": True}
-
-        prefix = action.upper()
-        method = os.getenv(f"SIMVOLY_{prefix}_PROJECT_METHOD", "POST")
-        path_template = os.getenv(f"SIMVOLY_{prefix}_PROJECT_PATH", "")
-        path = path_template.replace("{project_id}", str(project_id))
-        body_template = os.getenv(f"SIMVOLY_{prefix}_BODY", "{}")
-        body = render_template_json(body_template, {"project_id": project_id})
-        return self._request(method, path, json_body=body if method.upper() != "GET" else None)
-
-    @staticmethod
-    def _mock_projects() -> list[Project]:
-        rows = [
-            {"id": "demo-1001", "name": "Buckeye Roofing", "status": "active", "plan": "premium", "domain": "buckeyeroofing.example", "owner": {"email": "owner@example.com"}, "created_at": "2026-07-01"},
-            {"id": "demo-1002", "name": "Lakeview RV", "status": "active", "plan": "elite", "domain": "lakeviewrv.example", "owner": {"email": "marketing@example.com"}, "created_at": "2026-06-15"},
-            {"id": "demo-1003", "name": "Main Street Dental", "status": "suspended", "plan": "starter", "domain": "mainstreetdental.example", "owner": {"email": "office@example.com"}, "created_at": "2026-05-10"},
-        ]
-        client = SimvolyClient.__new__(SimvolyClient)
-        return [client._map_project(r) for r in rows]
+    def __init__(self): self.s=SETTINGS
+    def headers(self):
+        h={'Accept':'application/json','Content-Type':'application/json'}
+        if self.s.api_key: h[self.s.auth_header]=(self.s.auth_prefix+' '+self.s.api_key).strip()
+        return h
+    def request(self,method,path,body=None):
+        if not self.s.api_base_url: raise SimvolyError('SIMVOLY_API_BASE_URL is not configured.')
+        if not path: raise SimvolyError('Required Simvoly endpoint path is not configured.')
+        try: r=requests.request(method,self.s.api_base_url+'/'+path.lstrip('/'),headers=self.headers(),json=body,timeout=self.s.timeout_seconds,verify=self.s.verify_ssl)
+        except requests.RequestException as e: raise SimvolyError(f'Could not reach Simvoly: {e}') from e
+        if not r.ok: raise SimvolyError(f'Simvoly HTTP {r.status_code}: {r.text[:800]}')
+        try: return r.json() if r.content else {}
+        except ValueError: raise SimvolyError('Simvoly returned non-JSON.')
+    def list_plans(self):
+        if self.s.mock_mode: return mock_plans()
+        data=self.request(os.getenv('SIMVOLY_LIST_PLANS_METHOD','GET'),os.getenv('SIMVOLY_LIST_PLANS_PATH',''))
+        items=nested(data,os.getenv('SIMVOLY_PLANS_JSON_PATH','data'),data)
+        if not isinstance(items,list): raise SimvolyError('Plan response did not resolve to a list.')
+        return items
+    def list_all_projects(self):
+        if self.s.mock_mode: return mock_projects()
+        template=os.getenv('SIMVOLY_LIST_PROJECTS_PATH_TEMPLATE','')
+        if not template: raise SimvolyError('SIMVOLY_LIST_PROJECTS_PATH_TEMPLATE is not configured.')
+        page=0; out=[]; pages=1
+        while page<pages:
+            path=template.replace('{page}',str(page)).replace('{search}','')
+            data=self.request(os.getenv('SIMVOLY_LIST_PROJECTS_METHOD','GET'),path)
+            items=nested(data,os.getenv('SIMVOLY_PROJECTS_JSON_PATH','data.items'),[])
+            if not isinstance(items,list): raise SimvolyError('Project response did not resolve to a list.')
+            out.extend(items); pages=int(nested(data,os.getenv('SIMVOLY_PAGES_JSON_PATH','data.pagesCount'),1) or 1); page+=1
+            if page>500: raise SimvolyError('Pagination safety stop reached.')
+        return out
+    def project_detail(self,pid):
+        if self.s.mock_mode: return mock_project_detail(pid)
+        t=os.getenv('SIMVOLY_PROJECT_DETAIL_PATH_TEMPLATE','')
+        if not t: return {}
+        return self.request(os.getenv('SIMVOLY_PROJECT_DETAIL_METHOD','GET'),t.replace('{project_id}',str(pid)))
+    def create_site(self,values):
+        if self.s.mock_mode: return {'mock':True}
+        if not self.s.enable_write_actions: raise SimvolyError('Write actions are disabled.')
+        return self._action('CREATE_PROJECT',values)
+    def action(self,pid,action):
+        if self.s.mock_mode: return {'mock':True}
+        if not self.s.enable_write_actions: raise SimvolyError('Write actions are disabled.')
+        return self._action({'suspend':'SUSPEND_PROJECT','reactivate':'REACTIVATE_PROJECT','cancel':'CANCEL_PROJECT'}[action],{'project_id':pid})
+    def _action(self,key,values):
+        method=os.getenv(f'SIMVOLY_{key}_METHOD','POST'); path=os.getenv(f'SIMVOLY_{key}_PATH','')
+        for k,v in values.items(): path=path.replace('{'+k+'}',str(v))
+        raw=os.getenv(f'SIMVOLY_{key}_BODY','{}')
+        for k,v in values.items(): raw=raw.replace('{'+k+'}',str(v).replace('"','\\"'))
+        try: body=json.loads(raw)
+        except Exception as e: raise SimvolyError(f'Invalid {key} body JSON: {e}')
+        return self.request(method,path,None if method.upper()=='GET' else body)
+def mock_plans():
+    return [
+      {'id':929,'name':'Landing Page - Self Service','monthlyPrice':22,'yearlyPrice':204,'bgMonthlyPrice':0,'bgYearlyPrice':0,'basePlan':'MINI_EXTENDED','hidden':True,'visible':True,'pages':2,'storage':1,'bandwidth':2,'contributors':1,'storeProducts':0,'websites':1},
+      {'id':24,'name':'Starter Site - Self Service','monthlyPrice':29,'yearlyPrice':300,'bgMonthlyPrice':20,'bgYearlyPrice':180,'basePlan':'PERSONAL','hidden':False,'visible':True,'pages':5,'storage':2,'bandwidth':10,'contributors':2,'storeProducts':0,'websites':1},
+      {'id':25,'name':'Business - Self Service','monthlyPrice':39,'yearlyPrice':420,'bgMonthlyPrice':30,'bgYearlyPrice':290,'basePlan':'BUSINESS','hidden':False,'visible':True,'pages':200,'storage':25,'bandwidth':25,'contributors':5,'storeProducts':0,'websites':1},
+      {'id':927,'name':'Smart 1 Starter Premium','monthlyPrice':49,'yearlyPrice':588,'bgMonthlyPrice':0,'bgYearlyPrice':0,'basePlan':'PERSONAL','hidden':False,'visible':True,'pages':6,'storage':5,'bandwidth':10,'contributors':2,'storeProducts':5,'websites':1},
+      {'id':928,'name':'Smart 1 Business Premium','monthlyPrice':79,'yearlyPrice':948,'bgMonthlyPrice':0,'bgYearlyPrice':0,'basePlan':'BUSINESS','hidden':False,'visible':True,'pages':25,'storage':500,'bandwidth':500,'contributors':5,'storeProducts':10,'websites':1},
+      {'id':26,'name':'ECommerce Self Service','monthlyPrice':89,'yearlyPrice':948,'bgMonthlyPrice':40.83,'bgYearlyPrice':440,'basePlan':'ECOMMERCE','hidden':False,'visible':True,'pages':25,'storage':50,'bandwidth':100,'contributors':10,'storeProducts':100,'websites':1},
+      {'id':930,'name':'Smart 1 Ecommerce','monthlyPrice':99,'yearlyPrice':1188,'bgMonthlyPrice':0,'bgYearlyPrice':0,'basePlan':'ECOMMERCE','hidden':False,'visible':True,'pages':50,'storage':100,'bandwidth':500,'contributors':10,'storeProducts':25,'websites':1},
+      {'id':27,'name':'ECommerce Premium','monthlyPrice':129,'yearlyPrice':1428,'bgMonthlyPrice':57.5,'bgYearlyPrice':640,'basePlan':'ECOMMERCE_PLUS','hidden':False,'visible':True,'pages':999,'storage':999,'bandwidth':999,'contributors':30,'storeProducts':999,'websites':1}]
+def mock_projects():
+    return [
+      {'id':764630,'name':'Daily Gazette - Brothers That Just Do Gutters','status':'ACTIVE','plan':{'name':'Landing Page - Self Service','id':929},'created':'07/13/2026','billingPeriod':'MONTHLY','lastBillingDate':'07/16/2026','nextBillingDate':'08/16/2026','recurringManualSubscription':True,'inFreeMonth':False,'overchargeEmails':False,'bandwidthPeriod':'July 15, 2026','lastInvoiceId':0},
+      {'id':764551,'name':"TMRG - Dorr's Dorky Reptiles",'status':'ACTIVE','plan':{'name':'Starter Site - Self Service','id':24},'created':'07/12/2026','billingPeriod':'MONTHLY','lastBillingDate':'07/13/2026','nextBillingDate':'08/13/2026','recurringManualSubscription':True,'inFreeMonth':False,'overchargeEmails':False,'bandwidthPeriod':'July 12, 2026','lastInvoiceId':0},
+      {'id':765533,'name':"Anna's Website",'status':'TRIAL','plan':{'name':'Trial','id':0},'created':'07/24/2026','billingPeriod':'MONTHLY','lastBillingDate':'','nextBillingDate':'','recurringManualSubscription':False,'inFreeMonth':False,'overchargeEmails':False,'bandwidthPeriod':'July 24, 2026','lastInvoiceId':0},
+      {'id':763519,'name':"Nicholas's Website",'status':'EXPIRED','plan':{'name':'Trial','id':0},'created':'06/30/2026','billingPeriod':'MONTHLY','lastBillingDate':'','nextBillingDate':'','recurringManualSubscription':False,'inFreeMonth':False,'overchargeEmails':False,'bandwidthPeriod':'June 30, 2026','lastInvoiceId':0}]
+def mock_project_detail(pid):
+    return {'data':{'websites':{'items':[{'sentEmails':0,'marketingAllowance':1000,'marketingRisk':False,'created':'07/13/2026','domain':'brothersguttersny.com','name':'Daily Gazette - Brothers That Just Do Gutters','subdomain':'adops-189','active':True,'id':1609104,'type':'WEBSITE','marketingSubscribers':0}] if str(pid)=='764630' else []}}}
