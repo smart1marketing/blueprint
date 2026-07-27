@@ -16,7 +16,7 @@ const ImageModal = ({ creative, isOpen, onClose }) => {
 
   React.useEffect(() => {
     if (!isOpen) return;
-    
+
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
@@ -41,7 +41,7 @@ const ImageModal = ({ creative, isOpen, onClose }) => {
 
           <div className="modal-details">
             <h2>{creative.campaignName}</h2>
-            
+
             <div className="detail-grid">
               <div className="detail-item">
                 <label>Client</label>
@@ -69,7 +69,7 @@ const ImageModal = ({ creative, isOpen, onClose }) => {
             </div>
 
             <div className="modal-actions">
-              
+              <a
                 href={creative.imageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
