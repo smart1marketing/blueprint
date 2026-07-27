@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Smart 1 Google Account Finder</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <div class="topline">
+        <div>
+          <h1>Smart 1 Google Account Finder</h1>
+          <p>Search Google Analytics and Tag Manager by client, domain, account, property, or container ID.</p>
+        </div>
+        <div class="auth">
+          {% if user_email %}
+            <span>{{ user_email }}</span>
+            <a href="/logout">Sign out</a>
+          {% else %}
+            <a class="btn" href="/login">Connect Google</a>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if user_email %}
+      <div class="filters">
+        <button class="filter active" data-platform="all">All</button>
+        <button class="filter" data-platform="analytics">Analytics</button>
+        <button class="filter" data-platform="gtm">Tag Manager</button>
+        <button id="refresh" class="refresh">Refresh Google data</button>
+      </div>
+      <div class="searchbox">
+        <input id="q" autocomplete="off" placeholder="Try: Icon Solar, iconsolar.com, GTM-XXXXXXX, 123456789">
+      </div>
+      <div id="status" class="status">Start typing to search.</div>
+      <div id="results" class="results"></div>
+      {% else %}
+      <div class="connect-panel">
+        <strong>Connect the Smart 1 Google account</strong>
+        <p>Use the Google identity that has access to your Analytics and Tag Manager accounts.</p>
+      </div>
+      {% endif %}
+    </section>
+  </main>
+<script src="/static/app.js"></script>
+</body>
+</html>

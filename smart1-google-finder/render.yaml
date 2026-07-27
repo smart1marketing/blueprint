@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: smart1-google-finder
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: CACHE_SECONDS
+        value: 900
