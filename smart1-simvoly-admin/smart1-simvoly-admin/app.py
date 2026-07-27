@@ -128,6 +128,24 @@ def diag():
         "https://websitebuilder.app-sources.com",
         "https://api.smart1sites.com",
     ]
+    # Show, safely, exactly what key the app is transmitting so it can be
+    # compared against the real Platform API Key in Simvoly's settings.
+    _k = SETTINGS.api_key or ""
+    if _k:
+        key_preview = f"{_k[:4]}…{_k[-4:]}"
+        key_info = f"sending <code>{key_preview}</code>, length <b>{len(_k)}</b>"
+        warnings = []
+        if _k != _k.strip():
+            warnings.append("has leading/trailing whitespace")
+        if _k[:1] in "\"'" or _k[-1:] in "\"'":
+            warnings.append("appears wrapped in quotes")
+        if len(_k) != 32:
+            warnings.append("length is not 32 characters")
+        if warnings:
+            key_info += " <span class='bad'>⚠ " + "; ".join(warnings) + "</span>"
+    else:
+        key_info = "<span class='bad'>NO KEY SET</span>"
+
     seen = []
     rows = []
     for base in candidates:
@@ -182,8 +200,11 @@ def diag():
         ".ok{color:#166534;font-weight:600}.bad{color:#991b1b}</style>",
         "<h1>Simvoly API connectivity diagnostic</h1>",
         f"<p>Configured base URL: <code>{SETTINGS.api_base_url}</code> &nbsp;•&nbsp; "
-        f"API key configured: <b>{'yes' if SETTINGS.api_key else 'NO'}</b> &nbsp;•&nbsp; "
         f"mock mode: <b>{SETTINGS.mock_mode}</b></p>",
+        f"<p>API key: {key_info}</p>",
+        "<p>Compare the key above against the Platform API Key shown in your Simvoly "
+        "settings. It should match the first four and last four characters exactly and be "
+        "32 characters long. If it does not, correct <code>SIMVOLY_API_KEY</code> in Render.</p>",
         "<p>The host whose result says <span class='ok'>JSON OK</span> is your correct "
         "<code>SIMVOLY_API_BASE_URL</code>. Set it in Render and redeploy.</p>",
         "<table><tr><th>Candidate host</th><th>HTTP</th><th>Content-Type</th><th>Result</th></tr>",
