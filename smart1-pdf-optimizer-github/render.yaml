@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: smart1-pdf-optimizer
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: MAX_UPLOAD_MB
+        value: "100"
