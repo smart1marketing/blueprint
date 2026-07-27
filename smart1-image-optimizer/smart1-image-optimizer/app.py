@@ -12,6 +12,10 @@ from optimizer import OptimizationError, SUPPORTED_EXTENSIONS, optimize_image
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "40")) * 1024 * 1024
 
+DEFAULT_TARGET_KB = int(os.getenv("DEFAULT_TARGET_KB", "150"))
+BRAND_NAME = os.getenv("BRAND_NAME", "Smart 1 Marketing")
+APP_NAME = os.getenv("APP_NAME", "Image Optimizer")
+
 
 def _optimized_name(filename: str) -> str:
     safe = secure_filename(filename) or "image"
@@ -21,7 +25,13 @@ def _optimized_name(filename: str) -> str:
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        default_target_kb=DEFAULT_TARGET_KB,
+        brand_name=BRAND_NAME,
+        app_name=APP_NAME,
+        max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "40")),
+    )
 
 
 @app.get("/health")
@@ -40,7 +50,7 @@ def optimize():
         return jsonify({"error": "Only GIF, JPG, JPEG, and PNG files are supported."}), 400
 
     try:
-        target_kb = int(request.form.get("target_kb", "150"))
+        target_kb = int(request.form.get("target_kb", str(DEFAULT_TARGET_KB)))
     except ValueError:
         return jsonify({"error": "Target size must be a whole number of KB."}), 400
 
@@ -64,6 +74,7 @@ def optimize():
     response.headers["X-Savings-Percent"] = f"{result.savings_pct:.1f}"
     response.headers["X-Output-Width"] = str(result.width)
     response.headers["X-Output-Height"] = str(result.height)
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 

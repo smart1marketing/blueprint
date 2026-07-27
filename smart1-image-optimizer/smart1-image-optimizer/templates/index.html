@@ -3,72 +3,58 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Image Optimizer</title>
+<title>{{ brand_name }} | {{ app_name }}</title>
 <style>
-:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#f4f7fb}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}.card{width:min(680px,100%);background:white;border-radius:20px;padding:28px;box-shadow:0 14px 45px rgba(20,35,70,.12)}h1{margin:0 0 8px;font-size:30px}p{margin:0 0 22px;color:#5b6475;line-height:1.45}.drop{border:2px dashed #c7cfdd;border-radius:16px;padding:34px 20px;text-align:center;cursor:pointer;background:#fbfcfe}.drop.drag{border-color:#4f6bed;background:#f3f6ff}.drop strong{display:block;font-size:18px;margin-bottom:6px}.drop small{color:#737b8b}.controls{display:flex;gap:12px;align-items:end;margin-top:18px}.field{flex:1}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}.field input{width:100%;padding:12px;border:1px solid #d7dce6;border-radius:10px;font-size:16px}button{border:0;border-radius:10px;padding:13px 18px;font-weight:800;background:#172e58;color:#fff;cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}.status{margin-top:18px;padding:14px;border-radius:12px;background:#f6f8fb;display:none;white-space:pre-line}.status.error{display:block;background:#fff1f1;color:#9c2525}.status.ok{display:block;background:#effaf3;color:#1e6637}@media(max-width:560px){.controls{flex-direction:column;align-items:stretch}.card{padding:20px}}
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:transparent;--navy:#1A2E58;--muted:#667085;--line:#d9e0ea;--soft:#f5f7fb;--ok:#117a43;--err:#a22525}
+*{box-sizing:border-box}body{margin:0;background:transparent;padding:12px}.app{width:min(920px,100%);margin:auto;background:#fff;border:1px solid #e5e9f0;border-radius:18px;box-shadow:0 10px 30px rgba(18,35,65,.09);overflow:hidden}.top{background:var(--navy);color:#fff;padding:18px 22px}.eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.78}.top h1{font-size:25px;margin:4px 0 4px}.top p{margin:0;opacity:.84;font-size:14px;line-height:1.4}.body{padding:20px}.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.75fr);gap:18px}.drop{display:grid;place-items:center;min-height:220px;border:2px dashed #b8c2d1;border-radius:15px;text-align:center;padding:24px;background:#fafbfd;cursor:pointer;transition:.15s}.drop.drag{border-color:var(--navy);background:#f0f4fb}.drop strong{display:block;font-size:18px;margin-bottom:7px}.drop small{display:block;color:var(--muted);line-height:1.5}.preview{margin-top:14px;display:none;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px}.preview.show{display:flex}.preview img{width:72px;height:72px;object-fit:contain;border-radius:8px;background:#f3f4f6}.filemeta{min-width:0}.filename{font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.filesize{color:var(--muted);font-size:13px;margin-top:4px}.panel{background:var(--soft);border-radius:15px;padding:16px;height:max-content}.field label{display:block;font-size:13px;font-weight:800;margin-bottom:7px}.inputrow{display:flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}.inputrow input{border:0;outline:0;width:100%;font-size:17px;padding:12px}.inputrow span{padding:0 12px 0 6px;color:var(--muted);font-weight:700}.hint{font-size:12px;color:var(--muted);line-height:1.45;margin:8px 0 14px}button{width:100%;border:0;border-radius:10px;padding:13px 16px;font-weight:850;background:var(--navy);color:#fff;cursor:pointer;font-size:15px}button:disabled{opacity:.5;cursor:not-allowed}.progress{height:6px;background:#e4e8ef;border-radius:999px;overflow:hidden;margin-top:12px;display:none}.progress.show{display:block}.progress span{display:block;height:100%;width:40%;background:var(--navy);border-radius:999px;animation:move 1.1s ease-in-out infinite alternate}@keyframes move{from{transform:translateX(-100%)}to{transform:translateX(250%)}}.status{margin-top:16px;border-radius:12px;padding:14px;display:none}.status.error{display:block;background:#fff2f2;color:var(--err)}.status.ok{display:block;background:#effaf4;color:#155f39}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.stat{background:#fff;border:1px solid #dce9e1;border-radius:9px;padding:8px}.stat b{display:block;font-size:15px;color:#183322}.stat span{font-size:11px;color:#607069}.foot{font-size:11px;color:#7a8495;text-align:center;margin-top:14px}.downloadAgain{margin-top:10px;background:#fff;color:var(--navy);border:1px solid #b8c4d6;display:none}.downloadAgain.show{display:block}@media(max-width:700px){body{padding:0}.app{border-radius:0;border-left:0;border-right:0}.grid{grid-template-columns:1fr}.drop{min-height:180px}.stats{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
-<main class="card">
-  <h1>Image Optimizer</h1>
-  <p>Upload a GIF, JPG, JPEG, or PNG. The optimizer will preserve the original format and reduce the file to the target size or smaller.</p>
-
-  <label class="drop" id="dropZone">
-    <strong id="fileLabel">Choose an image or drop it here</strong>
-    <small>GIF · JPG · JPEG · PNG</small>
-    <input id="fileInput" type="file" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png" hidden>
-  </label>
-
-  <div class="controls">
-    <div class="field">
-      <label for="targetKb">Maximum file size (KB)</label>
-      <input id="targetKb" type="number" min="10" max="5000" value="150">
+<main class="app">
+  <header class="top">
+    <div class="eyebrow">{{ brand_name }}</div>
+    <h1>{{ app_name }}</h1>
+    <p>Compress GIF, JPG, JPEG, and PNG files to your target size while preserving the original format.</p>
+  </header>
+  <section class="body">
+    <div class="grid">
+      <div>
+        <label class="drop" id="dropZone">
+          <div>
+            <strong id="dropTitle">Drop an image here</strong>
+            <small>or click to choose a file<br>GIF · JPG · JPEG · PNG · up to {{ max_upload_mb }} MB</small>
+          </div>
+          <input id="fileInput" type="file" accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png" hidden>
+        </label>
+        <div class="preview" id="preview">
+          <img id="previewImg" alt="Selected image preview">
+          <div class="filemeta"><div class="filename" id="fileName"></div><div class="filesize" id="fileSize"></div></div>
+        </div>
+      </div>
+      <aside class="panel">
+        <div class="field">
+          <label for="targetKb">Maximum output size</label>
+          <div class="inputrow"><input id="targetKb" type="number" min="10" max="5000" value="{{ default_target_kb }}"><span>KB</span></div>
+        </div>
+        <div class="hint">Default is {{ default_target_kb }} KB. The optimizer reduces quality first and dimensions only when needed.</div>
+        <button id="optimizeBtn" disabled>Optimize & Download</button>
+        <div class="progress" id="progress"><span></span></div>
+        <button id="downloadAgain" class="downloadAgain">Download Again</button>
+      </aside>
     </div>
-    <button id="optimizeBtn" disabled>Optimize & Download</button>
-  </div>
-  <div id="status" class="status"></div>
+    <div id="status" class="status"></div>
+    <div class="foot">Images are processed by the optimizer and are not stored by this app.</div>
+  </section>
 </main>
 <script>
-const fileInput=document.getElementById('fileInput');
-const fileLabel=document.getElementById('fileLabel');
-const dropZone=document.getElementById('dropZone');
-const button=document.getElementById('optimizeBtn');
-const statusBox=document.getElementById('status');
-const targetKb=document.getElementById('targetKb');
-
-function setFile(file){
-  if(!file)return;
-  const dt=new DataTransfer();dt.items.add(file);fileInput.files=dt.files;
-  fileLabel.textContent=`${file.name} (${(file.size/1024).toFixed(1)} KB)`;
-  button.disabled=false;statusBox.className='status';statusBox.textContent='';
-}
-fileInput.addEventListener('change',()=>setFile(fileInput.files[0]));
-['dragenter','dragover'].forEach(evt=>dropZone.addEventListener(evt,e=>{e.preventDefault();dropZone.classList.add('drag')}));
-['dragleave','drop'].forEach(evt=>dropZone.addEventListener(evt,e=>{e.preventDefault();dropZone.classList.remove('drag')}));
-dropZone.addEventListener('drop',e=>setFile(e.dataTransfer.files[0]));
-
-button.addEventListener('click',async()=>{
-  const file=fileInput.files[0];if(!file)return;
-  button.disabled=true;button.textContent='Optimizing…';
-  statusBox.className='status';statusBox.textContent='';
-  const form=new FormData();form.append('file',file);form.append('target_kb',targetKb.value||'150');
-  try{
-    const res=await fetch('/api/optimize',{method:'POST',body:form});
-    if(!res.ok){const err=await res.json().catch(()=>({error:'Optimization failed.'}));throw new Error(err.error||'Optimization failed.');}
-    const blob=await res.blob();
-    const disposition=res.headers.get('Content-Disposition')||'';
-    const match=disposition.match(/filename="?([^";]+)"?/i);
-    const filename=match?match[1]:`optimized-${file.name}`;
-    const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
-    const original=Number(res.headers.get('X-Original-Bytes')||file.size);
-    const optimized=Number(res.headers.get('X-Optimized-Bytes')||blob.size);
-    const savings=res.headers.get('X-Savings-Percent')||(((1-optimized/original)*100).toFixed(1));
-    statusBox.className='status ok';
-    statusBox.textContent=`Done: ${(original/1024).toFixed(1)} KB → ${(optimized/1024).toFixed(1)} KB\nSaved ${savings}%`;
-  }catch(err){statusBox.className='status error';statusBox.textContent=err.message;}
-  finally{button.disabled=false;button.textContent='Optimize & Download';}
-});
+const fileInput=document.getElementById('fileInput'),dropZone=document.getElementById('dropZone'),dropTitle=document.getElementById('dropTitle'),button=document.getElementById('optimizeBtn'),statusBox=document.getElementById('status'),targetKb=document.getElementById('targetKb'),preview=document.getElementById('preview'),previewImg=document.getElementById('previewImg'),fileName=document.getElementById('fileName'),fileSize=document.getElementById('fileSize'),progress=document.getElementById('progress'),downloadAgain=document.getElementById('downloadAgain');
+let outputUrl=null,outputName='optimized-image';
+const kb=n=>(n/1024).toFixed(1)+' KB';
+function setFile(file){if(!file)return;const ext=(file.name.split('.').pop()||'').toLowerCase();if(!['gif','jpg','jpeg','png'].includes(ext)){statusBox.className='status error';statusBox.textContent='Please choose a GIF, JPG, JPEG, or PNG file.';return}const dt=new DataTransfer();dt.items.add(file);fileInput.files=dt.files;dropTitle.textContent='Image selected';fileName.textContent=file.name;fileSize.textContent=kb(file.size);preview.classList.add('show');previewImg.src=URL.createObjectURL(file);button.disabled=false;statusBox.className='status';downloadAgain.classList.remove('show')}
+fileInput.addEventListener('change',()=>setFile(fileInput.files[0]));['dragenter','dragover'].forEach(evt=>dropZone.addEventListener(evt,e=>{e.preventDefault();dropZone.classList.add('drag')}));['dragleave','drop'].forEach(evt=>dropZone.addEventListener(evt,e=>{e.preventDefault();dropZone.classList.remove('drag')}));dropZone.addEventListener('drop',e=>setFile(e.dataTransfer.files[0]));
+function download(){if(!outputUrl)return;const a=document.createElement('a');a.href=outputUrl;a.download=outputName;document.body.appendChild(a);a.click();a.remove()}
+downloadAgain.addEventListener('click',download);
+button.addEventListener('click',async()=>{const file=fileInput.files[0];if(!file)return;button.disabled=true;button.textContent='Optimizing…';progress.classList.add('show');statusBox.className='status';downloadAgain.classList.remove('show');const form=new FormData();form.append('file',file);form.append('target_kb',targetKb.value||'{{ default_target_kb }}');try{const res=await fetch('/api/optimize',{method:'POST',body:form});if(!res.ok){const err=await res.json().catch(()=>({error:'Optimization failed.'}));throw new Error(err.error||'Optimization failed.')}const blob=await res.blob();if(outputUrl)URL.revokeObjectURL(outputUrl);outputUrl=URL.createObjectURL(blob);const disposition=res.headers.get('Content-Disposition')||'';const match=disposition.match(/filename="?([^";]+)"?/i);outputName=match?match[1]:`optimized-${file.name}`;const original=Number(res.headers.get('X-Original-Bytes')||file.size),optimized=Number(res.headers.get('X-Optimized-Bytes')||blob.size),savings=res.headers.get('X-Savings-Percent')||((1-optimized/original)*100).toFixed(1),width=res.headers.get('X-Output-Width')||'—',height=res.headers.get('X-Output-Height')||'—';statusBox.className='status ok';statusBox.innerHTML=`<strong>Optimization complete.</strong><div class="stats"><div class="stat"><b>${kb(original)}</b><span>Original</span></div><div class="stat"><b>${kb(optimized)}</b><span>Optimized</span></div><div class="stat"><b>${savings}%</b><span>Saved</span></div><div class="stat"><b>${width}×${height}</b><span>Dimensions</span></div></div>`;download();downloadAgain.classList.add('show')}catch(err){statusBox.className='status error';statusBox.textContent=err.message}finally{button.disabled=false;button.textContent='Optimize & Download';progress.classList.remove('show')}});
 </script>
 </body>
 </html>

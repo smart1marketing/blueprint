@@ -5,3 +5,12 @@ services:
     plan: free
     autoDeploy: true
     healthCheckPath: /health
+    envVars:
+      - key: MAX_UPLOAD_MB
+        value: "40"
+      - key: DEFAULT_TARGET_KB
+        value: "150"
+      - key: BRAND_NAME
+        value: "Smart 1 Marketing"
+      - key: APP_NAME
+        value: "Image Optimizer"
