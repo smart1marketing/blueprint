@@ -8,6 +8,8 @@ from functools import wraps
 from dotenv import load_dotenv
 load_dotenv()
 
+import requests
+
 from flask import (
     Flask,
     abort,
@@ -110,6 +112,90 @@ def health():
         "api_key_configured": bool(SETTINGS.api_key),
         "database_path": db_path(),
     }
+
+
+@app.get("/diag")
+@login_required
+def diag():
+    """Read-only connectivity probe. Tries GET /api/v1/plans against several
+    candidate API hosts using the configured X-CLIENT-KEY and shows which one
+    returns real JSON. No secrets are printed. Redirects are not followed so a
+    login bounce is visible as a 3xx + Location instead of an HTML login page.
+    """
+    candidates = [
+        SETTINGS.api_base_url,
+        "https://api.app-sources.com",
+        "https://websitebuilder.app-sources.com",
+        "https://api.smart1sites.com",
+    ]
+    seen = []
+    rows = []
+    for base in candidates:
+        base = (base or "").rstrip("/")
+        if not base or base in seen:
+            continue
+        seen.append(base)
+        url = f"{base}/api/v1/plans"
+        row = {"base": base, "status": "", "content_type": "", "result": ""}
+        try:
+            r = requests.get(
+                url,
+                headers={
+                    "Accept": "application/json",
+                    "User-Agent": "Smart1SitesAdmin/3.0",
+                    "X-CLIENT-KEY": SETTINGS.api_key,
+                },
+                timeout=SETTINGS.timeout_seconds,
+                verify=SETTINGS.verify_ssl,
+                allow_redirects=False,
+            )
+            row["status"] = str(r.status_code)
+            row["content_type"] = r.headers.get("Content-Type", "")
+            ct = row["content_type"].lower()
+            if r.is_redirect or r.is_permanent_redirect:
+                row["result"] = f"REDIRECT → {r.headers.get('Location', '(no location)')}"
+            elif "json" in ct:
+                try:
+                    data = r.json()
+                    d = data.get("data") if isinstance(data, dict) else None
+                    if isinstance(d, list):
+                        row["result"] = f"✓ JSON OK — {len(d)} plans returned"
+                    else:
+                        row["result"] = "JSON, but no 'data' list (check key/permissions)"
+                except ValueError:
+                    row["result"] = "declared JSON but body did not parse"
+            else:
+                snippet = (r.text or "")[:80].replace("\n", " ")
+                row["result"] = f"non-JSON ({ct or 'unknown'}) — {snippet!r}"
+        except requests.RequestException as exc:
+            row["status"] = "ERR"
+            row["result"] = str(exc)[:200]
+        rows.append(row)
+
+    parts = [
+        "<!doctype html><meta charset='utf-8'>",
+        "<title>API connectivity diagnostic</title>",
+        "<style>body{font:14px/1.5 system-ui,sans-serif;margin:2rem;color:#111}"
+        "table{border-collapse:collapse;width:100%;max-width:1100px}"
+        "th,td{border:1px solid #ddd;padding:8px 10px;text-align:left;vertical-align:top}"
+        "th{background:#f4f4f5}code{background:#f4f4f5;padding:1px 4px;border-radius:4px}"
+        ".ok{color:#166534;font-weight:600}.bad{color:#991b1b}</style>",
+        "<h1>Simvoly API connectivity diagnostic</h1>",
+        f"<p>Configured base URL: <code>{SETTINGS.api_base_url}</code> &nbsp;•&nbsp; "
+        f"API key configured: <b>{'yes' if SETTINGS.api_key else 'NO'}</b> &nbsp;•&nbsp; "
+        f"mock mode: <b>{SETTINGS.mock_mode}</b></p>",
+        "<p>The host whose result says <span class='ok'>JSON OK</span> is your correct "
+        "<code>SIMVOLY_API_BASE_URL</code>. Set it in Render and redeploy.</p>",
+        "<table><tr><th>Candidate host</th><th>HTTP</th><th>Content-Type</th><th>Result</th></tr>",
+    ]
+    for row in rows:
+        cls = "ok" if "JSON OK" in row["result"] else ("bad" if row["status"] in ("ERR", "") or "REDIRECT" in row["result"] or "non-JSON" in row["result"] else "")
+        parts.append(
+            f"<tr><td><code>{row['base']}</code></td><td>{row['status']}</td>"
+            f"<td>{row['content_type']}</td><td class='{cls}'>{row['result']}</td></tr>"
+        )
+    parts.append("</table>")
+    return "\n".join(parts)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -281,7 +367,7 @@ def inventory_refresh_known():
         flash(msg, "success" if out["failed"] == 0 else "danger")
     except Exception as exc:
         flash(f"Project refresh failed: {exc}", "danger")
-    return redirect(url_for("inventory"))
+    return redirect(url_for("dashboard"))
 
 
 @app.get("/projects/<pid>")
