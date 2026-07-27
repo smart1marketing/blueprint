@@ -1,0 +1,29 @@
+╔═══════════════════════════════════════════════════════════════╗
+║           RENDER DEPLOYMENT QUICK CARD                      ║
+╚═══════════════════════════════════════════════════════════════╝
+
+SERVICE TYPE: Web Service
+RUNTIME: Node
+BUILD COMMAND: npm install && npm run build
+START COMMAND: npm start
+
+ENVIRONMENT VARIABLES:
+  REACT_APP_KNACK_API_KEY = your_api_key_here
+  REACT_APP_KNACK_IO_OBJECT_ID = object_234
+  NODE_ENV = production
+
+AUTO-DEPLOY: Yes (watches GitHub main branch)
+
+═══════════════════════════════════════════════════════════════
+
+STEPS:
+1. Go to render.com
+2. Click "New +" → "Web Service"
+3. Connect GitHub repository
+4. Fill in settings above
+5. Add Environment Variables
+6. Click "Deploy"
+7. Wait 2-5 minutes
+8. Your app is live! ✨
+
+═══════════════════════════════════════════════════════════════
