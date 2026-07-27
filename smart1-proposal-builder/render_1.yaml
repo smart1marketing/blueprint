@@ -1,0 +1,28 @@
+# =====================================================================
+# Render Blueprint — Smart 1 Proposal Builder (STATIC SITE)
+# ---------------------------------------------------------------------
+# IMPORTANT: Render only reads render.yaml at the REPO ROOT, so this file
+# must live at the root of the `blueprint` repo (NOT inside the subfolder).
+# `rootDir` points Render at the proposal-builder folder.
+#
+# If your repo root already has a render.yaml, just add the one service
+# entry below into its existing `services:` list.
+# =====================================================================
+services:
+  - type: web
+    runtime: static
+    name: smart1-proposal-builder
+    rootDir: smart1-proposal-builder      # the folder that holds index.html
+    buildCommand: ""                      # static HTML — nothing to build
+    staticPublishPath: .                  # serve the folder as-is
+    pullRequestPreviewsEnabled: false
+    # Allow the page to be embedded in an <iframe> on Simvoly / your site:
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors *"
+    # Serve index.html for the root path:
+    routes:
+      - type: rewrite
+        source: /
+        destination: /index.html
