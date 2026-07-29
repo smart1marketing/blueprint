@@ -1,15 +1,14 @@
 {
   "name": "stadium-to-screen",
-  "version": "1.0.0",
-  "description": "Smart 1 Marketing — Stadium to Screen proposal builder (Express + OpenAI on Render)",
+  "version": "2.0.0",
+  "description": "Smart 1 Marketing — Stadium to Screen: proposal builder + lead capture (PDF -> Cloudinary -> GHL) on Render",
   "main": "server.js",
   "type": "commonjs",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
+  "scripts": { "start": "node server.js" },
   "engines": { "node": ">=18" },
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "pdfkit": "^0.15.0",
+    "cloudinary": "^2.5.1"
   }
 }

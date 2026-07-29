@@ -1,69 +1,70 @@
-# Stadium to Screen — Proposal Builder
+# Stadium to Screen — proposal builder + lead capture
 
 Landing page + proposal generator for Smart 1 Marketing's college & pro football
-audio/CTV packages. An advertiser picks a team, targeting scope, and channel
-focus; the page returns audience sizing plus a matched media plan.
+audio/CTV packages. An advertiser picks a team, scope, and channel focus; gets a
+sized proposal; then submits the "Get your full proposal" form.
 
-## How it's built (and why)
+## Flow
 
-| Part | Where it runs | Source of truth |
+```
+Widget (on smart1marketing.com)  →  POST {BACKEND_URL}/api/lead  →  this Render app
+                                                                     ├─ builds the "company-stadium-report" PDF
+                                                                     ├─ uploads it to Cloudinary (CLOUDINARY_URL)
+                                                                     └─ forwards lead + pdfUrl → GHL_WEBHOOK_URL
+```
+
+Audience numbers are computed in the browser from `public/data.js` (deterministic,
+from market data — not AI). The server only: (1) proxies OpenAI for the recommendation
+lists, and (2) handles lead capture → PDF → Cloudinary → GHL.
+
+## Endpoints
+
+- `GET  /api/health` — reports whether AI / Cloudinary / GHL are configured
+- `POST /api/recommendations` — OpenAI-matched media lists (falls back if no key)
+- `POST /api/lead` — builds the PDF, stores it in Cloudinary, forwards to GHL
+
+## Environment variables (set in Render)
+
+| Variable | Required | Purpose |
 |---|---|---|
-| **Audience numbers** (fan base, households, phones/computers/tablets/CTV, matchable audience) | **Browser**, computed from `public/data.js` | Baseline market data + transparent, editable multipliers. **Not** AI. |
-| **Recommendation lists** (streaming services, podcasts, sports networks, related audiences) | **Server** → OpenAI API | `gpt-4o-mini` (configurable), with a curated fallback |
+| `OPENAI_API_KEY` | for AI lists | OpenAI key (falls back to curated lists if absent) |
+| `OPENAI_MODEL` | no | default `gpt-4o-mini` |
+| `GHL_WEBHOOK_URL` | for lead capture | GoHighLevel Inbound Webhook URL (leads are forwarded here) |
+| `CLOUDINARY_URL` | for PDF storage | `cloudinary://api_key:api_secret@cloud_name` |
+| `ALLOWED_ORIGIN` | no | CORS origin; default `*` (can set to `https://smart1marketing.com`) |
+| `PORT` | no | set automatically by Render |
 
-The **only** reason for a server is to hold the OpenAI key so it's never exposed
-in the browser. The server does not invent audience sizes — the LLM only
-produces the qualitative lists.
-
-> ⚠️ **Verify before launch.** The DMA household counts and state populations in
-> `public/data.js` are approximate. Replace them with current **Nielsen DMA** and
-> **Census** figures. The device multipliers, match rate, and fan-penetration
-> rates are industry-average planning assumptions — tune them to your own data.
-> Everything editable lives at the top of `public/data.js`.
+> **Cloudinary note:** new Cloudinary accounts block PDF delivery by default.
+> Enable **Settings → Security → "Allow delivery of PDF and ZIP files"** so the
+> stored report URL is viewable. The report is saved under the
+> `company-stadium-reports/` folder as `company-stadium-report-<timestamp>.pdf`.
 
 ## Local run
 
 ```bash
 npm install
-cp .env.example .env        # paste your real OPENAI_API_KEY
-npm start                   # http://localhost:3000
+cp .env.example .env     # fill in your keys
+npm start                # http://localhost:3000
 ```
 
-No key? It still runs — the recommendation lists just use the curated fallback.
+Missing keys degrade gracefully: no OpenAI key → curated lists; no Cloudinary → PDF
+isn't stored; no GHL URL → lead isn't forwarded. `/api/health` shows what's live.
 
-## Deploy: GitHub → Render → OpenAI
+## Deploy: GitHub → Render
 
-1. **GitHub** — push this folder to a new repo:
-   ```bash
-   git init && git add . && git commit -m "Stadium to Screen"
-   git branch -M main
-   git remote add origin https://github.com/<you>/stadium-to-screen.git
-   git push -u origin main
-   ```
-2. **Render** — go to [render.com](https://render.com) → **New +** → **Blueprint**,
-   connect the repo. Render reads `render.yaml` and creates the web service.
-   (Or **New + → Web Service**, build `npm install`, start `npm start`.)
-3. **OpenAI key** — get a key at [platform.openai.com](https://platform.openai.com/api-keys).
-   In Render → your service → **Environment** → add:
-   - `OPENAI_API_KEY` = your key
-   - `OPENAI_MODEL` = `gpt-4o-mini` (or another chat model you can access)
-4. **Deploy.** Render gives you a public URL. Check `/api/health` to confirm the
-   key is detected (`"ai": true`).
+1. Push this folder to a GitHub repo.
+2. Render → **New + → Blueprint**, connect the repo (reads `render.yaml`).
+3. In the service's **Environment** tab, paste the secret values:
+   `OPENAI_API_KEY`, `GHL_WEBHOOK_URL`, `CLOUDINARY_URL`.
+4. Deploy. Check `/api/health` → `ai/cloudinary/ghl` should be `true`.
 
 ## Files
 
 ```
-server.js            Express: static site + POST /api/recommendations (OpenAI proxy)
-public/index.html    Landing page + proposal builder
-public/data.js       Teams, market data, multipliers, audience model (edit here)
+server.js            Express: static site + /api/recommendations + /api/lead
+lib/pdf.js           PDF report generator (pdfkit)
+public/index.html    Landing page + proposal builder (also the embeddable widget)
+public/data.js       Teams, market data, audience model (server + reference)
 render.yaml          Render blueprint
 .env.example         Env template
 ```
-
-## Editing the data
-
-- **Add/adjust teams** → `COLLEGE` / `PRO` arrays in `public/data.js`
-  (`[name, city, venue, state, dmaKey]`).
-- **Fix market sizes** → `DMA_HOUSEHOLDS` and `STATES` tables.
-- **Tune the model** → `DEVICE_PER_HH`, `MATCH_RATE`, `FAN_PENETRATION` at the top.
-- **Change AI behavior** → the prompt in `server.js` (`buildPrompt`).
