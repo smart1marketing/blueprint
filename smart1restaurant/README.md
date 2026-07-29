@@ -9,8 +9,8 @@ A multi-step Smart 1 Marketing lead tool for restaurants, bars, and cafes. It cr
 - Priority districts/market targets
 - Audience segments and media-budget allocation, tiered by market size
 - Trigger-driven budget plan (dayparts, weather, local events)
-- Smart 1 Suite webhook payload
-- Print-to-PDF report
+- GoHighLevel (GHL) webhook payload
+- Branded PDF report stored in Cloudinary
 
 ## Important limitation
 
@@ -20,7 +20,7 @@ This version intentionally uses AI planning estimates instead of paid maps, geoc
 
 ```
 smart1restaurant/
-├── app.py               # Flask backend + OpenAI report generation + webhook
+├── app.py               # Flask backend + OpenAI report + PDF→Cloudinary + GHL webhook
 ├── templates/
 │   └── index.html       # Self-contained multi-step form (CSS + JS inlined)
 ├── requirements.txt
@@ -33,18 +33,32 @@ smart1restaurant/
 `index.html` lives in `templates/` because the backend serves it with Flask's
 `render_template("index.html")`. The page is intentionally self-contained: all
 CSS and JavaScript are inlined, so there are no separate `styles.css` or `app.js`
-files to keep in sync. This keeps the form reliable when embedded in Smart 1 Suite.
+files to keep in sync. This keeps the form reliable when embedded in the Smart 1 site.
 
-> Do not commit compiled artifacts (`__pycache__/`, `*.pyc`). They are ignored in
-> `.gitignore`. Edit and deploy `app.py`, not any compiled `.pyc`.
+> Do not commit secrets or compiled artifacts (`.env`, `__pycache__/`, `*.pyc`,
+> `static/reports/`). They are ignored in `.gitignore`. Edit and deploy `app.py`.
+
+## What changed in this version
+
+- **Webhook env var standardized:** `GHL_WEBHOOK_URL` (replaces `SMART1_WEBHOOK_URL`).
+- **PDF storage moved to Cloudinary:** the PDF is rendered in memory and uploaded to
+  Cloudinary using `CLOUDINARY_URL`. The returned `secure_url` is sent to GHL as
+  `report_pdf_url`. If `CLOUDINARY_URL` is not set, it falls back to writing
+  `static/reports/` (local dev only).
+- **Report naming:** PDFs are stored under the `REPORT_NAME` folder/prefix
+  (default `restaurant-market-report`) as `restaurant-market-report/<slug>-<timestamp>.pdf`,
+  so each lead's report is unique and grouped together.
+- **Embed mode:** loading the tool with `?embed=1` hides the hero (headline + intro)
+  so it drops straight into the form when embedded on the landing page, and posts
+  `s1-report-ready` to the parent so the page's branded loader clears immediately.
 
 ## Package tiers (market-based)
 
 The AI picks one of four fixed price tiers for each report based on market size, competitive
 density, and the number of daypart/occasion opportunities in the restaurant's trade area
 (lunch, happy hour, dinner, delivery, events, catering). These live in the `SMART 1 PACKAGE MENU`
-inside `app.py` — edit the prices/names there, not in the front end, then update the matching
-`PACKAGES` array in `templates/index.html` so the package grid stays in sync:
+inside `app.py` — edit the prices/names there, then update the matching `PACKAGES` array in
+`templates/index.html` so the package grid stays in sync:
 
 | Package | Monthly Investment | Best fit |
 |---|---|---|
@@ -57,30 +71,41 @@ inside `app.py` — edit the prices/names there, not in the front end, then upda
 
 1. Create a new GitHub repository named `smart1restaurant`.
 2. Upload every file and folder in this project. Keep the folder structure intact (especially `templates/`).
-3. Do not upload a real `.env` file or API key.
+3. Do **not** upload a real `.env`, any API key, `__pycache__/`, `*.pyc`, or `static/reports/`.
 
 ## Deploy to Render
 
 1. In Render, choose **New + > Blueprint**.
 2. Connect the `smart1restaurant` GitHub repository.
 3. Render will read `render.yaml`.
-4. Add the secret environment variable `OPENAI_API_KEY`.
-5. Add `SMART1_WEBHOOK_URL` for the Smart 1 Suite inbound webhook.
-6. Add `PUBLIC_BASE_URL` = your live Render URL (e.g. `https://smart1restaurant.onrender.com`) so the report PDF links are absolute.
-7. Keep `OPENAI_MODEL` at the default or change it to a model available in your OpenAI account.
-8. Deploy and test `/health`, then test the full form.
+4. Add the secret environment variables below.
+5. Deploy and test `/health`, then test the full form.
 
-## PDF report
+### Render environment variables
 
-Every completed report is rendered to a branded PDF (via `reportlab`, pure
-Python — no system libraries needed) and written to `static/reports/`. The
-public URL is sent to Smart 1 Suite in the webhook as `report_pdf_url`, so your
-team can link or attach it with `{{contact.report_pdf_url}}`. Set `ENABLE_PDF=0`
-to turn this off. On Render's ephemeral disk the files persist for the life of
-the instance; for permanent archival, upload the bytes to S3 or the GHL Media
-Library inside `build_report_pdf()`.
+| Variable | Required | Notes |
+|---|---|---|
+| `OPENAI_API_KEY` | Yes | OpenAI key (secret) |
+| `OPENAI_MODEL` | No | Defaults to `gpt-4.1-mini` |
+| `GHL_WEBHOOK_URL` | Yes | GoHighLevel inbound-webhook URL |
+| `CLOUDINARY_URL` | Yes | `cloudinary://<key>:<secret>@<cloud_name>` — stores the PDFs |
+| `REPORT_NAME` | No | Cloudinary folder/prefix; default `restaurant-market-report` |
+| `ENABLE_PDF` | No | `1` (default) or `0` to disable PDF generation |
+| `ALLOWED_ORIGINS` | No | CORS; default `*` |
+| `PUBLIC_BASE_URL` | No | Fallback public URL only if Cloudinary is not configured |
 
-## Smart 1 Suite fields
+> **Removed:** `SMART1_WEBHOOK_URL` — replace it with `GHL_WEBHOOK_URL`.
+
+## PDF report (Cloudinary)
+
+Every completed report is rendered to a branded PDF (via `reportlab`, pure Python — no
+system libraries) and uploaded to Cloudinary as a `raw` asset under
+`REPORT_NAME/<restaurant-slug>-<timestamp>.pdf`. The Cloudinary `secure_url` is sent to GHL
+in the webhook as `report_pdf_url`, so your team can link or attach it with
+`{{contact.report_pdf_url}}`. Set `ENABLE_PDF=0` to turn this off. If `CLOUDINARY_URL` is
+absent, the app falls back to `static/reports/` on Render's ephemeral disk (dev/testing only).
+
+## GoHighLevel fields
 
 Recommended custom fields:
 
@@ -99,22 +124,30 @@ Recommended custom fields:
 - Restaurant Report Status
 - Restaurant Report JSON (large text field, optional)
 
-The webhook sends human-readable fields plus `report_json`. If the Suite webhook ignores nested or large data, map the summary and estimated-household fields first and store the full report externally or in a large-text custom field.
+The webhook sends human-readable fields plus `report_json` and `report_pdf_url`. If the
+inbound webhook ignores nested or large data, map the summary, PDF URL, and
+estimated-household fields first and store the full report in a large-text custom field.
 
-## Embed on Smart 1 Suite
+## Embed on smart1marketing.com
 
-The easiest reliable method is an iframe pointing to the Render URL:
+Embed the tool inline on the restaurant gameplan page with an iframe pointing at the Render
+URL with `?embed=1`:
 
 ```html
 <iframe
-  src="https://YOUR-RENDER-URL.onrender.com/"
+  src="https://smart1restaurant.onrender.com/?embed=1"
   style="width:100%;min-height:1200px;border:0;border-radius:12px;"
   loading="lazy"
   title="Restaurant Market Intelligence">
 </iframe>
 ```
 
-Using an iframe keeps the JavaScript and API request on the same Render domain and avoids cross-origin and code-block restrictions inside Smart 1 Suite.
+- **Page to embed on:** `https://smart1marketing.com/restaurant-weather-marketing-gameplan`
+- `?embed=1` hides the tool's hero so it doesn't duplicate the landing page headline, and
+  signals the landing page's branded loader to clear as soon as the form is ready.
+
+Using an iframe keeps the JavaScript and API request on the same Render domain and avoids
+cross-origin and code-block restrictions.
 
 ## Test locally
 
@@ -135,5 +168,4 @@ The form supports a trigger-driven plan built around dayparts (lunch, happy hour
 delivery), weather (heat/patio, rain/comfort-food, cold snaps, first snow), and local demand
 signals (home-team game nights, local events, holiday weekends). Reports include suggested
 conditions, activation actions, applicable non-social tactics, and a budget-efficiency
-explanation. Social advertising and paid search are intentionally excluded from recommendations,
-matching the boat dealer tool's channel strategy.
+explanation. Social advertising and paid search are intentionally excluded from recommendations.
