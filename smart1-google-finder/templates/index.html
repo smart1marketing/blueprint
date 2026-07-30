@@ -12,7 +12,7 @@
       <div class="topline">
         <div>
           <h1>Smart 1 Google Account Finder</h1>
-          <p>Search all connected Google Analytics and Tag Manager accounts from one place.</p>
+          <p>Search all connected Google Analytics, Tag Manager, and Business Profile accounts from one place.</p>
         </div>
         <div class="auth">
           <a class="btn" href="/login">+ Add Google Account</a>
@@ -40,17 +40,18 @@
         <button class="filter active" data-platform="all">All</button>
         <button class="filter" data-platform="analytics">Analytics</button>
         <button class="filter" data-platform="gtm">Tag Manager</button>
+        <button class="filter" data-platform="gmb">Business Profiles</button>
         <button id="refresh" class="refresh">Refresh Google data</button>
       </div>
       <div class="searchbox">
-        <input id="q" autocomplete="off" placeholder="Client, domain, GA4 property ID, GTM ID, or Google login">
+        <input id="q" autocomplete="off" placeholder="Client, domain, GA4 property ID, GTM ID, GMB address, or Google login">
       </div>
       <div id="status" class="status">Start typing to search all connected accounts.</div>
       <div id="results" class="results"></div>
       {% else %}
       <div class="connect-panel">
         <strong>Connect your first Google account</strong>
-        <p>Add adops@smart1marketing.com, smartadops@gmail.com, and smart1sites@gmail.com. The finder will combine their accessible GA4 and GTM records into one search.</p>
+        <p>Add adops@smart1marketing.com, smartadops@gmail.com, smart1sites@gmail.com, and gmb@smart1marketing.com. The finder will combine their accessible GA4, GTM, and GMB records into one search.</p>
         <a class="btn connect" href="/login">Connect Google Account</a>
       </div>
       {% endif %}
