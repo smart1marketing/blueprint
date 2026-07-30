@@ -20,7 +20,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-# Keep OAuth refresh tokens server-side instead of inside Flask's signed browser cookie.
 app.config.update(
     SESSION_TYPE="filesystem",
     SESSION_FILE_DIR=os.environ.get("SESSION_FILE_DIR", "/tmp/smart1-google-finder-sessions"),
@@ -49,7 +48,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/tagmanager.readonly",
 ]
 
-# Cache is keyed by Google login so each account can refresh independently.
 CACHE = {}
 
 
@@ -146,7 +144,7 @@ def refresh_access_token(refresh_token):
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         },
-        timeout=30,
+        timeout=10,
     )
     r.raise_for_status()
     return r.json()["access_token"]
@@ -157,7 +155,7 @@ def google_get(access_token, url, params=None):
         url,
         headers={"Authorization": f"Bearer {access_token}"},
         params=params or {},
-        timeout=30,
+        timeout=10,
     )
     r.raise_for_status()
     return r.json()
@@ -205,28 +203,20 @@ def fetch_gtm_items(access_token, google_login):
     token = None
     accounts = []
 
-    # Fetch accounts with rate-limit retries
-    while True:
-        params = {}
-        if token:
-            params["pageToken"] = token
-
-        for attempt in range(3):
-            try:
-                data = google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts", params=params)
-                accounts.extend(data.get("account", []))
-                token = data.get("nextPageToken")
+    try:
+        while True:
+            params = {}
+            if token:
+                params["pageToken"] = token
+            data = google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts", params=params)
+            accounts.extend(data.get("account", []))
+            token = data.get("nextPageToken")
+            if not token:
                 break
-            except requests.exceptions.HTTPError as err:
-                if err.response.status_code == 429 and attempt < 2:
-                    time.sleep(2)  # Wait 2 seconds before retrying
-                else:
-                    raise err
+    except Exception as exc:
+        logger.warning("Failed fetching GTM accounts for %s: %s", google_login, exc)
+        return items
 
-        if not token:
-            break
-
-    # Loop through accounts and fetch containers with a slight delay
     for acct in accounts:
         account_id = acct.get("accountId", "")
         account_name = acct.get("name", "")
@@ -238,38 +228,33 @@ def fetch_gtm_items(access_token, google_login):
             if ctoken:
                 params["pageToken"] = ctoken
 
-            for attempt in range(3):
-                try:
-                    data = google_get(
-                        access_token,
-                        f"https://tagmanager.googleapis.com/tagmanager/v2/{parent}/containers",
-                        params=params,
-                    )
-                    for c in data.get("container", []):
-                        public_id = c.get("publicId", "")
-                        container_id = c.get("containerId", "")
-                        container_name = c.get("name", "")
-                        domains = " ".join(c.get("domainName", []) or [])
-                        items.append({
-                            "platform": "Google Tag Manager",
-                            "type": "GTM Container",
-                            "name": container_name,
-                            "account_name": account_name,
-                            "account_id": account_id,
-                            "resource_id": public_id or container_id,
-                            "search_extra": domains,
-                            "google_login": google_login,
-                            "open_url": f"https://tagmanager.google.com/#/container/accounts/{account_id}/containers/{container_id}" if account_id and container_id else "",
-                        })
-                    ctoken = data.get("nextPageToken")
-                    break
-                except requests.exceptions.HTTPError as err:
-                    if err.response.status_code == 429 and attempt < 2:
-                        time.sleep(2)
-                    else:
-                        raise err
+            try:
+                data = google_get(
+                    access_token,
+                    f"https://tagmanager.googleapis.com/tagmanager/v2/{parent}/containers",
+                    params=params,
+                )
+                for c in data.get("container", []):
+                    public_id = c.get("publicId", "")
+                    container_id = c.get("containerId", "")
+                    container_name = c.get("name", "")
+                    domains = " ".join(c.get("domainName", []) or [])
+                    items.append({
+                        "platform": "Google Tag Manager",
+                        "type": "GTM Container",
+                        "name": container_name,
+                        "account_name": account_name,
+                        "account_id": account_id,
+                        "resource_id": public_id or container_id,
+                        "search_extra": domains,
+                        "google_login": google_login,
+                        "open_url": f"https://tagmanager.google.com/#/container/accounts/{account_id}/containers/{container_id}" if account_id and container_id else "",
+                    })
+                ctoken = data.get("nextPageToken")
+            except Exception as exc:
+                logger.warning("Skipping container for GTM account %s (%s): %s", account_id, google_login, exc)
+                break
 
-            time.sleep(0.3)  # Respect Google Tag Manager API rate limits
             if not ctoken:
                 break
 
@@ -371,7 +356,7 @@ def oauth_callback():
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
-            timeout=30,
+            timeout=10,
         )
         if not token_resp.ok:
             try:
@@ -392,7 +377,7 @@ def oauth_callback():
         userinfo = requests.get(
             "https://openidconnect.googleapis.com/v1/userinfo",
             headers={"Authorization": f"Bearer {access_token}"},
-            timeout=30,
+            timeout=10,
         )
         if not userinfo.ok:
             logger.error("Userinfo lookup failed: status=%s body=%s", userinfo.status_code, userinfo.text[:500])
@@ -508,7 +493,7 @@ def health():
 
 @app.route("/debug/accounts")
 def debug_accounts():
-    """Detailed diagnostic endpoint to troubleshoot Google refresh errors."""
+    """Fast diagnostic endpoint to check token refresh and API accessibility without hitting timeouts."""
     diagnostics = []
     
     accounts = connected_accounts()
@@ -519,7 +504,7 @@ def debug_accounts():
         email = acc.get("email", "unknown")
         info = {"email": email, "refresh_token_present": bool(acc.get("refresh_token"))}
         
-        # Test 1: Exchange refresh token for access token
+        # Test token exchange
         try:
             access_token = refresh_access_token(acc["refresh_token"])
             info["token_refresh_status"] = "SUCCESS"
@@ -528,16 +513,16 @@ def debug_accounts():
             diagnostics.append(info)
             continue
 
-        # Test 2: Check Google Analytics Admin API access
+        # Lightweight test for GA4 Admin API
         try:
-            fetch_ga_items(access_token, email)
+            google_get(access_token, "https://analyticsadmin.googleapis.com/v1beta/accountSummaries", params={"pageSize": 1})
             info["ga4_api_status"] = "SUCCESS"
         except Exception as exc:
             info["ga4_api_status"] = f"FAILED: {exc}"
 
-        # Test 3: Check Google Tag Manager API access
+        # Lightweight test for GTM API
         try:
-            fetch_gtm_items(access_token, email)
+            google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts")
             info["gtm_api_status"] = "SUCCESS"
         except Exception as exc:
             info["gtm_api_status"] = f"FAILED: {exc}"
