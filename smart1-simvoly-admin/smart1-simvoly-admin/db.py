@@ -15,12 +15,38 @@ def now_iso():
 
 
 def _dsn():
-    url = SETTINGS.database_url
+    url = (SETTINGS.database_url or "").strip()
+
+    # Tolerate a value pasted with surrounding quotes.
+    if len(url) >= 2 and url[0] == url[-1] and url[0] in "\"'":
+        url = url[1:-1].strip()
+
     if not url:
         raise RuntimeError(
-            "DATABASE_URL is not set. Create a Render Postgres database and add its "
-            "Internal Database URL as the DATABASE_URL environment variable."
+            "DATABASE_URL is not set. Create a Render Postgres database and put its "
+            "Internal Database URL (it starts with 'postgresql://') in the DATABASE_URL "
+            "environment variable."
         )
+
+    # Render's scheme is 'postgresql://'. Accept the legacy 'postgres://' alias too.
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+
+    # A valid psycopg2 DSN is either a 'postgresql://...' URI or a 'key=value ...'
+    # keyword string. A bare value like the database *name* is neither, and psycopg2
+    # fails deep inside with a cryptic 'missing "=" ...' error. Catch it here instead.
+    looks_like_uri = url.startswith("postgresql://")
+    looks_like_kv = "=" in url.split(" ", 1)[0]
+    if not (looks_like_uri or looks_like_kv):
+        preview = url[:24] + ("…" if len(url) > 24 else "")
+        raise RuntimeError(
+            "DATABASE_URL does not look like a valid Postgres connection string "
+            f"(got '{preview}'). It must be the full Internal Database URL from Render, "
+            "starting with 'postgresql://user:password@host/dbname' — not just the "
+            "database name or hostname. Copy it from your Render Postgres instance "
+            "(Connect → Internal Database URL) and update the DATABASE_URL env var."
+        )
+
     return url
 
 
