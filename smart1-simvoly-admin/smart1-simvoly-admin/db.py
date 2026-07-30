@@ -588,7 +588,9 @@ def query_projects(q="", status="", plan="", partner="", page=1, per_page=50):
                             pl.monthly_price,pl.yearly_price,pl.bg_monthly_price,pl.bg_yearly_price,
                             m.client_price,m.platform_cost,m.partner,m.notes,m.internal_client_name,
                             m.lifecycle_state,m.cancelled_at,
-                            (SELECT domain FROM websites ww WHERE ww.project_id=p.project_id LIMIT 1) AS domain,
+                            (SELECT COALESCE(NULLIF(ww.domain,''), NULLIF(ww.subdomain,''), NULLIF(ww.name,''))
+                               FROM websites ww WHERE ww.project_id=p.project_id
+                               ORDER BY ww.website_id LIMIT 1) AS domain,
                             (CASE WHEN p.project_id ~ '^[0-9]+$' THEN CAST(p.project_id AS BIGINT) ELSE 0 END) AS _ord
                      FROM projects p
                      LEFT JOIN plans pl ON pl.plan_id=p.plan_id
