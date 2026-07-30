@@ -47,6 +47,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/tagmanager.readonly",
     "https://www.googleapis.com/auth/business.manage",
+    "https://www.googleapis.com/auth/webmasters.readonly",
 ]
 
 CACHE = {}
@@ -165,37 +166,40 @@ def google_get(access_token, url, params=None):
 def fetch_ga_items(access_token, google_login):
     items = []
     token = None
-    while True:
-        params = {"pageSize": 200}
-        if token:
-            params["pageToken"] = token
-        data = google_get(
-            access_token,
-            "https://analyticsadmin.googleapis.com/v1beta/accountSummaries",
-            params=params,
-        )
-        for acct in data.get("accountSummaries", []):
-            account_resource = acct.get("account", "")
-            account_id = account_resource.split("/")[-1] if account_resource else ""
-            account_name = acct.get("displayName", "")
-            for prop in acct.get("propertySummaries", []):
-                property_resource = prop.get("property", "")
-                property_id = property_resource.split("/")[-1] if property_resource else ""
-                property_name = prop.get("displayName", "")
-                items.append({
-                    "platform": "Google Analytics",
-                    "type": "GA4 Property",
-                    "name": property_name,
-                    "account_name": account_name,
-                    "account_id": account_id,
-                    "resource_id": property_id,
-                    "search_extra": "",
-                    "google_login": google_login,
-                    "open_url": f"https://analytics.google.com/analytics/web/#/p{property_id}" if property_id else "",
-                })
-        token = data.get("nextPageToken")
-        if not token:
-            break
+    try:
+        while True:
+            params = {"pageSize": 200}
+            if token:
+                params["pageToken"] = token
+            data = google_get(
+                access_token,
+                "https://analyticsadmin.googleapis.com/v1beta/accountSummaries",
+                params=params,
+            )
+            for acct in data.get("accountSummaries", []):
+                account_resource = acct.get("account", "")
+                account_id = account_resource.split("/")[-1] if account_resource else ""
+                account_name = acct.get("displayName", "")
+                for prop in acct.get("propertySummaries", []):
+                    property_resource = prop.get("property", "")
+                    property_id = property_resource.split("/")[-1] if property_resource else ""
+                    property_name = prop.get("displayName", "")
+                    items.append({
+                        "platform": "Google Analytics",
+                        "type": "GA4 Property",
+                        "name": property_name,
+                        "account_name": account_name,
+                        "account_id": account_id,
+                        "resource_id": property_id,
+                        "search_extra": "",
+                        "google_login": google_login,
+                        "open_url": f"https://analytics.google.com/analytics/web/#/p{property_id}" if property_id else "",
+                    })
+            token = data.get("nextPageToken")
+            if not token:
+                break
+    except Exception as exc:
+        logger.warning("Failed fetching GA4 items for %s: %s", google_login, exc)
     return items
 
 
@@ -263,7 +267,6 @@ def fetch_gtm_items(access_token, google_login):
 
 
 def fetch_gmb_items(access_token, google_login):
-    """Fetch Google Business Profile accounts and storefront locations."""
     items = []
     try:
         acct_data = google_get(
@@ -273,7 +276,7 @@ def fetch_gmb_items(access_token, google_login):
         accounts = acct_data.get("accounts", [])
 
         for acct in accounts:
-            account_resource = acct.get("name", "")  # format: accounts/{account_id}
+            account_resource = acct.get("name", "")
             account_id = account_resource.split("/")[-1] if account_resource else ""
             account_name = acct.get("accountName", "Google Business Profile")
 
@@ -281,23 +284,36 @@ def fetch_gmb_items(access_token, google_login):
                 loc_data = google_get(
                     access_token,
                     f"https://mybusinessbusinessinformation.googleapis.com/v1/{account_resource}/locations",
-                    params={"readMask": "name,title,storefrontAddress"}
+                    params={"readMask": "name,title,websiteUri,storefrontAddress,locationState"}
                 )
                 for loc in loc_data.get("locations", []):
                     loc_resource = loc.get("name", "")
                     loc_id = loc_resource.split("/")[-1] if loc_resource else ""
                     loc_title = loc.get("title", "(Unnamed Location)")
+                    website_url = loc.get("websiteUri", "")
+                    
+                    loc_state = loc.get("locationState", {})
+                    is_verified = loc_state.get("isVerified", False)
+                    has_pending = loc_state.get("hasPendingVerification", False)
+                    
+                    if is_verified:
+                        claimed_status = "Claimed & Verified"
+                    elif has_pending:
+                        claimed_status = "Verification Pending"
+                    else:
+                        claimed_status = "Unclaimed / Unverified"
+
                     address_data = loc.get("storefrontAddress", {})
                     address_str = " ".join(address_data.get("addressLines", []) or [])
 
                     items.append({
                         "platform": "Google Business Profile",
-                        "type": "GMB Location",
+                        "type": f"GMB Listing ({claimed_status})",
                         "name": loc_title,
                         "account_name": account_name,
                         "account_id": account_id,
                         "resource_id": loc_id,
-                        "search_extra": address_str,
+                        "search_extra": f"{website_url} {address_str} {claimed_status}".strip(),
                         "google_login": google_login,
                         "open_url": f"https://business.google.com/dashboard/l/{loc_id}" if loc_id else "https://business.google.com/",
                     })
@@ -306,6 +322,32 @@ def fetch_gmb_items(access_token, google_login):
 
     except Exception as exc:
         logger.warning("Failed fetching GMB accounts for %s: %s", google_login, exc)
+
+    return items
+
+
+def fetch_gsc_items(access_token, google_login):
+    items = []
+    try:
+        data = google_get(access_token, "https://www.googleapis.com/webmasters/v3/sites")
+        entries = data.get("siteEntry", [])
+        for site in entries:
+            site_url = site.get("siteUrl", "")
+            permission = site.get("permissionLevel", "")
+            
+            items.append({
+                "platform": "Search Console",
+                "type": "GSC Property",
+                "name": site_url,
+                "account_name": f"Permission: {permission}",
+                "account_id": site_url,
+                "resource_id": site_url,
+                "search_extra": permission,
+                "google_login": google_login,
+                "open_url": f"https://search.google.com/search-console?resource_id={urlencode({'': site_url})[1:]}",
+            })
+    except Exception as exc:
+        logger.warning("Failed fetching Search Console sites for %s: %s", google_login, exc)
 
     return items
 
@@ -330,7 +372,12 @@ def get_account_index(account, force=False):
         return cached["items"]
 
     access_token = refresh_access_token(account["refresh_token"])
-    items = fetch_ga_items(access_token, email) + fetch_gtm_items(access_token, email) + fetch_gmb_items(access_token, email)
+    items = (
+        fetch_ga_items(access_token, email)
+        + fetch_gtm_items(access_token, email)
+        + fetch_gmb_items(access_token, email)
+        + fetch_gsc_items(access_token, email)
+    )
     CACHE[email] = {"expires": now + CACHE_SECONDS, "items": items}
     return items
 
@@ -501,6 +548,8 @@ def api_search():
             continue
         if platform == "gmb" and item["platform"] != "Google Business Profile":
             continue
+        if platform == "gsc" and item["platform"] != "Search Console":
+            continue
 
         haystack = " ".join([
             item.get("name", ""), item.get("account_name", ""), item.get("account_id", ""),
@@ -544,7 +593,6 @@ def health():
 
 @app.route("/debug/accounts")
 def debug_accounts():
-    """Fast diagnostic endpoint to check token refresh and API accessibility."""
     diagnostics = []
     
     accounts = connected_accounts()
@@ -580,6 +628,12 @@ def debug_accounts():
             info["gmb_api_status"] = "SUCCESS"
         except Exception as exc:
             info["gmb_api_status"] = f"FAILED: {exc}"
+
+        try:
+            google_get(access_token, "https://www.googleapis.com/webmasters/v3/sites")
+            info["gsc_api_status"] = "SUCCESS"
+        except Exception as exc:
+            info["gsc_api_status"] = f"FAILED: {exc}"
 
         diagnostics.append(info)
 
