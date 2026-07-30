@@ -485,5 +485,46 @@ def health():
     return checks, (200 if checks["ok"] else 500)
 
 
+@app.route("/debug/accounts")
+def debug_accounts():
+    """Detailed diagnostic endpoint to troubleshoot Google refresh errors."""
+    diagnostics = []
+    
+    accounts = connected_accounts()
+    if not accounts:
+        return jsonify({"status": "No connected accounts found in token database."})
+
+    for acc in accounts:
+        email = acc.get("email", "unknown")
+        info = {"email": email, "refresh_token_present": bool(acc.get("refresh_token"))}
+        
+        # Test 1: Exchange refresh token for access token
+        try:
+            access_token = refresh_access_token(acc["refresh_token"])
+            info["token_refresh_status"] = "SUCCESS"
+        except Exception as exc:
+            info["token_refresh_status"] = f"FAILED: {exc}"
+            diagnostics.append(info)
+            continue
+
+        # Test 2: Check Google Analytics Admin API access
+        try:
+            fetch_ga_items(access_token, email)
+            info["ga4_api_status"] = "SUCCESS"
+        except Exception as exc:
+            info["ga4_api_status"] = f"FAILED: {exc}"
+
+        # Test 3: Check Google Tag Manager API access
+        try:
+            fetch_gtm_items(access_token, email)
+            info["gtm_api_status"] = "SUCCESS"
+        except Exception as exc:
+            info["gtm_api_status"] = f"FAILED: {exc}"
+
+        diagnostics.append(info)
+
+    return jsonify({"connected_account_count": len(accounts), "diagnostics": diagnostics})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "10000")))
