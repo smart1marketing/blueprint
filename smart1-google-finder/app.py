@@ -46,6 +46,7 @@ SCOPES = [
     "profile",
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/tagmanager.readonly",
+    "https://www.googleapis.com/auth/business.manage",
 ]
 
 CACHE = {}
@@ -261,6 +262,54 @@ def fetch_gtm_items(access_token, google_login):
     return items
 
 
+def fetch_gmb_items(access_token, google_login):
+    """Fetch Google Business Profile accounts and storefront locations."""
+    items = []
+    try:
+        acct_data = google_get(
+            access_token,
+            "https://mybusinessaccountmanagement.googleapis.com/v1/accounts"
+        )
+        accounts = acct_data.get("accounts", [])
+
+        for acct in accounts:
+            account_resource = acct.get("name", "")  # format: accounts/{account_id}
+            account_id = account_resource.split("/")[-1] if account_resource else ""
+            account_name = acct.get("accountName", "Google Business Profile")
+
+            try:
+                loc_data = google_get(
+                    access_token,
+                    f"https://mybusinessbusinessinformation.googleapis.com/v1/{account_resource}/locations",
+                    params={"readMask": "name,title,storefrontAddress"}
+                )
+                for loc in loc_data.get("locations", []):
+                    loc_resource = loc.get("name", "")
+                    loc_id = loc_resource.split("/")[-1] if loc_resource else ""
+                    loc_title = loc.get("title", "(Unnamed Location)")
+                    address_data = loc.get("storefrontAddress", {})
+                    address_str = " ".join(address_data.get("addressLines", []) or [])
+
+                    items.append({
+                        "platform": "Google Business Profile",
+                        "type": "GMB Location",
+                        "name": loc_title,
+                        "account_name": account_name,
+                        "account_id": account_id,
+                        "resource_id": loc_id,
+                        "search_extra": address_str,
+                        "google_login": google_login,
+                        "open_url": f"https://business.google.com/dashboard/l/{loc_id}" if loc_id else "https://business.google.com/",
+                    })
+            except Exception as loc_exc:
+                logger.warning("Failed fetching locations for GMB account %s (%s): %s", account_id, google_login, loc_exc)
+
+    except Exception as exc:
+        logger.warning("Failed fetching GMB accounts for %s: %s", google_login, exc)
+
+    return items
+
+
 def client_alias_tokens(query):
     aliases = load_aliases()
     q = query.lower().strip()
@@ -281,7 +330,7 @@ def get_account_index(account, force=False):
         return cached["items"]
 
     access_token = refresh_access_token(account["refresh_token"])
-    items = fetch_ga_items(access_token, email) + fetch_gtm_items(access_token, email)
+    items = fetch_ga_items(access_token, email) + fetch_gtm_items(access_token, email) + fetch_gmb_items(access_token, email)
     CACHE[email] = {"expires": now + CACHE_SECONDS, "items": items}
     return items
 
@@ -450,6 +499,8 @@ def api_search():
             continue
         if platform == "gtm" and item["platform"] != "Google Tag Manager":
             continue
+        if platform == "gmb" and item["platform"] != "Google Business Profile":
+            continue
 
         haystack = " ".join([
             item.get("name", ""), item.get("account_name", ""), item.get("account_id", ""),
@@ -493,7 +544,7 @@ def health():
 
 @app.route("/debug/accounts")
 def debug_accounts():
-    """Fast diagnostic endpoint to check token refresh and API accessibility without hitting timeouts."""
+    """Fast diagnostic endpoint to check token refresh and API accessibility."""
     diagnostics = []
     
     accounts = connected_accounts()
@@ -504,7 +555,6 @@ def debug_accounts():
         email = acc.get("email", "unknown")
         info = {"email": email, "refresh_token_present": bool(acc.get("refresh_token"))}
         
-        # Test token exchange
         try:
             access_token = refresh_access_token(acc["refresh_token"])
             info["token_refresh_status"] = "SUCCESS"
@@ -513,19 +563,23 @@ def debug_accounts():
             diagnostics.append(info)
             continue
 
-        # Lightweight test for GA4 Admin API
         try:
             google_get(access_token, "https://analyticsadmin.googleapis.com/v1beta/accountSummaries", params={"pageSize": 1})
             info["ga4_api_status"] = "SUCCESS"
         except Exception as exc:
             info["ga4_api_status"] = f"FAILED: {exc}"
 
-        # Lightweight test for GTM API
         try:
             google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts")
             info["gtm_api_status"] = "SUCCESS"
         except Exception as exc:
             info["gtm_api_status"] = f"FAILED: {exc}"
+
+        try:
+            google_get(access_token, "https://mybusinessaccountmanagement.googleapis.com/v1/accounts")
+            info["gmb_api_status"] = "SUCCESS"
+        except Exception as exc:
+            info["gmb_api_status"] = f"FAILED: {exc}"
 
         diagnostics.append(info)
 
