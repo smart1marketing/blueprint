@@ -11,12 +11,10 @@ class Settings:
     secret_key: str = os.getenv("SECRET_KEY", "dev-only-change-me")
     admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
     admin_password: str = os.getenv("ADMIN_PASSWORD", "change-me")
-    # Postgres connection string (Render provides this when a database is linked).
+    # Postgres connection string — Render's full Internal Database URL, e.g.
+    # postgresql://user:password@host/dbname. This is the ONLY datastore; there
+    # is no SQLite/persistent-disk fallback.
     database_url: str = os.getenv("DATABASE_URL", "")
-    # Retained for backward compatibility / local SQLite fallback only.
-    database_path: str = os.getenv(
-        "DATABASE_PATH", "/opt/render/project/src/data/smart1_sites.sqlite3"
-    )
     mock_mode: bool = env_bool("MOCK_MODE", True)
     enable_write_actions: bool = env_bool("ENABLE_WRITE_ACTIONS", False)
     use_bg_as_platform_cost: bool = env_bool("USE_BG_AS_PLATFORM_COST", False)
