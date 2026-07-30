@@ -8,6 +8,13 @@ function esc(v='') {
   return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 }
 
+function getBadgeClass(platformName) {
+  if (platformName.includes('Tag')) return 'gtm';
+  if (platformName.includes('Business')) return 'gmb';
+  if (platformName.includes('Console')) return 'gsc';
+  return 'ga';
+}
+
 function draw(items) {
   if (!items.length) {
     results.innerHTML = '<div class="empty">No matches found.</div>';
@@ -15,7 +22,7 @@ function draw(items) {
   }
   results.innerHTML = items.map(x => `
     <article class="result">
-      <div class="badge ${x.platform.includes('Tag') ? 'gtm' : 'ga'}">${esc(x.platform)}</div>
+      <div class="badge ${getBadgeClass(x.platform)}">${esc(x.platform)}</div>
       <div class="main">
         <h3>${esc(x.name || '(unnamed)')}</h3>
         <div class="login"><b>Google Login:</b> ${esc(x.google_login)}</div>
@@ -76,3 +83,41 @@ document.querySelectorAll('.disconnect').forEach(btn => btn.addEventListener('cl
   const r = await fetch(`/disconnect/${encodeURIComponent(email)}`, {method:'POST'});
   if (r.ok) window.location.reload();
 }));
+
+// Manual GMB Checker Logic
+const manualBtn = document.getElementById('manual-btn');
+const manualInput = document.getElementById('manual-q');
+const manualResults = document.getElementById('manual-results');
+
+if (manualBtn && manualInput) {
+  manualBtn.addEventListener('click', () => {
+    const query = manualInput.value.trim();
+    if (!query) {
+      manualResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please enter a business name or URL.</span>';
+      return;
+    }
+
+    const encoded = encodeURIComponent(query);
+    const mapsSearchUrl = `https://www.google.com/maps/search/${encoded}`;
+    const gmbClaimUrl = `https://business.google.com/add`;
+    const googleSearchUrl = `https://www.google.com/search?q=${encoded}`;
+
+    manualResults.innerHTML = `
+      <div class="manual-results-group">
+        <strong>Quick Links for "${esc(query)}":</strong>
+        <a href="${mapsSearchUrl}" target="_blank" rel="noopener" class="open" style="padding: 6px 10px; font-size: 12px;">Search Maps</a>
+        <a href="${googleSearchUrl}" target="_blank" rel="noopener" class="open" style="padding: 6px 10px; font-size: 12px; background: #1a2e58!important;">Google Search</a>
+        <a href="${gmbClaimUrl}" target="_blank" rel="noopener" class="open" style="padding: 6px 10px; font-size: 12px; background: #137333!important;">Claim/Add on GMB</a>
+      </div>
+      <p class="manual-tip">
+        <em>Tip: Click "Search Maps" to view the listing and check if an "Own this business?" or "Claim this business" link is visible.</em>
+      </p>
+    `;
+  });
+
+  manualInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      manualBtn.click();
+    }
+  });
+}
