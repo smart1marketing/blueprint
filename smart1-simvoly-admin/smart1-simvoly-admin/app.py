@@ -60,6 +60,12 @@ app.config.update(
 )
 
 init_db()
+
+# Auto-populate an empty database from a committed seed file (seed/portfolio.json).
+# No-op once projects exist; never blocks startup on a bad/missing seed.
+from seed_boot import seed_if_empty
+seed_if_empty()
+
 client = SimvolyClient()
 
 
