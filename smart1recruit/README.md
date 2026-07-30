@@ -48,10 +48,11 @@ files to keep in sync. This keeps the form reliable when embedded in Smart 1 Sui
 2. Connect the `smart1recruit` GitHub repository.
 3. Render will read `render.yaml`.
 4. Add the secret environment variable `OPENAI_API_KEY`.
-5. Add `SMART1_WEBHOOK_URL` for the Smart 1 Suite inbound webhook.
-6. Add `PUBLIC_BASE_URL` = your live Render URL (e.g. `https://smart1recruit.onrender.com`) so the report PDF links are absolute.
-7. Keep `OPENAI_MODEL` at the default or change it to a model available in your OpenAI account.
-8. Deploy and test `/health`, then test the full form.
+5. Add `GHL_WEBHOOK_URL` for the GoHighLevel / Smart 1 Suite inbound webhook.
+6. Add `CLOUDINARY_URL` (from your Cloudinary dashboard) so generated PDF reports are stored in Cloudinary and the link is sent to the webhook. Optionally set `CLOUDINARY_FOLDER` (defaults to `recruitment-reports`).
+7. Add `PUBLIC_BASE_URL` = your live Render URL (e.g. `https://recruitment-j62u.onrender.com`) — only used as a fallback PDF host when Cloudinary is not configured.
+8. Keep `OPENAI_MODEL` at the default or change it to a model available in your OpenAI account.
+9. Deploy and test `/health`, then test the full form.
 
 ## Deploy as a subfolder of an existing repo (Render "Root Directory")
 
@@ -65,8 +66,8 @@ root as `smart1recruit/` and deploy it as its own service without a Blueprint:
 3. **Runtime:** Python 3
 4. **Build command:** `pip install -r requirements.txt`
 5. **Start command:** `gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300`
-6. Add the environment variables (`OPENAI_API_KEY` required; `SMART1_WEBHOOK_URL`
-   and `PUBLIC_BASE_URL` optional).
+6. Add the environment variables (`OPENAI_API_KEY` required; `GHL_WEBHOOK_URL`,
+   `CLOUDINARY_URL`, `CLOUDINARY_FOLDER`, and `PUBLIC_BASE_URL` optional).
 7. Deploy, then test `/health`.
 
 Each push that touches this folder redeploys only this service. Because you set
@@ -75,15 +76,26 @@ apps (e.g. a Node `package.json`) elsewhere in the repo. The included
 `render.yaml` is only used if you deploy this folder as its own root-level repo
 or Blueprint; the Root-Directory web service above ignores it.
 
-## PDF report
+## PDF report &amp; Cloudinary storage
 
 Every completed report is rendered to a branded PDF (via `reportlab`, pure
-Python — no system libraries needed) and written to `static/reports/`. The
-public URL is sent to Smart 1 Suite in the webhook as `report_pdf_url`, so your
-team can link or attach it with `{{contact.report_pdf_url}}`. Set `ENABLE_PDF=0`
-to turn this off. On Render's ephemeral disk the files persist for the life of
-the instance; for permanent archival, upload the bytes to S3 or the GHL Media
-Library inside `build_report_pdf()`.
+Python — no system libraries needed) and named **`<Company>-Recruitment - report`**
+(e.g. `Example Manufacturing-Recruitment - report`).
+
+If `CLOUDINARY_URL` is set, the PDF is uploaded to Cloudinary (into the
+`CLOUDINARY_FOLDER`, default `recruitment-reports`) and its permanent secure URL
+is what gets sent to the webhook as `report_pdf_url` — so your team can link or
+attach it with `{{contact.report_pdf_url}}`. The webhook also includes
+`report_name` (the display name above).
+
+If Cloudinary is **not** configured, the app falls back to hosting the PDF
+locally under `static/reports/` and sends that URL instead (using
+`PUBLIC_BASE_URL` to make it absolute). Note that Render's local disk is
+ephemeral, so Cloudinary is strongly recommended for durable links. Set
+`ENABLE_PDF=0` to turn PDF generation off entirely.
+
+`CLOUDINARY_URL` format (copy the "API Environment variable" from your
+Cloudinary dashboard): `cloudinary://<api_key>:<api_secret>@<cloud_name>`.
 
 ## Smart 1 Suite fields
 
@@ -104,7 +116,8 @@ Recommended custom fields:
 - Recommended Package
 - Recommended Investment
 - Report Status
-- Report PDF URL
+- Report Name
+- Report PDF URL (Cloudinary link to the generated PDF)
 - Report JSON (large text field, optional)
 
 The webhook sends human-readable fields plus `report_json`. If the Suite webhook ignores nested or large data, map the summary and candidate-estimate fields first and store the full report externally or in a large-text custom field.

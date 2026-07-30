@@ -13,8 +13,12 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4.1-mini
-      - key: SMART1_WEBHOOK_URL
+      - key: GHL_WEBHOOK_URL
         sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: CLOUDINARY_FOLDER
+        value: recruitment-reports
       - key: PUBLIC_BASE_URL
         sync: false
       - key: ENABLE_PDF
