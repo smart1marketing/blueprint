@@ -204,49 +204,75 @@ def fetch_gtm_items(access_token, google_login):
     items = []
     token = None
     accounts = []
+
+    # Fetch accounts with rate-limit retries
     while True:
         params = {}
         if token:
             params["pageToken"] = token
-        data = google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts", params=params)
-        accounts.extend(data.get("account", []))
-        token = data.get("nextPageToken")
+
+        for attempt in range(3):
+            try:
+                data = google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts", params=params)
+                accounts.extend(data.get("account", []))
+                token = data.get("nextPageToken")
+                break
+            except requests.exceptions.HTTPError as err:
+                if err.response.status_code == 429 and attempt < 2:
+                    time.sleep(2)  # Wait 2 seconds before retrying
+                else:
+                    raise err
+
         if not token:
             break
 
+    # Loop through accounts and fetch containers with a slight delay
     for acct in accounts:
         account_id = acct.get("accountId", "")
         account_name = acct.get("name", "")
         parent = acct.get("path") or f"accounts/{account_id}"
         ctoken = None
+
         while True:
             params = {}
             if ctoken:
                 params["pageToken"] = ctoken
-            data = google_get(
-                access_token,
-                f"https://tagmanager.googleapis.com/tagmanager/v2/{parent}/containers",
-                params=params,
-            )
-            for c in data.get("container", []):
-                public_id = c.get("publicId", "")
-                container_id = c.get("containerId", "")
-                container_name = c.get("name", "")
-                domains = " ".join(c.get("domainName", []) or [])
-                items.append({
-                    "platform": "Google Tag Manager",
-                    "type": "GTM Container",
-                    "name": container_name,
-                    "account_name": account_name,
-                    "account_id": account_id,
-                    "resource_id": public_id or container_id,
-                    "search_extra": domains,
-                    "google_login": google_login,
-                    "open_url": f"https://tagmanager.google.com/#/container/accounts/{account_id}/containers/{container_id}" if account_id and container_id else "",
-                })
-            ctoken = data.get("nextPageToken")
+
+            for attempt in range(3):
+                try:
+                    data = google_get(
+                        access_token,
+                        f"https://tagmanager.googleapis.com/tagmanager/v2/{parent}/containers",
+                        params=params,
+                    )
+                    for c in data.get("container", []):
+                        public_id = c.get("publicId", "")
+                        container_id = c.get("containerId", "")
+                        container_name = c.get("name", "")
+                        domains = " ".join(c.get("domainName", []) or [])
+                        items.append({
+                            "platform": "Google Tag Manager",
+                            "type": "GTM Container",
+                            "name": container_name,
+                            "account_name": account_name,
+                            "account_id": account_id,
+                            "resource_id": public_id or container_id,
+                            "search_extra": domains,
+                            "google_login": google_login,
+                            "open_url": f"https://tagmanager.google.com/#/container/accounts/{account_id}/containers/{container_id}" if account_id and container_id else "",
+                        })
+                    ctoken = data.get("nextPageToken")
+                    break
+                except requests.exceptions.HTTPError as err:
+                    if err.response.status_code == 429 and attempt < 2:
+                        time.sleep(2)
+                    else:
+                        raise err
+
+            time.sleep(0.3)  # Respect Google Tag Manager API rate limits
             if not ctoken:
                 break
+
     return items
 
 
@@ -317,8 +343,6 @@ def login():
 
 @app.route("/oauth2callback")
 def oauth_callback():
-    # Keep this route deliberately verbose on failure so Render does not appear to
-    # "hang" with an empty callback page. Secrets and authorization codes are never shown.
     try:
         google_error = request.args.get("error")
         if google_error:
@@ -417,8 +441,6 @@ def disconnect(email):
 
 @app.route("/logout")
 def logout():
-    # Clears only the browser session/OAuth state. Connected Google accounts remain
-    # stored on the persistent disk until explicitly disconnected.
     session.clear()
     return redirect(url_for("index"))
 
@@ -449,7 +471,6 @@ def api_search():
             item.get("resource_id", ""), item.get("search_extra", ""), item.get("google_login", "")
         ]).lower()
         if any(t and t in haystack for t in tokens):
-            # If the exact same property/container is visible to multiple logins, keep each login visible.
             key = (item.get("platform"), item.get("account_id"), item.get("resource_id"), item.get("google_login"))
             if key not in seen:
                 seen.add(key)
