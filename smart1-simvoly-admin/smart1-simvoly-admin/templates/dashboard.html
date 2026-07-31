@@ -87,7 +87,7 @@
       <td><a href="{{url_for('project_detail',pid=r.project_id)}}"><b>{{r.internal_client_name or r.name}}</b><small>Project #{{r.project_id}}</small></a></td>
       <td><span class="pill {{status_class(r.status)}}">{{r.lifecycle_state or r.status or 'UNKNOWN'}}</span></td>
       <td>{{r.plan_name or '—'}}<small>{{money(r.monthly_price)}} catalog</small></td>
-      <td>{{r.domain or '—'}}</td>
+      <td>{% if r.domain %}{{r.domain}}<small><a href="{{login_url(r.domain)}}" target="_blank" rel="noopener">Login ↗</a></small>{% else %}—{% endif %}</td>
       <td>{{r.next_billing_date or '—'}}</td>
       <td>{{money(r.client_price if r.client_price is not none else r.monthly_price)}}</td>
       <td><a href="{{url_for('dashboard', partner=r.partner_display)}}">{{r.partner_display}}</a></td>
