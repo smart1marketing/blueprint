@@ -1,40 +1,62 @@
-# 🐙 GitHub Upload Guide
+CREATIVE LOOKUP TOOL - BUG FIX LOG
+═══════════════════════════════════════════════════════════════
 
-## Step 1: Extract This Zip
-```bash
-unzip knack-creative-lookup.zip
-cd knack-creative-lookup
-```
+VERSION 3.0 - KNACK API AUTHENTICATION FIXED
 
-## Step 2: Initialize Git
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-```
+═══════════════════════════════════════════════════════════════
 
-## Step 3: Create GitHub Repository
-1. Go to https://github.com/new
-2. Name it: `knack-creative-lookup`
-3. Choose Public or Private
-4. Click "Create repository"
-5. Copy the URL (looks like https://github.com/YOUR_USERNAME/knack-creative-lookup.git)
+ISSUE: 401 Unauthorized Error
 
-## Step 4: Push to GitHub
-```bash
-git remote add origin https://github.com/YOUR_USERNAME/knack-creative-lookup.git
-git push -u origin main
-```
+Root Cause:
+  Knack API requires TWO headers for authentication:
+  1. X-Knack-REST-API-Key (was included)
+  2. X-Knack-Application-Id (was MISSING!)
 
-## Step 5: Verify on GitHub
-- Visit your repo URL
-- Should see all files
-- Should NOT see: node_modules/, .env.local, build/
+FIX 1: Added Application ID Header
+  File: src/components/App.jsx
+  Change: Added 'X-Knack-Application-Id' to axios headers
+  Status: ✓ RESOLVED
 
-That's it! Your repo is ready for Render.
+FIX 2: Updated Environment Variables
+  Added: REACT_APP_KNACK_APP_ID to .env.example
+  Change: Now requires 3 env vars (was 2)
+  Status: ✓ RESOLVED
 
----
+FIX 3: React Hook Violation
+  File: src/components/ImageModal.jsx
+  Status: ✓ RESOLVED (v2.0)
 
-## Next: Connect to Render
-See SETUP_GUIDE.md step 4 onward.
+FIX 4: JSX Syntax Error
+  File: src/components/ImageModal.jsx
+  Status: ✓ RESOLVED (v2.0)
+
+═══════════════════════════════════════════════════════════════
+
+TESTING CHECKLIST:
+
+Local:
+  □ npm install          ✓ Pass
+  □ npm start            ✓ Pass
+  □ .env.local created   ✓ Have all 3 vars
+  □ Creatives display    ✓ No 401 error
+
+Render:
+  □ Environment tab has 3 variables
+  □ REACT_APP_KNACK_API_KEY set
+  □ REACT_APP_KNACK_APP_ID set
+  □ REACT_APP_KNACK_IO_OBJECT_ID = object_234
+  □ Deploy successful
+  □ App loads at render.com URL
+  □ Browser console shows no errors
+
+═══════════════════════════════════════════════════════════════
+
+KEY INSIGHT:
+
+Knack API requires BOTH:
+  1. API Key (proves you have access)
+  2. Application ID (proves you're accessing the right app)
+
+Without the Application ID header, you get 401 Unauthorized.
+
+═══════════════════════════════════════════════════════════════

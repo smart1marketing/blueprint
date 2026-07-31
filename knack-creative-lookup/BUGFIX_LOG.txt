@@ -1,32 +1,30 @@
-CREATIVE LOOKUP TOOL - BUG FIX LOG
-═══════════════════════════════════════════════════════════════
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
 
-VERSION 2.0 - SYNTAX ERRORS FIXED
+# Testing
+/coverage
 
-═══════════════════════════════════════════════════════════════
+# Production
+/build
+/dist
 
-FIX 1: React Hook Violation
-  File: src/components/ImageModal.jsx
-  Error: React Hook "React.useEffect" is called conditionally
-  Fix: Moved useEffect call before conditional return
-  Status: ✓ RESOLVED
+# Misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-FIX 2: JSX Closing Tag Error
-  File: src/components/ImageModal.jsx
-  Error: Expected corresponding JSX closing tag for <div>
-  Fix: Ensured all div tags properly closed and balanced
-  Status: ✓ RESOLVED
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-═══════════════════════════════════════════════════════════════
-
-BUILD TEST:
-  npm install      ✓ Pass
-  npm run build    ✓ Pass
-  Render deploy    ✓ Should pass
-
-═══════════════════════════════════════════════════════════════
-
-All JSX syntax is now valid. No compilation errors expected.
-If build fails, check browser console or Render logs.
-
-═══════════════════════════════════════════════════════════════
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
