@@ -271,7 +271,7 @@ def dashboard():
 
     revenue = 0.0
     cost = 0.0
-    partner_counts = {}
+    partner_stats = {}
     for row in allmeta:
         client_price = (
             row["client_price"]
@@ -285,11 +285,21 @@ def dashboard():
             if row["platform_cost"] is not None
             else (row["bg_monthly_price"] or 0)
         )
-        if row["status"] == "ACTIVE":
+        status_up = (row["status"] or "").upper()
+        if status_up == "ACTIVE":
             revenue += client_price or 0
             cost += platform_cost or 0
-        p = row["partner"] or infer_partner(row["name"])
-        partner_counts[p] = partner_counts.get(p, 0) + 1
+        pname = row["partner"] or infer_partner(row["name"])
+        stat = partner_stats.setdefault(
+            pname, {"active": 0, "trial": 0, "expired": 0, "total": 0}
+        )
+        if status_up == "ACTIVE":
+            stat["active"] += 1
+        elif status_up == "TRIAL":
+            stat["trial"] += 1
+        elif status_up == "EXPIRED":
+            stat["expired"] += 1
+        stat["total"] += 1
 
     return render_template(
         "dashboard.html",
@@ -310,7 +320,7 @@ def dashboard():
         cost=cost,
         margin=revenue - cost,
         alerts=alert_rows(8),
-        partners=sorted(partner_counts.items(), key=lambda x: -x[1]),
+        partners=sorted(partner_stats.items(), key=lambda x: -x[1]["total"]),
     )
 
 
