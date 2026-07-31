@@ -42,12 +42,23 @@
   <section class="card">
     <h2>Partner Portfolio</h2>
     <p class="hint">Click a partner to view their accounts, or download a CSV of that partner's client details.</p>
-    {% for name,n in partners %}
-      <div class="pair">
-        <a href="{{url_for('dashboard', partner=name)}}">{{name}}</a>
-        <span><b>{{n}}</b> · <a href="{{url_for('export_csv', partner=name)}}">CSV</a></span>
-      </div>
-    {% else %}<p>No partner data yet.</p>{% endfor %}
+    <div class="tablewrap">
+    <table class="partner-table">
+      <thead><tr><th>Partner</th><th>Active</th><th>Expired</th><th>Trial</th><th>Total</th><th></th></tr></thead>
+      <tbody>
+      {% for name,c in partners %}
+        <tr>
+          <td><a href="{{url_for('dashboard', partner=name)}}">{{name}}</a></td>
+          <td>{{c.active}}</td>
+          <td>{{c.expired}}</td>
+          <td>{{c.trial}}</td>
+          <td><b>{{c.total}}</b></td>
+          <td><a href="{{url_for('export_csv', partner=name)}}">CSV</a></td>
+        </tr>
+      {% else %}<tr><td colspan="6">No partner data yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    </div>
   </section>
 </div>
 
