@@ -16,7 +16,7 @@
   <h2>Websites / Funnels</h2>
   {% for w in websites %}
   <div class="website block">
-    <div><b>{{w.domain or w.subdomain or w.name}}</b><small>#{{w.website_id}} · {{w.type or 'SITE'}} · {% if w.active is none %}status unknown{% else %}{{'Active' if w.active else 'Inactive'}}{% endif %}</small></div>
+    <div><b>{{w.domain or w.subdomain or w.name}}</b><small>#{{w.website_id}} · {{w.type or 'SITE'}} · {% if w.active is none %}status unknown{% else %}{{'Active' if w.active else 'Inactive'}}{% endif %}</small>{% set host = w.domain or w.subdomain or w.name %}{% if host %} <a class="button" href="{{login_url(host)}}" target="_blank" rel="noopener">Login to site ↗</a>{% endif %}</div>
     <div class="website-actions">
       <form method="post" action="{{url_for('connect_domain',website_id=w.website_id)}}"><input type="hidden" name="csrf_token" value="{{session.csrf}}"><input name="domain" placeholder="domain.com" value="{{w.domain or ''}}"><button {{'disabled' if not settings.enable_write_actions}}>Connect</button></form>
       {% if w.domain %}<form method="post" action="{{url_for('disconnect_domain',website_id=w.website_id)}}"><input type="hidden" name="csrf_token" value="{{session.csrf}}"><input type="hidden" name="domain" value="{{w.domain}}"><button {{'disabled' if not settings.enable_write_actions}}>Disconnect</button></form>{% endif %}
