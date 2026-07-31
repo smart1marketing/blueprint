@@ -19,6 +19,7 @@
     </form>
     <a href="{{url_for('dashboard')}}">Accounts</a>
     <a href="{{url_for('inventory')}}">Inventory</a>
+    <a href="{{url_for('packages')}}">Packages</a>
     <a href="{{url_for('add_site')}}">Add Site</a>
     <form method="post" action="{{url_for('logout')}}">
       <input type="hidden" name="csrf_token" value="{{session.csrf}}">
