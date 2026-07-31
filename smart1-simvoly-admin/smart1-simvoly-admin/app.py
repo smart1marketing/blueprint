@@ -39,8 +39,11 @@ from db import (
     query_projects,
     save_meta,
     set_lifecycle,
+    set_plan_cost,
+    set_platform_cost,
     upsert_project,
 )
+from costs import parse_charges
 from simvoly_client import SimvolyClient, SimvolyError, unwrap_data
 from sync_service import (
     discover_customer,
@@ -485,6 +488,59 @@ def inventory_refresh_known():
     except Exception as exc:
         flash(f"Project refresh failed: {exc}", "danger")
     return redirect(url_for("dashboard"))
+
+
+@app.route("/packages", methods=["GET", "POST"])
+@login_required
+def packages():
+    plans = list_plans_for_ui()
+    if request.method == "POST":
+        require_csrf()
+        updated = 0
+        for pl in plans:
+            val = request.form.get(f"cost_{pl['plan_id']}", "").strip()
+            if val == "":
+                continue
+            try:
+                set_plan_cost(pl["plan_id"], float(Decimal(val)))
+                updated += 1
+            except (InvalidOperation, ValueError):
+                pass
+        flash(f"Saved package platform costs for {updated} plan(s).", "success")
+        return redirect(url_for("packages"))
+    return render_template("packages.html", plans=list_plans_for_ui())
+
+
+@app.post("/costs/import")
+@login_required
+def costs_import():
+    require_csrf()
+    raw = request.form.get("payload", "").strip()
+    upload = request.files.get("file")
+    if upload and upload.filename:
+        raw = upload.read().decode("utf-8", errors="replace")
+    if not raw:
+        flash("Paste the invoice text (or a JSON map of project id → cost), or choose a file.", "danger")
+        return redirect(url_for("packages"))
+    try:
+        costs = None
+        # Accept a JSON map { "project_id": cost, ... } as well as raw invoice text.
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                costs = {str(k): float(v) for k, v in parsed.items()}
+        except (ValueError, TypeError):
+            costs = None
+        if costs is None:
+            costs, _ = parse_charges(raw)
+        applied = 0
+        for pid, cost in costs.items():
+            set_platform_cost(pid, cost)
+            applied += 1
+        flash(f"Applied actual platform cost to {applied} site(s) as per-site overrides.", "success")
+    except Exception as exc:
+        flash(f"Cost import failed: {exc}", "danger")
+    return redirect(url_for("packages"))
 
 
 @app.get("/projects/<pid>")
