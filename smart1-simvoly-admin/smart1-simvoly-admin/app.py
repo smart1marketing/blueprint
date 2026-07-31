@@ -105,11 +105,24 @@ def status_class(status):
     }.get((status or "").upper(), "muted")
 
 
+def login_url(host):
+    """Public login page for a customer's site: https://<host>/login.
+    A bare subdomain label (no dot) is expanded to <label>.smart1sites.com."""
+    h = (host or "").strip().rstrip("/")
+    if not h:
+        return ""
+    h = h.split("://")[-1]  # drop any scheme
+    if "." not in h:
+        h = f"{h}.smart1sites.com"
+    return f"https://{h}/login"
+
+
 @app.context_processor
 def inject_context():
     return {
         "money": money,
         "status_class": status_class,
+        "login_url": login_url,
         "settings": SETTINGS,
     }
 
