@@ -562,13 +562,23 @@ def project_detail(pid):
     p = get_project(pid)
     if not p:
         abort(404)
+    websites = get_websites(pid)
+    # Auto-populate websites/domain from Simvoly on first view (read-only GET),
+    # so the domain and Login link appear without clicking "Refresh from Simvoly".
+    if not websites and not SETTINGS.mock_mode:
+        try:
+            sync_project(pid)
+            websites = get_websites(pid)
+            p = get_project(pid) or p
+        except Exception:
+            pass
     # Show the auto-inferred partner (from the name prefix) when no manual
     # partner override has been saved, matching the Accounts list.
     p["partner_display"] = p.get("partner") or infer_partner(p.get("name"))
     return render_template(
         "project_detail.html",
         p=p,
-        websites=get_websites(pid),
+        websites=websites,
         plans=list_plans_for_ui(),
     )
 
