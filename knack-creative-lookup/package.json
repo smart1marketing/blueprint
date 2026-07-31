@@ -1,59 +1,47 @@
-# 🔍 How to Find Your Knack Application ID
-
-## Method 1: From Your Knack Builder URL (EASIEST)
-
-1. **Open your Knack app in the builder**
-2. **Look at the URL in your browser:**
-   ```
-   https://builder.knack.com/app/XXXXXXXXXX/...
-                              ^^^^^^^^^^
-   ```
-3. **Copy the value between `/app/` and `/`**
-
-### Example:
-```
-URL: https://builder.knack.com/app/123abc456def789/data/object/234
-APP ID: 123abc456def789
-```
-
----
-
-## Method 2: From Knack Settings
-
-1. **In your Knack app → Settings**
-2. **Look for "API & Webhooks" section**
-3. **Look for "Application ID"** (sometimes listed here)
-
----
-
-## Method 3: From API Response
-
-Run this in terminal (replace YOUR_API_KEY):
-```bash
-curl -H "X-Knack-REST-API-Key: YOUR_API_KEY" \
-  https://api.knack.com/v1/applications
-```
-
-Look for your app in the JSON response.
-
----
-
-## ✅ Format Check
-
-Your Application ID should:
-- ✓ Be a long string (15+ characters)
-- ✓ Contain letters and numbers
-- ✓ Look like: `123abc456def789`
-- ✓ NOT start with "object_"
-- ✓ NOT start with "field_"
-
----
-
-## 🎯 Once You Have It
-
-1. Add to Render environment variables:
-   ```
-   REACT_APP_KNACK_APP_ID = [your app id]
-   ```
-2. Redeploy
-3. App should work! ✨
+{
+  "name": "knack-creative-lookup",
+  "version": "1.0.0",
+  "description": "Creative lookup tool for Knack Insertion Orders",
+  "private": true,
+  "homepage": ".",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "react-select": "^5.7.7",
+    "react-datepicker": "^4.21.0",
+    "date-fns": "^2.30.0",
+    "axios": "^1.5.0",
+    "classnames": "^2.3.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

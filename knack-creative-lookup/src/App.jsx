@@ -34,10 +34,13 @@ const App = () => {
     setError(null);
     try {
       const apiKey = process.env.REACT_APP_KNACK_API_KEY;
+      const appId = process.env.REACT_APP_KNACK_APP_ID;
       const objectId = process.env.REACT_APP_KNACK_IO_OBJECT_ID; // e.g., "object_234"
       
-      if (!apiKey || !objectId) {
-        throw new Error('Missing REACT_APP_KNACK_API_KEY or REACT_APP_KNACK_IO_OBJECT_ID');
+      if (!apiKey || !appId || !objectId) {
+        throw new Error(
+          'Missing required Knack credentials. Check: REACT_APP_KNACK_API_KEY, REACT_APP_KNACK_APP_ID, REACT_APP_KNACK_IO_OBJECT_ID'
+        );
       }
 
       const response = await axios.get(
@@ -45,6 +48,7 @@ const App = () => {
         {
           headers: {
             'X-Knack-REST-API-Key': apiKey,
+            'X-Knack-Application-Id': appId,
             'Content-Type': 'application/json'
           },
           params: {

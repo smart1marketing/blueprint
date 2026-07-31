@@ -1,48 +1,41 @@
 ╔═══════════════════════════════════════════════════════════════╗
 ║           RENDER DEPLOYMENT QUICK CARD                      ║
 ║                    VERSION 3.0                              ║
+║              ✅ ALREADY CONFIGURED FOR YOU                  ║
 ╚═══════════════════════════════════════════════════════════════╝
 
-SERVICE TYPE: Web Service
-RUNTIME: Node
-BUILD COMMAND: npm install && npm run build
-START COMMAND: npm start
+SERVICE SETUP:
+  ✅ Root Directory: knack-creative-lookup
+  ✅ Runtime: Node
+  ✅ Build Command: npm install && npm run build
+  ✅ Start Command: npm start
 
-ENVIRONMENT VARIABLES (3 REQUIRED):
+ENVIRONMENT VARIABLES NEEDED (Set in Render):
   REACT_APP_KNACK_API_KEY = your_api_key_here
   REACT_APP_KNACK_APP_ID = your_application_id_here
   REACT_APP_KNACK_IO_OBJECT_ID = object_234
   NODE_ENV = production
 
-AUTO-DEPLOY: Yes (watches GitHub main branch)
-
 ═══════════════════════════════════════════════════════════════
 
-HOW TO FIND YOUR VALUES:
+NEXT STEPS:
 
-API Key:
-  1. Knack App Settings > API & Webhooks
-  2. Copy REST API Key
-  3. Should be 32+ characters
+1. Get your Knack credentials (see FIND_APP_ID.md)
 
-Application ID:
-  1. Look at your Knack builder URL:
-     https://builder.knack.com/app/[APPLICATION_ID]/...
-  2. Copy the ID between /app/ and /data
+2. Update Render Environment Variables:
+   - Click Settings > Environment
+   - Add REACT_APP_KNACK_API_KEY
+   - Add REACT_APP_KNACK_APP_ID
+   - Verify REACT_APP_KNACK_IO_OBJECT_ID
 
-Object ID:
-  1. Should be: object_234 (for Insertion Orders)
+3. Push corrected code to GitHub:
+   git add knack-creative-lookup/
+   git commit -m "Fix: Add corrected app files"
+   git push origin main
 
-═══════════════════════════════════════════════════════════════
+4. Render auto-deploys on push
+   Wait 2-5 minutes
 
-STEPS:
-1. Go to render.com
-2. Click "New +" → "Web Service"
-3. Connect GitHub repository
-4. Set Build & Start commands above
-5. Add Environment Variables (3 of them!)
-6. Click "Deploy"
-7. Wait 2-5 minutes
-8. Your app is live! ✨
+5. Visit your app URL and test!
 
 ═══════════════════════════════════════════════════════════════

@@ -1,62 +1,73 @@
-CREATIVE LOOKUP TOOL - BUG FIX LOG
-═══════════════════════════════════════════════════════════════
+# 🐙 GitHub Upload Guide for Render
 
-VERSION 3.0 - KNACK API AUTHENTICATION FIXED
+## IMPORTANT: You already have Render configured!
 
-═══════════════════════════════════════════════════════════════
+Render is already set up to watch your `blueprint` repository and deploy from the `knack-creative-lookup` subfolder.
 
-ISSUE: 401 Unauthorized Error
+---
 
-Root Cause:
-  Knack API requires TWO headers for authentication:
-  1. X-Knack-REST-API-Key (was included)
-  2. X-Knack-Application-Id (was MISSING!)
+## What to do NOW:
 
-FIX 1: Added Application ID Header
-  File: src/components/App.jsx
-  Change: Added 'X-Knack-Application-Id' to axios headers
-  Status: ✓ RESOLVED
+### Step 1: Clean Up GitHub
 
-FIX 2: Updated Environment Variables
-  Added: REACT_APP_KNACK_APP_ID to .env.example
-  Change: Now requires 3 env vars (was 2)
-  Status: ✓ RESOLVED
+Delete the corrupted `knack-creative-lookup` folder:
 
-FIX 3: React Hook Violation
-  File: src/components/ImageModal.jsx
-  Status: ✓ RESOLVED (v2.0)
+```bash
+# On your local machine
+cd path/to/blueprint
+rm -rf knack-creative-lookup
+git add -A
+git commit -m "Remove corrupted folder"
+git push origin main
+```
 
-FIX 4: JSX Syntax Error
-  File: src/components/ImageModal.jsx
-  Status: ✓ RESOLVED (v2.0)
+### Step 2: Add Fresh Files
 
-═══════════════════════════════════════════════════════════════
+Extract the new zip and copy the folder:
 
-TESTING CHECKLIST:
+```bash
+# Extract new zip
+unzip knack-creative-lookup.zip
 
-Local:
-  □ npm install          ✓ Pass
-  □ npm start            ✓ Pass
-  □ .env.local created   ✓ Have all 3 vars
-  □ Creatives display    ✓ No 401 error
+# Copy to your blueprint repo
+cp -r knack-creative-lookup /path/to/blueprint/
 
-Render:
-  □ Environment tab has 3 variables
-  □ REACT_APP_KNACK_API_KEY set
-  □ REACT_APP_KNACK_APP_ID set
-  □ REACT_APP_KNACK_IO_OBJECT_ID = object_234
-  □ Deploy successful
-  □ App loads at render.com URL
-  □ Browser console shows no errors
+cd /path/to/blueprint
+```
 
-═══════════════════════════════════════════════════════════════
+### Step 3: Commit & Push
 
-KEY INSIGHT:
+```bash
+git add knack-creative-lookup/
+git commit -m "Fix: Add corrected app files (v3.0)"
+git push origin main
+```
 
-Knack API requires BOTH:
-  1. API Key (proves you have access)
-  2. Application ID (proves you're accessing the right app)
+### Step 4: Render Auto-Deploys
 
-Without the Application ID header, you get 401 Unauthorized.
+Render watches your repo and will automatically:
+1. Detect the push
+2. Run the build command
+3. Deploy successfully ✨
 
-═══════════════════════════════════════════════════════════════
+---
+
+## Verify in Render
+
+1. Go to render.com dashboard
+2. Your service: `knack-creative-lookup`
+3. Check Deployments tab
+4. Should see new build in progress
+5. Wait 2-5 minutes
+6. App should be live! 🎉
+
+---
+
+## Root Directory Already Set
+
+Your Render settings show:
+- ✅ Root Directory: `knack-creative-lookup`
+- ✅ Build Command: Correct
+- ✅ Everything else: Configured
+
+You don't need to change anything in Render!

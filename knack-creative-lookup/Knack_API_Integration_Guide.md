@@ -1,415 +1,354 @@
-# 📦 Creative Lookup - Complete File Package
-
-## What You Have
-A complete, production-ready React app for searching Knack creatives by date and client.
+# Knack API Integration Guide
+**Based on live data from 10,390 IO/Product records**
 
 ---
 
-## 📂 File Structure
+## Quick Start
 
-### Core Application Files
+### Base URL
 ```
-src/
-├── App.jsx                    # Main component (filters, API calls, state)
-├── App.css                    # Main styling
-├── index.js                   # React entry point
-├── index.css                  # Global styles
-└── components/
-    ├── ImageModal.jsx         # Full-size image viewer modal
-    ├── ImageModal.css         # Modal styling
-    ├── LoadingSpinner.jsx      # Loading indicator
-    └── LoadingSpinner.css      # Spinner animation
+https://api.knack.com/v1/objects/{object_key}/records
 ```
 
-### Configuration Files
+### Required Headers
 ```
-package.json                  # Dependencies & scripts
-.env.example                  # Environment variables template
-.gitignore                    # Git ignore rules
-.prettierrc                    # Code formatting
-render.yaml                   # Render deployment config
-public-index.html             # HTML template (rename to public/index.html)
-```
-
-### Documentation Files
-```
-README.md                     # Full documentation
-SETUP_GUIDE.md                # Quick 5-step setup
-ARCHITECTURE.md               # How it works (technical)
-QUICK_REFERENCE.md            # Cheat sheet
-FILES_INCLUDED.md             # This file
-```
-
-### Supporting Data Files
-```
-Knack_API_Field_Reference.xlsx     # Complete field mapping (all 3 tables)
-IO_Product_Live_Fields.xlsx         # Live field analysis (10,390 records)
-Knack_API_Integration_Guide.md      # API examples & patterns
+Content-Type: application/json
+X-Knack-REST-API-Key: YOUR_API_KEY
 ```
 
 ---
 
-## 🚀 Getting Started
+## Field Key Mapping (IO/Product Records)
 
-### Step 1: Review
-- [ ] Read `QUICK_REFERENCE.md` (2 min)
-- [ ] Read `SETUP_GUIDE.md` (5 min)
-
-### Step 2: Prepare
-- [ ] Get Knack API Key
-- [ ] Get Knack Object ID
-- [ ] Install Node.js 18+
-
-### Step 3: Deploy
-- [ ] Download files
-- [ ] Run `npm install`
-- [ ] Create `.env.local`
-- [ ] Test locally with `npm start`
-- [ ] Push to GitHub
-- [ ] Deploy to Render
+| API Field Key | Display Name | Usage |
+|---|---|---|
+| `field_2426` | IO # | Primary identifier |
+| `field_2243` | Client Organization Name | 100% populated - use for filtering |
+| `field_2237` | Media Partner Name | 100% populated - use for filtering |
+| `field_2254` | Status | Core tracking field |
+| `field_2234` | Date Created | 100% populated - great for date range queries |
+| `field_2305` | [Date field] | 100% populated |
+| `field_2543` | [Numeric field] | 100% populated (integers) |
+| `field_2640` | Product Code | 100% populated (e.g., "p100") |
+| `field_2796` | Total Cost | 100% populated (dollar amounts with formatting) |
 
 ---
 
-## 📋 File Descriptions
+## Common API Calls
 
-### Application Components
-
-#### `App.jsx` (MAIN FILE)
-**What it does:**
-- Fetches IO records from Knack API
-- Extracts unique clients
-- Handles filtering logic (client + dates)
-- Manages modal state
-- Renders filter UI and creative grid
-
-**Key functions:**
-- `fetchIoRecords()` - API call to Knack
-- `handleImageClick()` - Opens modal
-- `handleClientChange()` - Updates selected client
-- `handleReset()` - Clears filters
-
-**To customize:**
-- Line ~140: Change image field
-- Line ~100: Add more filters
-- Line ~180: Adjust filtering logic
-
-#### `components/ImageModal.jsx`
-**What it does:**
-- Displays full-size creative image
-- Shows campaign/client/IO details
-- Allows opening image in new tab
-- Keyboard shortcuts (ESC to close)
-
-**Features:**
-- Backdrop click to close
-- Responsive layout
-- Detail grid (client, IO#, date, status)
-- Open in new tab button
-
-#### `components/LoadingSpinner.jsx`
-**What it does:**
-- Shows loading animation while fetching data
-- Displays "Loading creatives..." message
-
----
-
-### Styling Files
-
-#### `App.css` (PRIMARY STYLES)
-**Sections:**
-- Header styling
-- Filter section layout (responsive grid)
-- Buttons and inputs
-- Creative card styling (hover effects)
-- Creative grid (responsive columns)
-- Status badges (different colors)
-- Mobile responsive breakpoints
-
-**Customize:**
-- Colors: Search for hex values (#3b82f6, etc.)
-- Grid: `.creatives-grid` - adjust `minmax()` values
-- Spacing: Adjust padding/margins as needed
-
-#### `ImageModal.css`
-**Sections:**
-- Modal backdrop (dark overlay)
-- Modal animations (fade in, slide up)
-- Image container
-- Details panel
-- Action buttons
-- Responsive grid
-
-#### `LoadingSpinner.css`
-**Animations:**
-- Spinner rotation (infinite spin)
-- Fade in effect
-- Responsive sizing
-
-#### `index.css`
-**Purpose:**
-- Global CSS resets
-- React DatePicker overrides
-- HTML/body defaults
-
----
-
-### Configuration Files
-
-#### `package.json`
-**Contains:**
-- Dependencies (react, react-select, react-datepicker, axios)
-- Scripts (start, build, test)
-- Node engine requirement (18.x)
-- Metadata
-
-**Don't modify unless:**
-- Adding new dependencies
-- Changing node version
-
-#### `.env.example`
-**Purpose:**
-- Template for environment variables
-- Shows which variables are needed
-- Instructions for each
-
-**To use:**
-```bash
-cp .env.example .env.local
-# Edit .env.local with your values
+### 1. Fetch All IO Records
+```javascript
+fetch('https://api.knack.com/v1/objects/object_123/records', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Knack-REST-API-Key': 'YOUR_API_KEY'
+  }
+})
+.then(r => r.json())
+.then(data => console.log(data.records))
 ```
 
-#### `render.yaml`
-**Purpose:**
-- Configures Render deployment
-- Sets build/start commands
-- Specifies Node environment
-
-**Note:** Render reads this file automatically
-
-#### `.prettierrc`
-**Purpose:**
-- Code formatting rules
-- Ensures consistent code style
-- Optional (for team development)
-
-#### `.gitignore`
-**Purpose:**
-- Prevents committing sensitive files
-- Keeps repository clean
-- Includes: node_modules, .env, build/
-
----
-
-### Documentation
-
-#### `README.md` (COMPREHENSIVE)
-**Sections:**
-- Project overview
-- Quick start
-- Project structure
-- Configuration guide
-- Usage instructions
-- Render deployment
-- Customization guide
-- Troubleshooting
-- Performance tips
-- Support resources
-
-**Read this for:** Full understanding and reference
-
-#### `SETUP_GUIDE.md` (QUICK STEPS)
-**Contains:**
-- 5-step quick setup
-- Prerequisites checklist
-- Step-by-step with copy-paste commands
-- Common customizations
-- Troubleshooting table
-
-**Read this for:** Fast deployment without reading everything
-
-#### `ARCHITECTURE.md` (TECHNICAL)
-**Explains:**
-- System overview (diagrams)
-- Data flow
-- Component hierarchy
-- State management
-- API integration
-- Filtering logic
-- Performance considerations
-- Security notes
-
-**Read this for:** How it works technically
-
-#### `QUICK_REFERENCE.md` (CHEAT SHEET)
-**Includes:**
-- File list
-- Environment variables
-- Key Knack fields
-- Commands
-- Customization snippets
-- Troubleshooting table
-- Timeline
-
-**Read this for:** Quick lookup while working
-
----
-
-### Supporting Documentation
-
-#### `Knack_API_Field_Reference.xlsx`
-**Contains:**
-- INDEX sheet (overview)
-- Client Org sheet (76 fields)
-- Partner sheet (55 fields)
-- Insertion Order sheet (76 fields)
-- Display names & API field keys
-
-**Use for:** Looking up field names/keys
-
-#### `IO_Product_Live_Fields.xlsx`
-**Contains:**
-- 202 fields from actual data
-- Data type for each field
-- % filled (how often populated)
-- Sample values
-- 10,390 records analyzed
-
-**Use for:** Understanding real data patterns
-
-#### `Knack_API_Integration_Guide.md`
-**Contains:**
-- API examples (GET, POST, PUT, DELETE)
-- Filter examples
-- Data format notes
-- Connection fields explanation
-- n8n/Zapier tips
-- Webhook payloads
-
-**Use for:** Building additional integrations
-
----
-
-## 🔑 Key Decisions When Setting Up
-
-### Image Field Selection
-**Default:** `field_2264` (Uploaded Files in Insertion Order)
-
-**Alternatives:**
-- `field_149` - Upload Your Logo (Client Org)
-- `field_3080` - Logo (Partner)
-- Your custom field
-
-**To change:** Edit `App.jsx` line ~140
-
-### Date Field for Filtering
-**Default:** `field_2234` (Date Created)
-
-**Alternatives:**
-- `field_2305` - Different date field
-- `field_2313` - Another date field
-
-**To change:** Edit `App.jsx` filtering logic
-
-### Client Dropdown Field
-**Default:** `field_2243` (Client Organization Name)
-
-**To change:** Edit `App.jsx` lines ~45-50
-
----
-
-## 📦 What You Need to Add
-
-### Before Deploying
-1. `.env.local` file (created from .env.example)
-2. Knack API Key
-3. Knack Object ID
-4. GitHub account setup
-5. Render account setup
-
-### After Downloading
-1. Create `.env.local` with credentials
-2. Create `public/index.html` from `public-index.html`
-3. Create `src/components/` folder if needed
-4. Place all component files in correct folders
-
----
-
-## 🎯 Quick Checklist
-
-- [ ] Download all files to `knack-creative-lookup/` folder
-- [ ] Create `src/components/` subfolder
-- [ ] Rename `public-index.html` to `public/index.html`
-- [ ] Create `.env.local` from `.env.example`
-- [ ] Fill in KNACK_API_KEY and KNACK_IO_OBJECT_ID
-- [ ] Run `npm install`
-- [ ] Run `npm start`
-- [ ] Verify app loads at `http://localhost:3000`
-- [ ] Push to GitHub
-- [ ] Deploy to Render
-- [ ] Set environment variables in Render
-- [ ] Wait for build to complete
-- [ ] Test live app
-
----
-
-## 📞 Support Files
-
-**For quick answers:** QUICK_REFERENCE.md  
-**For step-by-step:** SETUP_GUIDE.md  
-**For full details:** README.md  
-**For technical deep dive:** ARCHITECTURE.md  
-**For API patterns:** Knack_API_Integration_Guide.md  
-
----
-
-## 📊 File Statistics
-
-```
-Total Files:           18
-React Components:      2
-Styling Files:         5
-Documentation:         7
-Configuration:         4
-Support Data:          3
-
-Lines of Code:         ~1,500
-Lines of Docs:         ~3,000
-Ready to Deploy:       ✓ YES
-Production Ready:      ✓ YES
+**Response Structure:**
+```json
+{
+  "records": [
+    {
+      "id": "64774b27e66b290027a4228a",
+      "field_2426": "IO-12345",
+      "field_2243": "General Motors",
+      "field_2237": "Circle City Broadcasting",
+      "field_2254": "Complete",
+      "field_2305": "05/31/2023",
+      "field_2640": "p100",
+      "field_2796": "$2,640.31",
+      "field_2543": 100,
+      ...
+    }
+  ]
+}
 ```
 
 ---
 
-## 🆕 What's New in This Package?
+### 2. Filter by Client Organization
+```javascript
+const filters = [{
+  "field": "field_2243",  // Client Organization Name
+  "operator": "is",
+  "value": "General Motors"
+}];
 
-✅ Complete React app (not just templates)  
-✅ Real Knack API integration  
-✅ Responsive design (mobile/tablet/desktop)  
-✅ Full documentation (4 guides)  
-✅ Deployment ready (Render config included)  
-✅ Field reference (spreadsheets)  
-✅ Architecture diagrams  
-✅ Troubleshooting guides  
-✅ Code examples  
-✅ Comments throughout code  
+const query = new URLSearchParams();
+query.append('where', JSON.stringify(filters));
 
----
-
-## 🚀 Expected Timeline
-
-| Task | Time |
-|------|------|
-| Read QUICK_REFERENCE | 2 min |
-| Download & organize files | 5 min |
-| Setup locally | 10 min |
-| Deploy to Render | 10 min |
-| Test | 5 min |
-| **TOTAL** | **32 min** |
+fetch(`https://api.knack.com/v1/objects/object_123/records?${query}`, {
+  headers: {
+    'X-Knack-REST-API-Key': 'YOUR_API_KEY'
+  }
+})
+```
 
 ---
 
-**🎉 You're ready to build!**
+### 3. Filter by Status
+```javascript
+const filters = [{
+  "field": "field_2254",  // Status
+  "operator": "is",
+  "value": "Complete"
+}];
+```
 
-Start with: `QUICK_REFERENCE.md` → `SETUP_GUIDE.md` → Deploy!
+**Common Status Values:** `Complete`, `Live`, `Pending`, `Cancelled`
 
-Questions? Check the appropriate guide above or see README.md "Support & Resources".
+---
+
+### 4. Filter by Date Range
+```javascript
+const filters = [{
+  "field": "field_2234",  // Date Created
+  "operator": "is after",
+  "value": "07/01/2023"
+}, {
+  "field": "field_2234",
+  "operator": "is before",
+  "value": "08/31/2023"
+}];
+```
+
+---
+
+### 5. Create New IO Record
+```javascript
+const newRecord = {
+  "field_2426": "IO-99999",          // IO #
+  "field_2243": "New Client",        // Client Organization Name
+  "field_2237": "New Partner",       // Media Partner Name
+  "field_2234": "07/27/2023",        // Date Created
+  "field_2254": "Pending",           // Status
+  "field_2245": "Contact Name",      // Client Name
+  "field_2246": "email@example.com", // Client Email
+  "field_2249": "Campaign objectives here", // Campaign Goals
+  "field_2640": "p100"               // Product Code
+};
+
+fetch('https://api.knack.com/v1/objects/object_123/records', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Knack-REST-API-Key': 'YOUR_API_KEY'
+  },
+  body: JSON.stringify(newRecord)
+})
+```
+
+---
+
+### 6. Update Existing Record
+```javascript
+const recordId = "64774b27e66b290027a4228a";
+const updates = {
+  "field_2254": "Live",              // Update Status to Live
+  "field_2796": "$5,280.62"          // Update Total Cost
+};
+
+fetch(`https://api.knack.com/v1/objects/object_123/records/${recordId}`, {
+  method: 'PUT',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Knack-REST-API-Key': 'YOUR_API_KEY'
+  },
+  body: JSON.stringify(updates)
+})
+```
+
+---
+
+### 7. Delete Record
+```javascript
+const recordId = "64774b27e66b290027a4228a";
+
+fetch(`https://api.knack.com/v1/objects/object_123/records/${recordId}`, {
+  method: 'DELETE',
+  headers: {
+    'X-Knack-REST-API-Key': 'YOUR_API_KEY'
+  }
+})
+```
+
+---
+
+## Data Format Notes
+
+### Dates
+- **Format:** `MM/DD/YYYY` (e.g., `07/31/2023`)
+- **Field Examples:** `field_2234`, `field_2305`, `field_2946`
+- **100% populated** in most records
+
+### Currency/Money
+- **Format:** `$X,XXX.XX` (string with formatting)
+- **Field Examples:** `field_2796` (Total Cost), `field_3206` (another cost field)
+- **Note:** Always comes as formatted string in API response
+
+### Numbers
+- **Format:** Plain integers or decimals
+- **Field Examples:** `field_2543` (100), `field_2576` (4), `field_2580` (2023)
+- **100% populated** in key tracking fields
+
+### Yes/No Fields
+- **Values:** `"Yes"` or `"No"` (strings)
+- **Field Examples:** `field_2346`, `field_2883`
+- **100% populated** in many records
+
+### Connection Fields
+- **API Response:** Shows as HTML span with connection ID
+- **Raw Response:** Available in `field_XXXX_raw` with array of objects
+- **Example:** Media Partner reference shows as both display (HTML) and raw ID
+
+---
+
+## Connection Fields (Relationships)
+
+When a field references another table, the API returns:
+
+**Display Version** (in field_XXXX):
+```html
+<span class="650c7792090ff00027275ea3" data-kn="connection-value">Digital TV</span>
+```
+
+**Raw Version** (in field_XXXX_raw):
+```json
+[{
+  "id": "650c7792090ff00027275ea3",
+  "identifier": "Digital TV"
+}]
+```
+
+---
+
+## Field Data Completeness
+
+### 100% Populated Fields (Always Have Data)
+- `field_2305` - Key date field
+- `field_2543` - Key numeric field
+- `field_2640` - Product code
+- `field_2796` - Total cost
+- `field_2798` - Related cost
+- `field_2859` - Concatenated identifier
+- `field_2883` - Yes/No field
+- `field_2885-2892` - Status/count fields
+
+### Frequently Empty
+- `field_2310` - Optional notes
+- `field_2332` - Optional field
+- `field_2334-2337` - Optional fields
+- `field_2347` - Optional field
+- `field_2812` - Sometimes empty
+
+---
+
+## Zapier/Make Integration Tips
+
+1. **Use 100% populated fields for filtering** - They'll always have values
+2. **API Field Keys in Zapier** - When Zapier asks for "field mapping," use `field_2426`, not the display name
+3. **Dates** - Use `MM/DD/YYYY` format when setting values
+4. **Currency** - Include the $ and formatting when updating money fields
+5. **Connection fields** - Zapier will show the display version; use the ID from `_raw` for direct API calls
+
+---
+
+## n8n Workflow Example
+
+```json
+{
+  "nodes": [
+    {
+      "name": "Get IO Records",
+      "type": "http",
+      "typeVersion": 4.1,
+      "position": [250, 300],
+      "parameters": {
+        "url": "https://api.knack.com/v1/objects/object_123/records",
+        "method": "GET",
+        "headers": {
+          "X-Knack-REST-API-Key": "YOUR_API_KEY"
+        }
+      }
+    },
+    {
+      "name": "Filter Complete IOs",
+      "type": "n8n-nodes-base.itemLists",
+      "position": [450, 300],
+      "parameters": {
+        "operation": "filter",
+        "conditions": {
+          "options": [{
+            "key": "field_2254",
+            "condition": "equals",
+            "value": "Complete"
+          }]
+        }
+      }
+    }
+  ]
+}
+```
+
+---
+
+## Webhook Payload Example
+
+When Knack sends a webhook for a new/updated IO record:
+
+```json
+{
+  "timestamp": 1692086400000,
+  "action": "update",
+  "object": "insertion_order",
+  "recordId": "64774b27e66b290027a4228a",
+  "data": {
+    "field_2426": "IO-12345",
+    "field_2243": "General Motors",
+    "field_2254": "Live",
+    "field_2234": "07/01/2023",
+    "field_2796": "$2,640.31",
+    "field_2543": 100,
+    ...
+  }
+}
+```
+
+---
+
+## Rate Limiting & Performance
+
+- **Batch operations:** Use POST to create multiple records in sequence
+- **Large pulls:** Consider date filtering to limit result sets
+- **Typical response:** 10,390 total records available
+- **Fields per record:** 202 active fields in live data
+
+---
+
+## Troubleshooting
+
+| Error | Cause | Solution |
+|---|---|---|
+| `Invalid API Key` | Missing/wrong `X-Knack-REST-API-Key` | Check your API key in Knack Settings > API |
+| `Field not found` | Using display name instead of field key | Use `field_2426`, not "IO #" |
+| `400 Bad Request` | Malformed JSON or filter | Validate JSON syntax; check filter structure |
+| `404 Not Found` | Wrong object_key or record ID | Verify object exists; check record ID |
+| `Date format error` | Wrong date format in filter/update | Use `MM/DD/YYYY` format |
+
+---
+
+## Resources
+
+- **Knack API Docs:** https://docs.knack.com/docs/knack-api
+- **Your Database Field Reference:** `Knack_API_Field_Reference.xlsx`
+- **Live Field Analysis:** `IO_Product_Live_Fields.xlsx`
+- **API Base URL:** `https://api.knack.com/v1`
+
+---
+
+*Last updated: Based on analysis of 10,390 IO/Product records with 202 active fields*
