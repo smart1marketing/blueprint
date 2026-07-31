@@ -269,8 +269,8 @@ def upsert_plan(p):
                  name=excluded.name,
                  monthly_price=excluded.monthly_price,
                  yearly_price=excluded.yearly_price,
-                 bg_monthly_price=excluded.bg_monthly_price,
-                 bg_yearly_price=excluded.bg_yearly_price,
+                 bg_monthly_price=COALESCE(NULLIF(excluded.bg_monthly_price,0), plans.bg_monthly_price),
+                 bg_yearly_price=COALESCE(NULLIF(excluded.bg_yearly_price,0), plans.bg_yearly_price),
                  base_plan=excluded.base_plan,
                  hidden=excluded.hidden,
                  visible=excluded.visible,
@@ -483,6 +483,31 @@ def set_lifecycle(project_id, state):
                  cancelled_at=excluded.cancelled_at,
                  updated_at=excluded.updated_at""",
             (str(project_id), state, cancelled, now_iso()),
+        )
+
+
+def set_plan_cost(plan_id, monthly_cost):
+    """Set the platform (wholesale) cost for a plan/package. Stored in
+    bg_monthly_price, which every effective-cost calc already uses as the
+    per-site default. Preserved across catalog syncs (see upsert_plan)."""
+    with connection() as c:
+        c.execute(
+            "UPDATE plans SET bg_monthly_price=?, updated_at=? WHERE plan_id=?",
+            (monthly_cost, now_iso(), str(plan_id)),
+        )
+
+
+def set_platform_cost(project_id, cost):
+    """Set only the per-site actual platform cost override, without touching
+    any other Smart 1 metadata (used by the invoice-cost import)."""
+    with connection() as c:
+        c.execute(
+            """INSERT INTO project_meta(project_id,platform_cost,updated_at)
+               VALUES(?,?,?)
+               ON CONFLICT(project_id) DO UPDATE SET
+                 platform_cost=excluded.platform_cost,
+                 updated_at=excluded.updated_at""",
+            (str(project_id), cost, now_iso()),
         )
 
 
