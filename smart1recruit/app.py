@@ -46,6 +46,8 @@ WEBHOOK_URL = os.getenv("GHL_WEBHOOK_URL", "").strip()
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 ENABLE_PDF = os.getenv("ENABLE_PDF", "1").strip() not in ("0", "false", "False", "")
 REPORT_DIR = os.path.join(app.static_folder, "reports")
+# Booking / consultation link surfaced as the call-to-action in the report + PDF.
+BOOKING_URL = os.getenv("BOOKING_URL", "https://smart1marketing.com/free-consultation").strip()
 
 # Cloudinary storage. The library auto-reads the CLOUDINARY_URL env var; we just
 # confirm it is present so we know whether to upload or fall back to local files.
@@ -223,6 +225,22 @@ REPORT_SCHEMA = {
 }
 
 
+# Marketing-attribution fields captured from the landing page and passed through
+# to the webhook so every lead is tied to the campaign that produced it.
+TRACKING_FIELDS = [
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "gclid", "fbclid", "referrer", "page_url",
+]
+
+# Hidden honeypot field name. Real users never see or fill it; bots do.
+HONEYPOT_FIELD = "website_hp"
+
+
+def is_spam(data: dict) -> bool:
+    """True when the hidden honeypot field was filled (bot submission)."""
+    return bool(str(data.get(HONEYPOT_FIELD, "")).strip())
+
+
 def clean_payload(data: dict) -> dict:
     fields = [
         "company_name",
@@ -238,6 +256,11 @@ def clean_payload(data: dict) -> dict:
         "notes",
     ]
     cleaned = {k: str(data.get(k, "")).strip()[:1500] for k in fields}
+    # Pass through marketing attribution fields (best-effort; never required).
+    for k in TRACKING_FIELDS:
+        val = str(data.get(k, "")).strip()[:600]
+        if val:
+            cleaned[k] = val
     if not re.fullmatch(r"\d{5}(-\d{4})?", cleaned["company_zip"]):
         raise ValueError("A valid U.S. ZIP code is required.")
     return cleaned
@@ -417,6 +440,22 @@ def build_report_pdf(report: dict, company: str) -> str:
         story.append(Paragraph("Your Hiring Opportunity", st["h2"]))
         story.append(Paragraph(report.get("market_opportunity", ""), st["body"]))
 
+        # Call-to-action + market-exclusivity nudge
+        cta = Table([[Paragraph(
+            f"<b>Ready to activate this plan?</b> We work with only one employer per market on this program — "
+            f"claim yours before a competitor does. Book your strategy call: "
+            f"<b>{BOOKING_URL}</b>", st["body"])]], colWidths=[7.3 * inch])
+        cta.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), AQUA),
+            ("BOX", (0, 0), (-1, -1), 0.5, BLUE),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ]))
+        story.append(Spacer(1, 6))
+        story.append(cta)
+
         story.append(Paragraph("Recommended Package", st["h2"]))
         story.append(Paragraph(f"<b>{rp.get('monthly_investment','')} — {rp.get('package_name','')}</b>", st["body"]))
         story.append(Paragraph(rp.get("description", ""), st["small"]))
@@ -569,10 +608,31 @@ def health():
     return jsonify({"status": "ok"})
 
 
+@app.post("/api/lead")
+def lead():
+    """Progressive lead capture. The landing page calls this the instant the form
+    is submitted — BEFORE the (slower) AI report call — so a lead lands in the CRM
+    even if generation is slow, fails, or the visitor closes the tab. GoHighLevel
+    upserts the contact by email and later updates it when '/api/analyze' fires
+    'completed'."""
+    data = request.get_json(silent=True) or {}
+    if is_spam(data):
+        return jsonify({"ok": False, "error": "blocked"}), 400
+    try:
+        payload = clean_payload(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    send_webhook(payload, None, "new_lead")
+    return jsonify({"ok": True})
+
+
 @app.post("/api/analyze")
 def analyze():
     try:
-        payload = clean_payload(request.get_json(silent=True) or {})
+        data = request.get_json(silent=True) or {}
+        if is_spam(data):
+            return jsonify({"ok": False, "error": "blocked"}), 400
+        payload = clean_payload(data)
         report = generate_report(payload)
         base_url = PUBLIC_BASE_URL or request.url_root
         company = payload.get("company_name", "Company")

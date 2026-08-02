@@ -97,6 +97,22 @@ ephemeral, so Cloudinary is strongly recommended for durable links. Set
 `CLOUDINARY_URL` format (copy the "API Environment variable" from your
 Cloudinary dashboard): `cloudinary://<api_key>:<api_secret>@<cloud_name>`.
 
+## Conversion features (built for close rate)
+
+- **Progressive lead capture** — the landing page posts to `POST /api/lead` the
+  instant the form is submitted, *before* the slower AI report call. The contact
+  lands in GoHighLevel with `report_status = new_lead` even if generation is slow,
+  fails, or the visitor closes the tab. `POST /api/analyze` later updates the same
+  contact with `report_status = completed` (GHL upserts by email).
+- **Marketing attribution** — UTM params, `gclid`/`fbclid`, referrer, and the
+  landing-page URL are captured on page load and passed through to the webhook on
+  every lead, so each contact is tied to the campaign that produced it.
+- **Spam honeypot** — a hidden `website_hp` field blocks bot submissions before
+  they hit OpenAI or the CRM.
+- **In-report call-to-action** — the on-screen report and the PDF both include a
+  "Book Your Strategy Call" CTA (to `BOOKING_URL`) plus a one-employer-per-market
+  exclusivity nudge.
+
 ## Smart 1 Suite fields
 
 Recommended custom fields:
