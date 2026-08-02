@@ -42,15 +42,52 @@ files to keep in sync. This keeps the form reliable when embedded in the Smart 1
 
 - **Webhook env var standardized:** `GHL_WEBHOOK_URL` (replaces `SMART1_WEBHOOK_URL`).
 - **PDF storage moved to Cloudinary:** the PDF is rendered in memory and uploaded to
-  Cloudinary using `CLOUDINARY_URL`. The returned `secure_url` is sent to GHL as
-  `report_pdf_url`. If `CLOUDINARY_URL` is not set, it falls back to writing
-  `static/reports/` (local dev only).
-- **Report naming:** PDFs are stored under the `REPORT_NAME` folder/prefix
-  (default `restaurant-market-report`) as `restaurant-market-report/<slug>-<timestamp>.pdf`,
-  so each lead's report is unique and grouped together.
-- **Embed mode:** loading the tool with `?embed=1` hides the hero (headline + intro)
-  so it drops straight into the form when embedded on the landing page, and posts
-  `s1-report-ready` to the parent so the page's branded loader clears immediately.
+  Cloudinary using `CLOUDINARY_URL`. The `secure_url` is sent to GHL as `report_pdf_url`.
+  Uploaded as an `image`/`pdf` asset by default (inline preview + thumbnails); set
+  `PDF_RESOURCE_TYPE=raw` if your account restricts image-PDF delivery. Falls back to
+  `static/reports/` only if Cloudinary is not configured.
+- **Report naming:** PDFs are grouped under the `REPORT_NAME` prefix (default
+  `restaurant-market-report`), unique per lead.
+- **Embed mode:** `?embed=1` hides the hero and posts `s1-report-ready` to the parent so
+  the landing page's branded loader clears immediately.
+
+### New in this release (product/process hardening)
+
+- **Two-POST lead capture.** A partial-lead webhook (`report_status: "new"`) fires the
+  moment a valid email is entered or the form is submitted (`/api/lead`), so the lead is
+  saved even if OpenAI fails or the visitor leaves. The `completed` webhook follows with
+  the report + PDF. Both carry the same `lead_id` so GHL can correlate/update one opportunity.
+- **Faster on-screen report.** `/api/analyze` returns the interactive report as soon as the
+  model responds; PDF render, Cloudinary upload, JSON persistence, and the completed webhook
+  run in a background thread.
+- **Abuse / cost protection.** Hidden honeypot field (`company_website`), a minimum
+  fill-time check (`MIN_FILL_SECONDS`), and per-IP rate limiting (`RATE_LIMIT_MAX` /
+  `RATE_LIMIT_WINDOW_SEC`) guard the paid OpenAI endpoint.
+- **OpenAI retry.** One automatic retry on a transient API error or malformed JSON.
+- **Single source of truth for packages.** Prices live only in `PACKAGES` in `app.py` and
+  are injected into the template — the front-end grid can no longer drift.
+- **CORS.** `ALLOWED_ORIGINS` is now honored (`*` or a comma-separated allow-list).
+- **Shareable report links.** Each report is persisted to Cloudinary and served read-only at
+  `/r/<id>`; that URL is sent to GHL as `report_view_url` (needs `PUBLIC_BASE_URL` set).
+- **Illustrative trade-area map.** The report now includes a schematic center-point + priority
+  pin diagram (clearly labeled not-to-scale; no paid map APIs).
+- **Funnel analytics.** `dataLayer` events push `s1_form_start`, `s1_lead_captured`,
+  `s1_report_requested`, `s1_report_viewed`, and `s1_report_error` for GTM.
+- **Optional PDF logo.** Set `PDF_LOGO_URL` to draw a logo at the top of the PDF.
+
+### Endpoints
+
+| Route | Purpose |
+|---|---|
+| `GET /` | The multi-step form |
+| `POST /api/lead` | Partial-lead capture (fires `new` webhook) |
+| `POST /api/analyze` | Generate report; returns immediately, finalizes in background |
+| `GET /r/<id>` | Read-only shared report view |
+| `GET /api/report/<id>` | JSON for a stored report (used by `/r/<id>`) |
+| `GET /health` | Health check |
+
+> **Auto-email the PDF to the lead** is best done as a GHL workflow off the
+> `report_pdf_url` field, not in this app.
 
 ## Package tiers (market-based)
 
@@ -88,11 +125,16 @@ inside `app.py` — edit the prices/names there, then update the matching `PACKA
 | `OPENAI_API_KEY` | Yes | OpenAI key (secret) |
 | `OPENAI_MODEL` | No | Defaults to `gpt-4.1-mini` |
 | `GHL_WEBHOOK_URL` | Yes | GoHighLevel inbound-webhook URL |
-| `CLOUDINARY_URL` | Yes | `cloudinary://<key>:<secret>@<cloud_name>` — stores the PDFs |
+| `CLOUDINARY_URL` | Yes | `cloudinary://<key>:<secret>@<cloud_name>` — stores PDFs + report JSON |
 | `REPORT_NAME` | No | Cloudinary folder/prefix; default `restaurant-market-report` |
 | `ENABLE_PDF` | No | `1` (default) or `0` to disable PDF generation |
-| `ALLOWED_ORIGINS` | No | CORS; default `*` |
-| `PUBLIC_BASE_URL` | No | Fallback public URL only if Cloudinary is not configured |
+| `PDF_RESOURCE_TYPE` | No | `image` (default, inline preview) or `raw` |
+| `PDF_LOGO_URL` | No | Optional logo drawn at top of the PDF |
+| `ALLOWED_ORIGINS` | No | CORS; `*` (default) or comma-separated allow-list |
+| `MIN_FILL_SECONDS` | No | Min seconds on form before submit is trusted; default `3` |
+| `RATE_LIMIT_MAX` | No | Max requests per IP per window; default `12` |
+| `RATE_LIMIT_WINDOW_SEC` | No | Rate-limit window seconds; default `60` |
+| `PUBLIC_BASE_URL` | Recommended | Powers shareable `/r/<id>` links; also PDF fallback URL |
 
 > **Removed:** `SMART1_WEBHOOK_URL` — replace it with `GHL_WEBHOOK_URL`.
 

@@ -21,8 +21,19 @@ services:
         value: restaurant-market-report
       - key: ENABLE_PDF
         value: "1"
+      - key: PDF_RESOURCE_TYPE
+        value: image
+      - key: PDF_LOGO_URL
+        sync: false
       - key: ALLOWED_ORIGINS
         value: "*"
-      # Optional: only used as a fallback public URL when CLOUDINARY_URL is not set.
+      - key: MIN_FILL_SECONDS
+        value: "3"
+      - key: RATE_LIMIT_MAX
+        value: "12"
+      - key: RATE_LIMIT_WINDOW_SEC
+        value: "60"
+      # PUBLIC_BASE_URL powers shareable /r/<id> report links (and the local PDF
+      # fallback). Set it to your live Render URL, e.g. https://smart1restaurant.onrender.com
       - key: PUBLIC_BASE_URL
         sync: false

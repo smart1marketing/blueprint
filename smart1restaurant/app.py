@@ -2,7 +2,10 @@ import io
 import json
 import os
 import re
+import threading
 import time
+import uuid
+from collections import defaultdict, deque
 from typing import Any
 
 import requests
@@ -19,6 +22,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
+    Image,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -31,18 +35,56 @@ load_dotenv()
 app = Flask(__name__)
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+
 # Standardized on GHL_WEBHOOK_URL (was SMART1_WEBHOOK_URL).
 WEBHOOK_URL = os.getenv("GHL_WEBHOOK_URL", "").strip()
-# Cloudinary is the primary store for generated PDFs. The Cloudinary SDK reads
-# CLOUDINARY_URL from the environment automatically; we only check presence here.
+
+# Cloudinary stores the generated PDFs and (for shareable links) report JSON.
+# The SDK reads CLOUDINARY_URL from the environment automatically.
 CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "").strip()
-# Base name / folder used for the report public_id in Cloudinary.
 REPORT_NAME = os.getenv("REPORT_NAME", "restaurant-market-report").strip().strip("/") or "restaurant-market-report"
-# Absolute base used ONLY as a fallback public URL when Cloudinary is not configured
-# (e.g. local dev). If empty, the app derives it from the incoming request.
+REPORT_JSON_NAME = f"{REPORT_NAME}-json"
+# "image" delivers PDFs inline in the browser (and enables thumbnails); "raw" is a
+# safe fallback if your Cloudinary account restricts PDF delivery for image assets.
+PDF_RESOURCE_TYPE = os.getenv("PDF_RESOURCE_TYPE", "image").strip().lower()
+if PDF_RESOURCE_TYPE not in ("image", "raw"):
+    PDF_RESOURCE_TYPE = "image"
+# Optional logo drawn at the top of the PDF (URL to a PNG/JPG on a dark-safe background).
+PDF_LOGO_URL = os.getenv("PDF_LOGO_URL", "").strip()
+
+# Absolute base for building shareable report links and the fallback PDF URL. If empty,
+# the app derives it from the incoming request.
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
 ENABLE_PDF = os.getenv("ENABLE_PDF", "1").strip() not in ("0", "false", "False", "")
 REPORT_DIR = os.path.join(app.static_folder, "reports")
+
+# CORS — the tool is embedded same-origin via iframe, but ALLOWED_ORIGINS is honored
+# so the API can be called from an explicit allow-list if ever needed.
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").strip()
+
+# Basic abuse / cost protection.
+HONEYPOT_FIELD = "company_website"          # hidden in the form; humans leave it blank
+MIN_FILL_SECONDS = int(os.getenv("MIN_FILL_SECONDS", "3"))
+RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "12"))
+RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
+_rate_hits: dict = defaultdict(deque)
+_rate_lock = threading.Lock()
+
+# Single source of truth for the package menu. The AI prompt and the front-end grid
+# both derive from this, so prices never drift between the two.
+PACKAGES = [
+    {"name": "Corner Table", "price": "$1,500/month",
+     "blurb": "Entry trigger-driven presence for a single location or small local market."},
+    {"name": "Local Favorite", "price": "$3,000/month",
+     "blurb": "Balanced coverage across lunch, dinner, and delivery dayparts."},
+    {"name": "Regional Draw", "price": "$5,500/month",
+     "blurb": "Heavier push across a competitive market or multiple locations."},
+    {"name": "Market Leader", "price": "$8,500/month",
+     "blurb": "Maximum share of voice across a large or highly competitive metro."},
+]
+PACKAGE_MENU_STR = "\n".join(f"    * {p['price']} — {p['name']}" for p in PACKAGES)
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 SYSTEM_PROMPT = """
 You are the Smart 1 Marketing Restaurant Market Intelligence Architect.
@@ -222,6 +264,44 @@ REPORT_SCHEMA = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Request helpers: client IP, rate limiting, honeypot, validation
+# ---------------------------------------------------------------------------
+
+def _client_ip() -> str:
+    fwd = request.headers.get("X-Forwarded-For", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def rate_ok(ip: str) -> bool:
+    now = time.time()
+    with _rate_lock:
+        dq = _rate_hits[ip]
+        while dq and now - dq[0] > RATE_LIMIT_WINDOW:
+            dq.popleft()
+        if len(dq) >= RATE_LIMIT_MAX:
+            return False
+        dq.append(now)
+        return True
+
+
+def is_bot(data: dict) -> bool:
+    """Honeypot + minimum fill-time check. Returns True for likely bots."""
+    if str(data.get(HONEYPOT_FIELD, "")).strip():
+        return True
+    started = data.get("form_started_at")
+    try:
+        if started:
+            elapsed = time.time() - (float(started) / 1000.0)
+            if 0 <= elapsed < MIN_FILL_SECONDS:
+                return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
 def clean_payload(data: dict) -> dict:
     fields = [
         "restaurant_name",
@@ -239,10 +319,20 @@ def clean_payload(data: dict) -> dict:
     cleaned = {k: str(data.get(k, "")).strip()[:1500] for k in fields}
     if not re.fullmatch(r"\d{5}(-\d{4})?", cleaned["restaurant_zip"]):
         raise ValueError("A valid U.S. ZIP code is required.")
+    # lead_id lets GHL correlate the partial lead POST with the completed report POST.
+    cleaned["lead_id"] = str(data.get("lead_id", "")).strip()[:64] or uuid.uuid4().hex[:16]
     return cleaned
 
 
-def generate_report(payload: dict) -> Any:
+def _valid_contact(payload: dict) -> bool:
+    return bool(payload.get("contact_name")) and bool(EMAIL_RE.match(payload.get("contact_email", "")))
+
+
+# ---------------------------------------------------------------------------
+# OpenAI report generation (with one retry)
+# ---------------------------------------------------------------------------
+
+def _call_openai(payload: dict) -> Any:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not configured.")
@@ -272,10 +362,7 @@ def generate_report(payload: dict) -> Any:
         "description of what that level buys. Pick the tier based on market size, competitive density, and "
         "the number of daypart/occasion opportunities (lunch, happy hour, dinner, delivery, events, catering).\n"
         "  SMART 1 PACKAGE MENU (use these, do not invent prices):\n"
-        "    * $1,500/month — Corner Table\n"
-        "    * $3,000/month — Local Favorite\n"
-        "    * $5,500/month — Regional Draw\n"
-        "    * $8,500/month — Market Leader\n"
+        f"{PACKAGE_MENU_STR}\n"
         "- media_channels: ALLOWED channels/data only. ALWAYS include 'In-Market Diner & Foot-Traffic Audience "
         "Data' as one of the chips (we layer third-party in-market dining and delivery-app-user data across the "
         "plan). Then choose from: geofencing offices/residential/venues, location look-back retargeting, "
@@ -321,10 +408,77 @@ def generate_report(payload: dict) -> Any:
     return json.loads(text)
 
 
+def generate_report(payload: dict) -> Any:
+    """Generate the report, retrying once on transient API or JSON-parse failures."""
+    try:
+        return _call_openai(payload)
+    except Exception:
+        app.logger.warning("OpenAI report attempt 1 failed; retrying once.", exc_info=True)
+        time.sleep(1.2)
+        return _call_openai(payload)
+
+
 # ---------------------------------------------------------------------------
-# PDF report — reportlab, pure Python. The PDF is rendered to memory and stored
-# in Cloudinary (CLOUDINARY_URL); the returned secure_url is sent to GHL in the
-# webhook as report_pdf_url. Guarded so any failure never blocks the lead/webhook.
+# Cloudinary helpers
+# ---------------------------------------------------------------------------
+
+def _cloud_name() -> str:
+    m = re.search(r"@([^/?\s]+)", CLOUDINARY_URL)
+    return m.group(1) if m else ""
+
+
+def _cloudinary_upload(data: bytes, public_id: str, resource_type: str, fmt: str = "") -> dict:
+    import cloudinary
+    import cloudinary.uploader
+
+    cloudinary.config(secure=True)  # reads CLOUDINARY_URL from env
+    kwargs = dict(
+        resource_type=resource_type,
+        public_id=public_id,
+        overwrite=True,
+        unique_filename=False,
+        use_filename=False,
+    )
+    if fmt:
+        kwargs["format"] = fmt
+    return cloudinary.uploader.upload(io.BytesIO(data), **kwargs)
+
+
+def _store_report_json(report: dict, report_id: str) -> bool:
+    """Persist the report JSON in Cloudinary so /r/<id> can serve it later."""
+    if not CLOUDINARY_URL:
+        return False
+    try:
+        _cloudinary_upload(
+            json.dumps(report).encode("utf-8"),
+            public_id=f"{REPORT_JSON_NAME}/{report_id}",
+            resource_type="raw",
+            fmt="json",
+        )
+        return True
+    except Exception:
+        app.logger.exception("Report JSON store failed")
+        return False
+
+
+def _fetch_report_json(report_id: str):
+    if not CLOUDINARY_URL:
+        return None
+    cloud = _cloud_name()
+    if not cloud:
+        return None
+    url = f"https://res.cloudinary.com/{cloud}/raw/upload/{REPORT_JSON_NAME}/{report_id}.json"
+    try:
+        r = requests.get(url, timeout=8)
+        if r.ok:
+            return r.json()
+    except requests.RequestException:
+        app.logger.exception("Report JSON fetch failed")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# PDF report — reportlab, pure Python. Rendered in memory, stored in Cloudinary.
 # ---------------------------------------------------------------------------
 
 NAVY = colors.HexColor("#0a2240")
@@ -345,30 +499,45 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (text or "report").lower()).strip("-") or "report"
 
 
-def _upload_pdf_to_cloudinary(pdf_bytes: bytes, public_id_base: str) -> str:
-    """Upload the PDF bytes to Cloudinary and return the secure_url ('' on failure
-    or when CLOUDINARY_URL is not configured). Files are grouped under REPORT_NAME."""
-    if not CLOUDINARY_URL:
-        return ""
-    try:
-        import cloudinary
-        import cloudinary.uploader
+def _pdf_styles():
+    ss = getSampleStyleSheet()
+    body = ParagraphStyle("s1body", parent=ss["Normal"], fontName="Helvetica",
+                          fontSize=9.5, leading=14, textColor=colors.HexColor("#25364b"))
+    h2 = ParagraphStyle("s1h2", parent=ss["Heading2"], fontName="Helvetica-Bold",
+                        fontSize=13, leading=16, textColor=NAVY, spaceBefore=16, spaceAfter=6)
+    title = ParagraphStyle("s1title", parent=ss["Title"], fontName="Helvetica-Bold",
+                           fontSize=22, leading=25, textColor=NAVY, alignment=TA_LEFT, spaceAfter=4)
+    eyebrow = ParagraphStyle("s1eye", parent=body, fontName="Helvetica-Bold",
+                             fontSize=8, textColor=BLUE, spaceAfter=2)
+    small = ParagraphStyle("s1small", parent=body, fontSize=8, textColor=MUTED, leading=11)
+    cell = ParagraphStyle("s1cell", parent=body, fontSize=8, leading=10.5)
+    cellw = ParagraphStyle("s1cellw", parent=cell, textColor=colors.white)
+    return dict(body=body, h2=h2, title=title, eyebrow=eyebrow, small=small, cell=cell, cellw=cellw)
 
-        # The SDK reads CLOUDINARY_URL from the environment automatically.
-        cloudinary.config(secure=True)
-        public_id = f"{REPORT_NAME}/{public_id_base}.pdf"
-        result = cloudinary.uploader.upload(
-            io.BytesIO(pdf_bytes),
-            resource_type="raw",   # PDFs upload reliably as raw and deliver a direct URL
-            public_id=public_id,
-            overwrite=False,
-            unique_filename=False,
-            use_filename=False,
-        )
-        return result.get("secure_url", "") or ""
+
+_LOGO_CACHE: dict = {}
+
+
+def _logo_flowable():
+    """Return a reportlab Image for the PDF logo (cached) or None."""
+    if not PDF_LOGO_URL:
+        return None
+    try:
+        if "bytes" not in _LOGO_CACHE:
+            resp = requests.get(PDF_LOGO_URL, timeout=8)
+            _LOGO_CACHE["bytes"] = resp.content if resp.ok else b""
+        raw = _LOGO_CACHE.get("bytes") or b""
+        if not raw:
+            return None
+        img = Image(io.BytesIO(raw))
+        # scale to ~150px wide keeping aspect
+        ratio = (img.imageHeight or 1) / (img.imageWidth or 1)
+        img.drawWidth = 150
+        img.drawHeight = 150 * ratio
+        return img
     except Exception:
-        app.logger.exception("Cloudinary upload failed")
-        return ""
+        app.logger.exception("PDF logo load failed")
+        return None
 
 
 def build_report_pdf(report: dict, restaurant: str, base_url: str) -> str:
@@ -387,6 +556,10 @@ def build_report_pdf(report: dict, restaurant: str, base_url: str) -> str:
         public_id_base = f"{_slug(restaurant)}-{int(time.time())}"
 
         story = []
+        logo = _logo_flowable()
+        if logo is not None:
+            story.append(logo)
+            story.append(Spacer(1, 8))
         story.append(Paragraph("SMART 1 MARKETING &nbsp;|&nbsp; RESTAURANT MARKET REPORT", st["eyebrow"]))
         story.append(Paragraph(restaurant or "Market Report", st["title"]))
         story.append(Paragraph(report.get("market_summary", ""), st["body"]))
@@ -487,9 +660,19 @@ def build_report_pdf(report: dict, restaurant: str, base_url: str) -> str:
         pdf_bytes = buffer.getvalue()
 
         # Primary path: store in Cloudinary and return its hosted URL.
-        cloud_url = _upload_pdf_to_cloudinary(pdf_bytes, public_id_base)
-        if cloud_url:
-            return cloud_url
+        if CLOUDINARY_URL:
+            try:
+                if PDF_RESOURCE_TYPE == "image":
+                    res = _cloudinary_upload(pdf_bytes, public_id=f"{REPORT_NAME}/{public_id_base}",
+                                             resource_type="image", fmt="pdf")
+                else:
+                    res = _cloudinary_upload(pdf_bytes, public_id=f"{REPORT_NAME}/{public_id_base}.pdf",
+                                             resource_type="raw")
+                url = res.get("secure_url", "") or ""
+                if url:
+                    return url
+            except Exception:
+                app.logger.exception("Cloudinary PDF upload failed; using local fallback")
 
         # Fallback (local dev / Cloudinary not configured): write to static/reports.
         os.makedirs(REPORT_DIR, exist_ok=True)
@@ -503,23 +686,12 @@ def build_report_pdf(report: dict, restaurant: str, base_url: str) -> str:
         return ""
 
 
-def _pdf_styles():
-    ss = getSampleStyleSheet()
-    body = ParagraphStyle("s1body", parent=ss["Normal"], fontName="Helvetica",
-                          fontSize=9.5, leading=14, textColor=colors.HexColor("#25364b"))
-    h2 = ParagraphStyle("s1h2", parent=ss["Heading2"], fontName="Helvetica-Bold",
-                        fontSize=13, leading=16, textColor=NAVY, spaceBefore=16, spaceAfter=6)
-    title = ParagraphStyle("s1title", parent=ss["Title"], fontName="Helvetica-Bold",
-                           fontSize=22, leading=25, textColor=NAVY, alignment=TA_LEFT, spaceAfter=4)
-    eyebrow = ParagraphStyle("s1eye", parent=body, fontName="Helvetica-Bold",
-                             fontSize=8, textColor=BLUE, spaceAfter=2)
-    small = ParagraphStyle("s1small", parent=body, fontSize=8, textColor=MUTED, leading=11)
-    cell = ParagraphStyle("s1cell", parent=body, fontSize=8, leading=10.5)
-    cellw = ParagraphStyle("s1cellw", parent=cell, textColor=colors.white)
-    return dict(body=body, h2=h2, title=title, eyebrow=eyebrow, small=small, cell=cell, cellw=cellw)
+# ---------------------------------------------------------------------------
+# Webhook
+# ---------------------------------------------------------------------------
 
-
-def send_webhook(payload: dict, report: Any, status: str, pdf_url: str = "") -> None:
+def send_webhook(payload: dict, report: Any, status: str, pdf_url: str = "",
+                 report_view_url: str = "") -> None:
     if not WEBHOOK_URL:
         return
     report = report or {}
@@ -527,8 +699,9 @@ def send_webhook(payload: dict, report: Any, status: str, pdf_url: str = "") -> 
     rp = report.get("recommended_package", {}) or {}
     monthly = _money_to_int(rp.get("monthly_investment", ""))
     body = {
-        # --- Contact / lead fields (already sent) ---
+        # --- Contact / lead fields ---
         **payload,
+        "lead_id": payload.get("lead_id", ""),
         "source": "Smart 1 Restaurant Market Intelligence",
         "report_status": status,
         # --- Opportunity fields ---
@@ -543,9 +716,10 @@ def send_webhook(payload: dict, report: Any, status: str, pdf_url: str = "") -> 
         "est_households": mp.get("estimated_frequent_diner_households_base"),
         "estimated_frequent_diner_households_base": mp.get("estimated_frequent_diner_households_base"),
         "demand_triggers": ", ".join(report.get("demand_triggers", []) or []),
-        # Cloudinary-hosted PDF URL — map to {{contact.report_pdf_url}} in GHL.
+        # Cloudinary-hosted PDF + shareable interactive report link.
         "report_pdf_url": pdf_url,
-        "report_json": json.dumps(report, separators=(",", ":"))[:60000],
+        "report_view_url": report_view_url,
+        "report_json": json.dumps(report, separators=(",", ":"))[:60000] if report else "",
     }
     try:
         requests.post(WEBHOOK_URL, json=body, timeout=12)
@@ -553,9 +727,74 @@ def send_webhook(payload: dict, report: Any, status: str, pdf_url: str = "") -> 
         app.logger.exception("Webhook delivery failed")
 
 
+def _send_webhook_async(*args, **kwargs) -> None:
+    threading.Thread(target=send_webhook, args=args, kwargs=kwargs, daemon=True).start()
+
+
+def _finalize_report(payload: dict, report: dict, base_url: str, report_id: str) -> None:
+    """Background work after the interactive report is returned to the browser:
+    build+store the PDF, persist the report JSON, and send the completed webhook."""
+    try:
+        pdf_url = build_report_pdf(report, payload.get("restaurant_name", "Market Report"), base_url)
+        # Persist the restaurant name inside the report so /r/<id> can title the shared view.
+        report["_restaurant"] = payload.get("restaurant_name", "")
+        stored = _store_report_json(report, report_id)
+        base = (PUBLIC_BASE_URL or base_url or "").rstrip("/")
+        report_view_url = f"{base}/r/{report_id}" if (stored and base) else ""
+        send_webhook(payload, report, "completed", pdf_url, report_view_url)
+    except Exception:
+        app.logger.exception("Report finalize failed")
+
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+
+@app.after_request
+def _apply_cors(resp):
+    origin = request.headers.get("Origin")
+    if ALLOWED_ORIGINS == "*":
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+    elif origin and origin in [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Vary"] = "Origin"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template(
+        "index.html",
+        packages_json=json.dumps(PACKAGES),
+        honeypot_field=HONEYPOT_FIELD,
+        report_view_id="",
+    )
+
+
+@app.get("/r/<rid>")
+def shared_report(rid):
+    rid = re.sub(r"[^a-zA-Z0-9]", "", rid)[:32]
+    return render_template(
+        "index.html",
+        packages_json=json.dumps(PACKAGES),
+        honeypot_field=HONEYPOT_FIELD,
+        report_view_id=rid,
+    )
+
+
+@app.get("/api/report/<rid>")
+def api_report(rid):
+    rid = re.sub(r"[^a-zA-Z0-9]", "", rid)[:32]
+    report = _fetch_report_json(rid)
+    if report is None:
+        return jsonify({"ok": False, "error": "Report not found."}), 404
+    return jsonify({"ok": True, "report": report})
 
 
 @app.get("/health")
@@ -563,28 +802,64 @@ def health():
     return jsonify({"status": "ok"})
 
 
-@app.post("/api/analyze")
-def analyze():
+@app.route("/api/lead", methods=["POST", "OPTIONS"])
+def api_lead():
+    """Fire a partial-lead webhook the moment the form is submitted, so the lead is
+    captured even if report generation fails or the visitor leaves."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    if is_bot(data):
+        return jsonify({"ok": True})  # silently accept, do nothing
+    if not rate_ok(_client_ip()):
+        return jsonify({"ok": False, "error": "Too many requests."}), 429
     try:
-        payload = clean_payload(request.get_json(silent=True) or {})
+        payload = clean_payload(data)
+    except ValueError:
+        # Don't hard-fail lead capture on a bad ZIP; keep what we can.
+        payload = {k: str(data.get(k, "")).strip()[:1500] for k in
+                   ("restaurant_name", "restaurant_zip", "contact_name", "contact_email", "contact_phone")}
+        payload["lead_id"] = str(data.get("lead_id", "")).strip()[:64] or uuid.uuid4().hex[:16]
+    if not _valid_contact(payload):
+        return jsonify({"ok": True, "lead_id": payload.get("lead_id", "")})
+    _send_webhook_async(payload, None, "new")
+    return jsonify({"ok": True, "lead_id": payload.get("lead_id", "")})
+
+
+@app.route("/api/analyze", methods=["POST", "OPTIONS"])
+def analyze():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    if is_bot(data):
+        return jsonify({"ok": False, "error": "Request rejected."}), 400
+    if not rate_ok(_client_ip()):
+        return jsonify({"ok": False, "error": "Too many requests. Please wait a minute and try again."}), 429
+    try:
+        payload = clean_payload(data)
         report = generate_report(payload)
+        report_id = uuid.uuid4().hex[:16]
         base_url = PUBLIC_BASE_URL or request.url_root
-        pdf_url = build_report_pdf(report, payload.get("restaurant_name", "Market Report"), base_url)
-        send_webhook(payload, report, "completed", pdf_url)
-        return jsonify({"ok": True, "report": report, "report_pdf_url": pdf_url})
+        # Return the interactive report to the browser immediately; do the heavy
+        # PDF/Cloudinary/webhook work in the background.
+        threading.Thread(target=_finalize_report,
+                         args=(payload, report, base_url, report_id), daemon=True).start()
+        return jsonify({"ok": True, "report": report, "report_id": report_id})
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception as exc:
         app.logger.exception("Analysis failed")
+        # Still record the failed lead so nothing is lost.
         try:
-            send_webhook(clean_payload(request.get_json(silent=True) or {}), None, "failed")
+            fail_payload = clean_payload(data)
+            _send_webhook_async(fail_payload, None, "failed")
         except Exception:
             pass
         return (
             jsonify(
                 {
                     "ok": False,
-                    "error": "The report could not be generated. Check the server configuration and try again.",
+                    "error": "The report could not be generated. Please try again.",
                     "detail": f"{type(exc).__name__}: {exc}",
                 }
             ),
