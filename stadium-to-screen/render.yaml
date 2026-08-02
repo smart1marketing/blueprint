@@ -18,3 +18,19 @@ services:
         sync: false
       - key: ALLOWED_ORIGIN
         value: "*"
+      - key: ADMIN_TOKEN
+        sync: false   # token to view the /leads dashboard
+      - key: NOTIFY_WEBHOOK_URL
+        sync: false   # instant rep notification (Slack/generic)
+      - key: SMTP_URL
+        sync: false   # auto-email prospect their PDF
+      - key: MAIL_FROM
+        sync: false
+      - key: REP_NAME
+        sync: false
+      - key: REP_EMAIL
+        sync: false
+      - key: REP_PHONE
+        sync: false
+      - key: CALENDAR_URL
+        sync: false   # "Book a strategy call" link

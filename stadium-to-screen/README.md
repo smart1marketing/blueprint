@@ -58,6 +58,34 @@ isn't stored; no GHL URL → lead isn't forwarded. `/api/health` shows what's li
    `OPENAI_API_KEY`, `GHL_WEBHOOK_URL`, `CLOUDINARY_URL`.
 4. Deploy. Check `/api/health` → `ai/cloudinary/ghl` should be `true`.
 
+## Leads dashboard (outside GHL)
+
+Every captured lead is also stored (mirrored to a Cloudinary raw JSON file so it
+survives restarts) and viewable at **`/leads`** — a private page listing all leads
+with contact + proposal detail, PDF links, search, and CSV export.
+
+- Set **`ADMIN_TOKEN`** in Render to a long random string, then open
+  `https://<your-app>.onrender.com/leads` and enter that token.
+- Without `ADMIN_TOKEN` the dashboard and its API are disabled (returns 503) so
+  the PII is never exposed by default.
+- The `/api/leads` endpoint requires the token via the `x-admin-token` header.
+- If `CLOUDINARY_URL` is missing, leads are kept in memory only (reset on restart)
+  — the dashboard shows a warning in that case.
+
+> This is a lightweight token gate for an internal view. For stronger security or
+> higher volume, move lead storage to a database and put SSO in front of `/leads`.
+
+## Conversion + reliability features
+
+- **Estimates shown as ranges** (±12%) on the proposal and PDF — no false precision.
+- **Book a strategy call** button appears on unlock when `CALENDAR_URL` is set (server also emails/attaches the PDF).
+- **Auto-email the prospect** their PDF via `SMTP_URL` + `MAIL_FROM` (skipped gracefully if unset).
+- **Instant rep notification** to Slack or any webhook via `NOTIFY_WEBHOOK_URL`.
+- **Abuse protection:** hidden honeypot field + in-memory rate limits (`/api/lead` 8 / 10 min, `/api/recommendations` 30 / 10 min per IP).
+- **Cold-start UX:** the widget shows a "waking up the server…" message on slow first loads. For a true fix, point an uptime pinger (UptimeRobot / cron-job.org) at `/api/health` every ~10 min.
+- **Funnel analytics:** GTM `dataLayer` events fire on `proposal_built`, `unlock_started`, `lead_submitted`, `report_downloaded`, `book_call_clicked`.
+- **Dashboard analytics:** `/leads` shows most-requested teams, package breakdown, and a date-range filter.
+
 ## Files
 
 ```
