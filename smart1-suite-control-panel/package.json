@@ -1,0 +1,17 @@
+{
+  "name": "smart1-suite-control-panel",
+  "version": "1.0.0",
+  "description": "Simplified control panel for creating, looking up, and deleting Smart 1 Suite (GoHighLevel) sub-accounts.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2"
+  },
+  "license": "UNLICENSED"
+}

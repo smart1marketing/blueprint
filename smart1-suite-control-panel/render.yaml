@@ -1,0 +1,26 @@
+# Render Blueprint — deploys this repo as a Web Service.
+# In Render: New + > Blueprint, point it at your GitHub repo, then fill in
+# the environment variables marked sync:false in the dashboard.
+services:
+  - type: web
+    name: smart1-suite-control-panel
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GHL_PRIVATE_TOKEN
+        sync: false          # Your GHL Private Integration token
+      - key: GHL_COMPANY_ID
+        sync: false          # Your agency company ID
+      - key: PANEL_PASSWORD
+        sync: false          # Shared password to unlock the panel
+      - key: SESSION_SECRET
+        generateValue: true  # Render generates a random secret for you
+      - key: BRANDFETCH_API_KEY
+        sync: false          # Optional — enables brand auto-fill on the create form
+      - key: GHL_API_VERSION
+        value: "2021-07-28"
