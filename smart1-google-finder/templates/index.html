@@ -12,13 +12,40 @@
       <div class="topline">
         <div>
           <h1>Smart 1 Google Account Command Center</h1>
-          <p>Search Analytics, Tag Manager, Search Console, & Business Profiles + AI Traffic Analysis.</p>
+          <p>Search all connected Analytics, Tag Manager, Search Console, & Business Profiles instantly.</p>
         </div>
         <div class="auth">
           <a class="btn" href="/login">+ Add Google Account</a>
           {% if accounts %}<a href="/logout">Disconnect all</a>{% endif %}
         </div>
       </div>
+
+      <!-- PRIMARY SEARCH BOX (MOVED TO TOP OF PAGE) -->
+      {% if accounts %}
+      <div class="primary-search-section">
+        <div class="filters">
+          <button class="filter active" data-platform="all">All Platforms</button>
+          <button class="filter" data-platform="analytics">Analytics</button>
+          <button class="filter" data-platform="gtm">Tag Manager</button>
+          <button class="filter" data-platform="gsc">Search Console</button>
+          <button class="filter" data-platform="gmb">Business Profiles</button>
+          <button id="refresh" class="refresh">Refresh Google data</button>
+        </div>
+        <div class="searchbox">
+          <input id="q" autocomplete="off" autofocus placeholder="Type client name, domain, GA4 ID, GTM ID, or email to search all sites...">
+        </div>
+        <div id="status" class="status">Start typing to search all connected accounts.</div>
+        <div id="results" class="results"></div>
+      </div>
+      {% else %}
+      <div class="connect-panel">
+        <strong>Connect your Google accounts</strong>
+        <p>Add adops@smart1marketing.com, smartadops@gmail.com, smart1sites@gmail.com, and gmb@smart1marketing.com to combine records across GA4, GTM, Search Console, and GMB.</p>
+        <a class="btn connect" href="/login">Connect Google Account</a>
+      </div>
+      {% endif %}
+
+      <hr style="margin: 28px 0 20px; border: 0; border-top: 1px solid #e1e7ef;">
 
       <!-- GA4 AI Comparison Engine Widget -->
       <div class="ai-comparator-card">
@@ -95,6 +122,7 @@
         <div id="manual-results"></div>
       </div>
 
+      <!-- Connected Accounts Footer Section -->
       <div class="accounts">
         <div class="accounts-title">Connected Google Accounts</div>
         {% if accounts %}
@@ -109,28 +137,6 @@
           <span class="muted">No Google accounts connected yet.</span>
         {% endif %}
       </div>
-
-      {% if accounts %}
-      <div class="filters">
-        <button class="filter active" data-platform="all">All</button>
-        <button class="filter" data-platform="analytics">Analytics</button>
-        <button class="filter" data-platform="gtm">Tag Manager</button>
-        <button class="filter" data-platform="gsc">Search Console</button>
-        <button class="filter" data-platform="gmb">Business Profiles</button>
-        <button id="refresh" class="refresh">Refresh Google data</button>
-      </div>
-      <div class="searchbox">
-        <input id="q" autocomplete="off" placeholder="Client, domain, GA4 property ID, GTM ID, or Google login">
-      </div>
-      <div id="status" class="status">Start typing to search all connected accounts.</div>
-      <div id="results" class="results"></div>
-      {% else %}
-      <div class="connect-panel">
-        <strong>Connect your Google accounts</strong>
-        <p>Add adops@smart1marketing.com, smartadops@gmail.com, smart1sites@gmail.com, and gmb@smart1marketing.com to combine records across GA4, GTM, Search Console, and GMB.</p>
-        <a class="btn connect" href="/login">Connect Google Account</a>
-      </div>
-      {% endif %}
     </section>
   </main>
 
