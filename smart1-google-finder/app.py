@@ -231,7 +231,7 @@ def fetch_ga_items(access_token, google_login):
                         "account_name": account_name,
                         "account_id": account_id,
                         "resource_id": property_id,
-                        "search_extra": "",
+                        "search_extra": f"{property_name} {account_name} {property_id}",
                         "google_login": google_login,
                         "open_url": f"https://analytics.google.com/analytics/web/#/p{property_id}" if property_id else "",
                     })
@@ -291,7 +291,7 @@ def fetch_gtm_items(access_token, google_login):
                         "account_name": account_name,
                         "account_id": account_id,
                         "resource_id": public_id or container_id,
-                        "search_extra": domains,
+                        "search_extra": f"{domains} {container_name} {public_id}",
                         "google_login": google_login,
                         "open_url": f"https://tagmanager.google.com/#/container/accounts/{account_id}/containers/{container_id}" if account_id and container_id else "",
                     })
@@ -375,6 +375,9 @@ def fetch_gsc_items(access_token, google_login):
             site_url = site.get("siteUrl", "")
             permission = site.get("permissionLevel", "")
             
+            # Clean site_url for extra search matches (e.g. sc-domain:example.com or https://example.com)
+            clean_domain = site_url.replace("sc-domain:", "").replace("https://", "").replace("http://", "").strip("/")
+            
             items.append({
                 "platform": "Search Console",
                 "type": "GSC Property",
@@ -382,7 +385,7 @@ def fetch_gsc_items(access_token, google_login):
                 "account_name": f"Permission: {permission}",
                 "account_id": site_url,
                 "resource_id": site_url,
-                "search_extra": permission,
+                "search_extra": f"{clean_domain} {permission}",
                 "google_login": google_login,
                 "open_url": f"https://search.google.com/search-console?resource_id={urlencode({'': site_url})[1:]}",
             })
