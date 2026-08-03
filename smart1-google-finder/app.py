@@ -437,24 +437,22 @@ def get_index(force=False):
 def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown):
     sessions_p1 = m1.get("sessions", 0)
     sessions_p2 = m2.get("sessions", 0)
-    users_p1 = m1.get("activeUsers", 0)
-    users_p2 = m2.get("activeUsers", 0)
     conversions_p1 = m1.get("keyEvents", 0)
     conversions_p2 = m2.get("keyEvents", 0)
 
-    sess_change = ((sessions_p1 - sessions_p2) / sessions_p2 * 100) if sessions_p2 > 0 else 0
-    user_change = ((users_p1 - users_p2) / users_p2 * 100) if users_p2 > 0 else 0
-    conv_change = ((conversions_p1 - conversions_p2) / conversions_p2 * 100) if conversions_p2 > 0 else 0
+    if sessions_p2 > 0:
+        sess_change = ((sessions_p1 - sessions_p2) / sessions_p2) * 100
+        verdict = f"Traffic changed by **{sess_change:+.1f}%** during {p1_name} compared to {p2_name}."
+    else:
+        sess_change = 100.0 if sessions_p1 > 0 else 0.0
+        verdict = f"Selected period recorded **{sessions_p1:,}** sessions (Baseline prior period recorded {sessions_p2:,} sessions)."
 
     if sess_change > 5:
         summary_tone = "Positive Traffic Growth"
-        verdict = f"Overall traffic grew by **+{sess_change:.1f}%** during {p1_name} compared to {p2_name}."
     elif sess_change < -5:
         summary_tone = "Traffic Decline Warning"
-        verdict = f"Traffic decreased by **{sess_change:.1f}%** during {p1_name} compared to {p2_name}."
     else:
         summary_tone = "Stable Performance"
-        verdict = f"Traffic remained relatively flat (**{sess_change:+.1f}%**) between periods."
 
     insights = [verdict]
 
@@ -476,17 +474,14 @@ def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown):
 
     c_rate_p1 = (conversions_p1 / sessions_p1 * 100) if sessions_p1 > 0 else 0
     c_rate_p2 = (conversions_p2 / sessions_p2 * 100) if sessions_p2 > 0 else 0
-    if c_rate_p1 or c_rate_p2:
-        insights.append(
-            f"🎯 **Conversion Rate:** Shifted from **{c_rate_p2:.2f}%** to **{c_rate_p1:.2f}%** "
-            f"({conv_change:+.1f}% change in total key events)."
-        )
+    insights.append(
+        f"🎯 **Conversion Rate:** Shifted from **{c_rate_p2:.2f}%** to **{c_rate_p1:.2f}%** "
+        f"({conversions_p1:,} total key events vs {conversions_p2:,} in prior period)."
+    )
 
     return {
         "status": summary_tone,
         "sess_change_pct": round(sess_change, 1),
-        "user_change_pct": round(user_change, 1),
-        "conv_change_pct": round(conv_change, 1),
         "insights": insights,
     }
 
@@ -660,7 +655,7 @@ def api_ga4_channels():
             "dateRanges": [{"startDate": "30daysAgo", "endDate": "yesterday"}],
             "dimensions": [{"name": "sessionSourceMedium"}],
             "metrics": [{"name": "sessions"}],
-            "limit": 25
+            "limit": 50
         }
         report = google_post(access_token, url, req_body)
         channels = [row["dimensionValues"][0]["value"] for row in report.get("rows", [])]
@@ -680,10 +675,8 @@ def api_ga4_compare():
     page_path = data.get("page_path", "").strip()
     source_medium = data.get("source_medium", "").strip()
 
-    p1_start = data.get("p1_start")
-    p1_end = data.get("p1_end")
-    p2_start = data.get("p2_start")
-    p2_end = data.get("p2_end")
+    p1_start_str = data.get("p1_start")
+    p1_end_str = data.get("p1_end")
 
     if not property_id or not google_login:
         return jsonify({"error": "Missing GA4 Property ID or Google Login."}), 400
@@ -698,14 +691,13 @@ def api_ga4_compare():
         return jsonify({"error": f"Failed to authenticate {google_login}: {exc}"}), 401
 
     today = datetime.utcnow().date()
-    if not p1_start or not p1_end:
-        p1_end_dt = today - timedelta(days=1)
-        p1_start_dt = p1_end_dt - timedelta(days=29)
-        p1_start = p1_start_dt.strftime("%Y-%m-%d")
-        p1_end = p1_end_dt.strftime("%Y-%m-%d")
+    if not p1_start_str or not p1_end_str:
+        first_this_month = today.replace(day=1)
+        p1_end_dt = first_this_month - timedelta(days=1)
+        p1_start_dt = p1_end_dt.replace(day=1)
     else:
-        p1_start_dt = datetime.strptime(p1_start, "%Y-%m-%d").date()
-        p1_end_dt = datetime.strptime(p1_end, "%Y-%m-%d").date()
+        p1_start_dt = datetime.strptime(p1_start_str, "%Y-%m-%d").date()
+        p1_end_dt = datetime.strptime(p1_end_str, "%Y-%m-%d").date()
 
     num_days = (p1_end_dt - p1_start_dt).days + 1
 
@@ -720,12 +712,15 @@ def api_ga4_compare():
         p2_end = p1_end_dt.replace(year=p1_end_dt.year - 1).strftime("%Y-%m-%d")
         p2_label = f"Previous Year ({p2_start} to {p2_end})"
     else:
+        p2_start = data.get("p2_start", "")
+        p2_end = data.get("p2_end", "")
         p2_label = f"Custom Period ({p2_start} to {p2_end})"
 
+    p1_start = p1_start_dt.strftime("%Y-%m-%d")
+    p1_end = p1_end_dt.strftime("%Y-%m-%d")
     p1_label = f"Selected Period ({p1_start} to {p1_end})"
 
     dimension_name = "pagePath" if scope_type in ["page", "multiple"] else "sessionSourceMedium"
-    dimension_filter = None
     expressions = []
 
     if scope_type == "page" and page_path:
@@ -751,31 +746,32 @@ def api_ga4_compare():
             }
         })
 
+    dimension_filter = None
     if len(expressions) == 1:
         dimension_filter = expressions[0]["filter"]
     elif len(expressions) > 1:
         dimension_filter = {"andGroup": {"expressions": expressions}}
 
-    req_body = {
-        "dateRanges": [
-            {"startDate": p1_start, "endDate": p1_end, "name": "period_1"},
-            {"startDate": p2_start, "endDate": p2_end, "name": "period_2"}
-        ],
-        "dimensions": [{"name": dimension_name}],
-        "metrics": [
-            {"name": "sessions"},
-            {"name": "activeUsers"},
-            {"name": "keyEvents"}
-        ],
-        "limit": 50
-    }
-    if dimension_filter:
-        req_body["dimensionFilter"] = dimension_filter
+    # Helper function to query a single date range from GA4 Data API
+    def query_ga4_range(start, end):
+        req_body = {
+            "dateRanges": [{"startDate": start, "endDate": end}],
+            "dimensions": [{"name": dimension_name}],
+            "metrics": [
+                {"name": "sessions"},
+                {"name": "activeUsers"},
+                {"name": "keyEvents"}
+            ],
+            "limit": 100
+        }
+        if dimension_filter:
+            req_body["dimensionFilter"] = dimension_filter
+        url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+        return google_post(access_token, url, req_body)
 
-    url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
-    
     try:
-        report = google_post(access_token, url, req_body)
+        rep1 = query_ga4_range(p1_start, p1_end)
+        rep2 = query_ga4_range(p2_start, p2_end)
     except Exception as exc:
         return jsonify({"error": f"GA4 Data API call failed: {exc}"}), 500
 
@@ -783,27 +779,33 @@ def api_ga4_compare():
     m2 = {"sessions": 0, "activeUsers": 0, "keyEvents": 0}
     breakdown_map = {}
 
-    for row in report.get("rows", []):
+    for row in rep1.get("rows", []):
         dim_val = row["dimensionValues"][0]["value"]
-        range_idx = row.get("dateRange", "period_1")
-        
         sess = int(row["metricValues"][0]["value"])
         users = int(row["metricValues"][1]["value"])
         convs = int(row["metricValues"][2]["value"])
 
+        m1["sessions"] += sess
+        m1["activeUsers"] += users
+        m1["keyEvents"] += convs
+
         if dim_val not in breakdown_map:
             breakdown_map[dim_val] = {"name": dim_val, "p1_sessions": 0, "p2_sessions": 0}
+        breakdown_map[dim_val]["p1_sessions"] += sess
 
-        if range_idx == "period_1" or range_idx == "date_range_0":
-            m1["sessions"] += sess
-            m1["activeUsers"] += users
-            m1["keyEvents"] += convs
-            breakdown_map[dim_val]["p1_sessions"] += sess
-        else:
-            m2["sessions"] += sess
-            m2["activeUsers"] += users
-            m2["keyEvents"] += convs
-            breakdown_map[dim_val]["p2_sessions"] += sess
+    for row in rep2.get("rows", []):
+        dim_val = row["dimensionValues"][0]["value"]
+        sess = int(row["metricValues"][0]["value"])
+        users = int(row["metricValues"][1]["value"])
+        convs = int(row["metricValues"][2]["value"])
+
+        m2["sessions"] += sess
+        m2["activeUsers"] += users
+        m2["keyEvents"] += convs
+
+        if dim_val not in breakdown_map:
+            breakdown_map[dim_val] = {"name": dim_val, "p1_sessions": 0, "p2_sessions": 0}
+        breakdown_map[dim_val]["p2_sessions"] += sess
 
     breakdown_list = []
     for k, v in breakdown_map.items():
@@ -818,7 +820,7 @@ def api_ga4_compare():
         "p2_label": p2_label,
         "metrics_p1": m1,
         "metrics_p2": m2,
-        "breakdown": sorted(breakdown_list, key=lambda x: abs(x["session_diff"]), reverse=True)[:10],
+        "breakdown": sorted(breakdown_list, key=lambda x: abs(x["session_diff"]), reverse=True)[:15],
         "ai_analysis": ai_result
     })
 
