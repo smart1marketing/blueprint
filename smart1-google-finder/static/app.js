@@ -51,7 +51,6 @@ async function populateGa4Comparator(propertyId, loginEmail) {
   document.getElementById('comp-login').value = loginEmail;
   document.getElementById('comp-period-type').value = 'previous_period';
 
-  // Calculate Last Month (P1) and Previous Month (P2)
   const now = new Date();
   const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastDayLastMonth = new Date(firstDayThisMonth.getTime() - 86400000);
@@ -187,6 +186,15 @@ if (runCompBtn) {
     const m2 = data.metrics_p2;
     const breakdown = data.breakdown || [];
 
+    const formatSecs = (s) => {
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+    };
+
+    const avgTimeP1 = m1.sessions > 0 ? formatSecs(m1.userEngagementDuration / m1.sessions) : '0s';
+    const avgTimeP2 = m2.sessions > 0 ? formatSecs(m2.userEngagementDuration / m2.sessions) : '0s';
+
     resBox.innerHTML = `
       <div class="ai-box">
         <h4 style="margin:0 0 8px; color:#1a2e58; font-size:15px;">🤖 AI Traffic Summary: ${esc(ai.status)}</h4>
@@ -198,27 +206,33 @@ if (runCompBtn) {
           <div>
             <strong style="color:#1a2e58;">${esc(data.p1_label)}</strong>
             <div>Sessions: <b>${m1.sessions.toLocaleString()}</b></div>
-            <div>Active Users: <b>${m1.activeUsers.toLocaleString()}</b></div>
+            <div>Engaged Sessions: <b>${m1.engagedSessions.toLocaleString()}</b></div>
+            <div>Avg Engagement Time: <b>${avgTimeP1}</b></div>
+            <div>Total Events: <b>${m1.eventCount.toLocaleString()}</b></div>
             <div>Key Events: <b>${m1.keyEvents.toLocaleString()}</b></div>
           </div>
           <div>
             <strong style="color:#1a2e58;">${esc(data.p2_label)}</strong>
             <div>Sessions: <b>${m2.sessions.toLocaleString()}</b></div>
-            <div>Active Users: <b>${m2.activeUsers.toLocaleString()}</b></div>
+            <div>Engaged Sessions: <b>${m2.engagedSessions.toLocaleString()}</b></div>
+            <div>Avg Engagement Time: <b>${avgTimeP2}</b></div>
+            <div>Total Events: <b>${m2.eventCount.toLocaleString()}</b></div>
             <div>Key Events: <b>${m2.keyEvents.toLocaleString()}</b></div>
           </div>
         </div>
 
         ${breakdown.length ? `
-          <div style="margin-top:14px; background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb;">
-            <h5 style="margin:0 0 8px; font-size:13px; color:#1a2e58;">Top Source / Medium Performance Breakdown</h5>
-            <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+          <div style="margin-top:14px; background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb; overflow-x:auto;">
+            <h5 style="margin:0 0 8px; font-size:13px; color:#1a2e58;">Top Source / Medium Detailed Breakdown</h5>
+            <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left; min-width:600px;">
               <thead>
                 <tr style="border-bottom:2px solid #e1e7ef; color:#58677e;">
                   <th style="padding:6px;">Source / Medium</th>
-                  <th style="padding:6px; text-align:right;">Selected Period</th>
-                  <th style="padding:6px; text-align:right;">Prior Period</th>
-                  <th style="padding:6px; text-align:right;">Change</th>
+                  <th style="padding:6px; text-align:right;">Sessions (P1 / P2)</th>
+                  <th style="padding:6px; text-align:right;">Engaged Sessions</th>
+                  <th style="padding:6px; text-align:right;">Avg Time on Site</th>
+                  <th style="padding:6px; text-align:right;">Total Events</th>
+                  <th style="padding:6px; text-align:right;">Key Events</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,9 +243,11 @@ if (runCompBtn) {
                   return `
                     <tr style="border-bottom:1px solid #f0f4f9;">
                       <td style="padding:6px;"><code>${esc(b.name)}</code></td>
-                      <td style="padding:6px; text-align:right;"><b>${b.p1_sessions.toLocaleString()}</b></td>
-                      <td style="padding:6px; text-align:right;">${b.p2_sessions.toLocaleString()}</td>
-                      <td style="padding:6px; text-align:right; font-weight:bold; color:${diffColor};">${diffSign}${diff.toLocaleString()}</td>
+                      <td style="padding:6px; text-align:right;"><b>${b.p1_sessions.toLocaleString()}</b> <span style="color:#8a95a7;">/ ${b.p2_sessions.toLocaleString()}</span> <span style="font-weight:bold; color:${diffColor};">(${diffSign}${diff.toLocaleString()})</span></td>
+                      <td style="padding:6px; text-align:right;"><b>${b.p1_engaged.toLocaleString()}</b> <span style="color:#8a95a7;">/ ${b.p2_engaged.toLocaleString()}</span></td>
+                      <td style="padding:6px; text-align:right;"><b>${b.p1_avg_time_str}</b> <span style="color:#8a95a7;">/ ${b.p2_avg_time_str}</span></td>
+                      <td style="padding:6px; text-align:right;"><b>${b.p1_events.toLocaleString()}</b> <span style="color:#8a95a7;">/ ${b.p2_events.toLocaleString()}</span></td>
+                      <td style="padding:6px; text-align:right;"><b>${b.p1_convs.toLocaleString()}</b> <span style="color:#8a95a7;">/ ${b.p2_convs.toLocaleString()}</span></td>
                     </tr>
                   `;
                 }).join('')}
