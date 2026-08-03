@@ -437,8 +437,12 @@ def get_index(force=False):
 def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown):
     sessions_p1 = m1.get("sessions", 0)
     sessions_p2 = m2.get("sessions", 0)
+    engaged_p1 = m1.get("engagedSessions", 0)
+    engaged_p2 = m2.get("engagedSessions", 0)
     conversions_p1 = m1.get("keyEvents", 0)
     conversions_p2 = m2.get("keyEvents", 0)
+    time_p1 = m1.get("userEngagementDuration", 0)
+    time_p2 = m2.get("userEngagementDuration", 0)
 
     if sessions_p2 > 0:
         sess_change = ((sessions_p1 - sessions_p2) / sessions_p2) * 100
@@ -455,6 +459,13 @@ def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown):
         summary_tone = "Stable Performance"
 
     insights = [verdict]
+
+    # Engagement Rate insight
+    eng_rate_p1 = (engaged_p1 / sessions_p1 * 100) if sessions_p1 > 0 else 0
+    eng_rate_p2 = (engaged_p2 / sessions_p2 * 100) if sessions_p2 > 0 else 0
+    insights.append(
+        f"⚡ **Engagement Rate:** **{eng_rate_p1:.1f}%** ({engaged_p1:,} engaged sessions) vs **{eng_rate_p2:.1f}%** ({engaged_p2:,} engaged sessions) in prior period."
+    )
 
     if dimension_breakdown:
         top_gainer = max(dimension_breakdown, key=lambda x: x.get("session_diff", 0), default=None)
@@ -752,7 +763,7 @@ def api_ga4_compare():
     elif len(expressions) > 1:
         dimension_filter = {"andGroup": {"expressions": expressions}}
 
-    # Helper function to query a single date range from GA4 Data API
+    # Query GA4 Data API including engagedSessions, userEngagementDuration, and eventCount
     def query_ga4_range(start, end):
         req_body = {
             "dateRanges": [{"startDate": start, "endDate": end}],
@@ -760,6 +771,9 @@ def api_ga4_compare():
             "metrics": [
                 {"name": "sessions"},
                 {"name": "activeUsers"},
+                {"name": "engagedSessions"},
+                {"name": "userEngagementDuration"},
+                {"name": "eventCount"},
                 {"name": "keyEvents"}
             ],
             "limit": 100
@@ -775,41 +789,80 @@ def api_ga4_compare():
     except Exception as exc:
         return jsonify({"error": f"GA4 Data API call failed: {exc}"}), 500
 
-    m1 = {"sessions": 0, "activeUsers": 0, "keyEvents": 0}
-    m2 = {"sessions": 0, "activeUsers": 0, "keyEvents": 0}
+    m1 = {"sessions": 0, "activeUsers": 0, "engagedSessions": 0, "userEngagementDuration": 0, "eventCount": 0, "keyEvents": 0}
+    m2 = {"sessions": 0, "activeUsers": 0, "engagedSessions": 0, "userEngagementDuration": 0, "eventCount": 0, "keyEvents": 0}
     breakdown_map = {}
 
     for row in rep1.get("rows", []):
         dim_val = row["dimensionValues"][0]["value"]
         sess = int(row["metricValues"][0]["value"])
         users = int(row["metricValues"][1]["value"])
-        convs = int(row["metricValues"][2]["value"])
+        eng_sess = int(row["metricValues"][2]["value"])
+        eng_time = float(row["metricValues"][3]["value"])
+        events = int(row["metricValues"][4]["value"])
+        convs = int(row["metricValues"][5]["value"])
 
         m1["sessions"] += sess
         m1["activeUsers"] += users
+        m1["engagedSessions"] += eng_sess
+        m1["userEngagementDuration"] += eng_time
+        m1["eventCount"] += events
         m1["keyEvents"] += convs
 
         if dim_val not in breakdown_map:
-            breakdown_map[dim_val] = {"name": dim_val, "p1_sessions": 0, "p2_sessions": 0}
+            breakdown_map[dim_val] = {
+                "name": dim_val, 
+                "p1_sessions": 0, "p2_sessions": 0,
+                "p1_engaged": 0, "p2_engaged": 0,
+                "p1_time": 0, "p2_time": 0,
+                "p1_events": 0, "p2_events": 0,
+                "p1_convs": 0, "p2_convs": 0
+            }
         breakdown_map[dim_val]["p1_sessions"] += sess
+        breakdown_map[dim_val]["p1_engaged"] += eng_sess
+        breakdown_map[dim_val]["p1_time"] += eng_time
+        breakdown_map[dim_val]["p1_events"] += events
+        breakdown_map[dim_val]["p1_convs"] += convs
 
     for row in rep2.get("rows", []):
         dim_val = row["dimensionValues"][0]["value"]
         sess = int(row["metricValues"][0]["value"])
         users = int(row["metricValues"][1]["value"])
-        convs = int(row["metricValues"][2]["value"])
+        eng_sess = int(row["metricValues"][2]["value"])
+        eng_time = float(row["metricValues"][3]["value"])
+        events = int(row["metricValues"][4]["value"])
+        convs = int(row["metricValues"][5]["value"])
 
         m2["sessions"] += sess
         m2["activeUsers"] += users
+        m2["engagedSessions"] += eng_sess
+        m2["userEngagementDuration"] += eng_time
+        m2["eventCount"] += events
         m2["keyEvents"] += convs
 
         if dim_val not in breakdown_map:
-            breakdown_map[dim_val] = {"name": dim_val, "p1_sessions": 0, "p2_sessions": 0}
+            breakdown_map[dim_val] = {
+                "name": dim_val, 
+                "p1_sessions": 0, "p2_sessions": 0,
+                "p1_engaged": 0, "p2_engaged": 0,
+                "p1_time": 0, "p2_time": 0,
+                "p1_events": 0, "p2_events": 0,
+                "p1_convs": 0, "p2_convs": 0
+            }
         breakdown_map[dim_val]["p2_sessions"] += sess
+        breakdown_map[dim_val]["p2_engaged"] += eng_sess
+        breakdown_map[dim_val]["p2_time"] += eng_time
+        breakdown_map[dim_val]["p2_events"] += events
+        breakdown_map[dim_val]["p2_convs"] += convs
 
     breakdown_list = []
     for k, v in breakdown_map.items():
         v["session_diff"] = v["p1_sessions"] - v["p2_sessions"]
+        
+        # Calculate Avg Engagement Time per session
+        v["p1_avg_time_str"] = f"{int(v['p1_time'] / v['p1_sessions'])}s" if v["p1_sessions"] > 0 else "0s"
+        v["p2_avg_time_str"] = f"{int(v['p2_time'] / v['p2_sessions'])}s" if v["p2_sessions"] > 0 else "0s"
+        
         breakdown_list.append(v)
 
     ai_result = generate_ga4_ai_analysis(p1_label, p2_label, m1, m2, breakdown_list)
