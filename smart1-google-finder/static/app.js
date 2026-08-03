@@ -3,6 +3,7 @@ const results = document.getElementById('results');
 const statusEl = document.getElementById('status');
 let platform = 'all';
 let timer;
+let currentReportPayload = null;
 
 function esc(v='') {
   return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
@@ -84,6 +85,189 @@ document.querySelectorAll('.disconnect').forEach(btn => btn.addEventListener('cl
   if (r.ok) window.location.reload();
 }));
 
+// GA4 Comparison Engine Logic
+const scopeSelect = document.getElementById('comp-scope-type');
+const pageWrapper = document.getElementById('page-path-wrapper');
+
+if (scopeSelect) {
+  scopeSelect.addEventListener('change', () => {
+    if (scopeSelect.value === 'page' || scopeSelect.value === 'multiple') {
+      pageWrapper.style.display = 'block';
+    } else {
+      pageWrapper.style.display = 'none';
+    }
+  });
+}
+
+const runCompBtn = document.getElementById('run-ga4-comp');
+if (runCompBtn) {
+  runCompBtn.addEventListener('click', async () => {
+    const property_id = document.getElementById('comp-property-id').value.trim();
+    const google_login = document.getElementById('comp-login').value.trim();
+    const period_type = document.getElementById('comp-period-type').value;
+    const scope_type = document.getElementById('comp-scope-type').value;
+    const page_path = document.getElementById('comp-page-path').value.trim();
+    const source_medium = document.getElementById('comp-source-medium').value.trim();
+    const p1_start = document.getElementById('p1-start').value;
+    const p1_end = document.getElementById('p1-end').value;
+
+    const resBox = document.getElementById('ai-comp-results');
+    resBox.innerHTML = '<p style="font-size:13px; color:#1a2e58;">Running GA4 Data API report and compiling AI analysis…</p>';
+
+    const resp = await fetch('/api/ga4/compare', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        property_id, google_login, period_type, scope_type,
+        page_path, source_medium, p1_start, p1_end
+      })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) {
+      resBox.innerHTML = `<div style="color:#c5221f; font-size:13px;">Error: ${esc(data.error || 'Failed to generate comparison.')}</div>`;
+      return;
+    }
+
+    currentReportPayload = data;
+    const ai = data.ai_analysis;
+    const m1 = data.metrics_p1;
+    const m2 = data.metrics_p2;
+
+    resBox.innerHTML = `
+      <div class="ai-box">
+        <h4 style="margin:0 0 8px; color:#1a2e58; font-size:15px;">🤖 AI Traffic Summary: ${esc(ai.status)}</h4>
+        <ul style="margin:0 0 12px; padding-left:18px; font-size:13px; color:#202124;">
+          ${ai.insights.map(i => `<li>${i.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/`(.*?)`/g, '<code>$1</code>')}</li>`).join('')}
+        </ul>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb; font-size:13px;">
+          <div>
+            <strong>${esc(data.p1_label)}</strong>
+            <div>Sessions: <b>${m1.sessions.toLocaleString()}</b></div>
+            <div>Active Users: <b>${m1.activeUsers.toLocaleString()}</b></div>
+            <div>Key Events: <b>${m1.keyEvents.toLocaleString()}</b></div>
+          </div>
+          <div>
+            <strong>${esc(data.p2_label)}</strong>
+            <div>Sessions: <b>${m2.sessions.toLocaleString()}</b></div>
+            <div>Active Users: <b>${m2.activeUsers.toLocaleString()}</b></div>
+            <div>Key Events: <b>${m2.keyEvents.toLocaleString()}</b></div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px; padding:12px; background:#eaf2ff; border:1px solid #b8d2f8; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:13px; color:#1a2e58; font-weight:600;">Would you like to save this report for future comparison and automated alerts?</span>
+          <button id="btn-open-save-modal" class="btn" style="padding:6px 12px; font-size:12px;">Save Report & Setup Alerts</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-open-save-modal').addEventListener('click', () => {
+      document.getElementById('save-modal').style.display = 'flex';
+    });
+  });
+}
+
+// Save Report & Schedule Modal Handlers
+const enableAlertsEl = document.getElementById('modal-enable-alerts');
+if (enableAlertsEl) {
+  enableAlertsEl.addEventListener('change', (e) => {
+    document.getElementById('alert-options-box').style.display = e.target.value === 'yes' ? 'block' : 'none';
+  });
+}
+
+const cancelBtn = document.getElementById('modal-cancel');
+if (cancelBtn) {
+  cancelBtn.addEventListener('click', () => {
+    document.getElementById('save-modal').style.display = 'none';
+  });
+}
+
+const confirmSaveBtn = document.getElementById('modal-confirm-save');
+if (confirmSaveBtn) {
+  confirmSaveBtn.addEventListener('click', async () => {
+    const customer_name = document.getElementById('modal-cust-name').value.trim();
+    const summary_title = document.getElementById('modal-sum-title').value.trim();
+    const enableAlerts = document.getElementById('modal-enable-alerts').value === 'yes';
+
+    if (!customer_name || !summary_title) {
+      alert("Please enter both customer name and summary title.");
+      return;
+    }
+
+    const saveResp = await fetch('/api/reports/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        customer_name,
+        summary_title,
+        property_id: currentReportPayload.property_id,
+        google_login: document.getElementById('comp-login').value.trim(),
+        report_data: currentReportPayload
+      })
+    });
+
+    const saveRes = await saveResp.json();
+    if (!saveResp.ok) {
+      alert("Error saving report: " + saveRes.error);
+      return;
+    }
+
+    if (enableAlerts) {
+      const notification_email = document.getElementById('modal-alert-email').value.trim();
+      const frequency = document.getElementById('modal-alert-freq').value;
+      const ghl_webhook_url = document.getElementById('modal-ghl-url').value.trim();
+
+      await fetch('/api/reports/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          report_id: saveRes.report_id,
+          notification_email,
+          frequency,
+          ghl_webhook_url
+        })
+      });
+    }
+
+    document.getElementById('save-modal').style.display = 'none';
+    alert("Report saved successfully!");
+    fetchSavedReports();
+  });
+}
+
+// Search Historical Reports
+async function fetchSavedReports(query='') {
+  const listEl = document.getElementById('saved-reports-list');
+  if (!listEl) return;
+
+  const resp = await fetch(`/api/reports/search?q=${encodeURIComponent(query)}`);
+  const data = await resp.json();
+  
+  if (!data.reports || !data.reports.length) {
+    listEl.innerHTML = '<span style="font-size:12px; color:#69758a;">No historical reports found.</span>';
+    return;
+  }
+
+  listEl.innerHTML = data.reports.map(r => `
+    <div style="padding:8px 10px; background:#fff; border:1px solid #d8e0eb; border-radius:6px; margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <strong>${esc(r.customer_name)}</strong> - ${esc(r.summary_title)} 
+        <span style="color:#69758a;">(Property: ${esc(r.property_id)})</span>
+      </div>
+      <span style="color:#8a95a7;">${new Date(r.created_at * 1000).toLocaleDateString()}</span>
+    </div>
+  `).join('');
+}
+
+const btnSearchSaved = document.getElementById('btn-search-saved');
+if (btnSearchSaved) {
+  btnSearchSaved.addEventListener('click', () => {
+    fetchSavedReports(document.getElementById('search-saved-q').value);
+  });
+}
+
 // Manual GMB Checker Logic
 const manualBtn = document.getElementById('manual-btn');
 const manualInput = document.getElementById('manual-q');
@@ -109,15 +293,6 @@ if (manualBtn && manualInput) {
         <a href="${googleSearchUrl}" target="_blank" rel="noopener" class="open" style="padding: 6px 10px; font-size: 12px; background: #1a2e58!important;">Google Search</a>
         <a href="${gmbClaimUrl}" target="_blank" rel="noopener" class="open" style="padding: 6px 10px; font-size: 12px; background: #137333!important;">Claim/Add on GMB</a>
       </div>
-      <p class="manual-tip">
-        <em>Tip: Click "Search Maps" to view the listing and check if an "Own this business?" or "Claim this business" link is visible.</em>
-      </p>
     `;
-  });
-
-  manualInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      manualBtn.click();
-    }
   });
 }
