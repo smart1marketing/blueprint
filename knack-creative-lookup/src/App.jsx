@@ -42,29 +42,57 @@ const App = () => {
         );
       }
 
-      // Query object_135 (Campaign/Product records)
+      // Query object_135 with optimized batch size
       const objectId = 'object_135';
+      let allRecords = [];
+      let pageNumber = 1;
+      let hasMore = true;
+      const batchSize = 500; // Fetch in smaller batches to prevent memory issues
 
-      const response = await axios.get(
-        `https://api.knack.com/v1/objects/${objectId}/records`,
-        {
-          headers: {
-            'X-Knack-REST-API-Key': apiKey,
-            'X-Knack-Application-Id': appId,
-            'Content-Type': 'application/json'
-          },
-          params: {
-            rows_per_page: 10000 // Fetch all records
+      // Paginate through records
+      while (hasMore && pageNumber <= 20) { // Max 20 pages = 10,000 records
+        try {
+          const response = await axios.get(
+            `https://api.knack.com/v1/objects/${objectId}/records`,
+            {
+              headers: {
+                'X-Knack-REST-API-Key': apiKey,
+                'X-Knack-Application-Id': appId,
+                'Content-Type': 'application/json'
+              },
+              params: {
+                rows_per_page: batchSize,
+                page: pageNumber
+              }
+            }
+          );
+
+          const records = response.data.records || [];
+          
+          if (records.length === 0) {
+            hasMore = false;
+          } else {
+            allRecords = allRecords.concat(records);
+            pageNumber++;
           }
+        } catch (pageErr) {
+          console.warn(`Error fetching page ${pageNumber}:`, pageErr);
+          hasMore = false;
         }
-      );
+      }
 
-      const records = response.data.records || [];
-      setIoRecords(records);
+      if (allRecords.length === 0) {
+        setError('No records found');
+        setIoRecords([]);
+        setClients([]);
+        return;
+      }
+
+      setIoRecords(allRecords);
 
       // Extract unique clients from field_2384 (no duplicates)
       const uniqueClients = [...new Set(
-        records
+        allRecords
           .map(r => r.field_2384) // Client lookup field
           .filter(client => client && client.toString().trim() !== '') // Remove empty/null
       )].sort();
@@ -82,9 +110,13 @@ const App = () => {
       setStartDate(firstDayOfMonth);
       setEndDate(today);
 
+      console.log(`✓ Loaded ${allRecords.length} records from ${pageNumber - 1} pages`);
+
     } catch (err) {
       console.error('Error fetching records:', err);
       setError(err.message || 'Failed to fetch data from Knack');
+      setIoRecords([]);
+      setClients([]);
     } finally {
       setLoading(false);
     }
@@ -119,38 +151,34 @@ const App = () => {
   });
 
   // Extract creatives (images) from filtered records (object_135)
-  const creatives = filteredRecords.map(record => {
-    // Try multiple potential creative/image fields in priority order
-    const imageUrl = 
-      record.field_2409 || // Creative upload
-      record.field_2427 || // Creative Pickup
-      record.field_3422 || // External Creative Link 1
-      record.field_3425 || // External Creative Link 2
-      record.field_3426 || // External Creative Link 3
-      record.field_3427 || // External Creative Link 4
-      null;
+  // Memoize to prevent unnecessary recalculations
+  const creatives = React.useMemo(() => {
+    return filteredRecords.map(record => {
+      // Try multiple potential creative/image fields in priority order
+      const imageUrl = 
+        record.field_2409 || // Creative upload
+        record.field_2427 || // Creative Pickup
+        record.field_3422 || // External Creative Link 1
+        record.field_3425 || // External Creative Link 2
+        record.field_3426 || // External Creative Link 3
+        record.field_3427 || // External Creative Link 4
+        null;
 
-    return {
-      id: record.id,
-      clientName: record.field_2384,     // Client lookup
-      ioCampaignName: record.field_2309,  // IO Campaign Name
-      productCampaignName: record.field_3340,  // Product Campaign Name
-      displayCampaignName: record.field_3341,  // Display Campaign Name
-      creativeUpload: record.field_2409,
-      creativePickup: record.field_2427,
-      externalLink1: record.field_3422,
-      externalLink2: record.field_3425,
-      externalLink3: record.field_3426,
-      externalLink4: record.field_3427,
-      prodCreativePickup: record.field_2748,   // Prod# - Creative Pickup
-      productText: record.field_2327,
-      ioNumber: record.field_2469,  // IO #
-      startDate: record.field_2313,  // Start Date
-      status: record.field_2300,     // Status
-      imageUrl: imageUrl,
-      record: record
-    };
-  }).filter(creative => creative.clientName); // Only show records with client info
+      // Only store essential fields to save memory
+      return {
+        id: record.id,
+        clientName: record.field_2384,
+        ioCampaignName: record.field_2309,
+        productCampaignName: record.field_3340,
+        displayCampaignName: record.field_3341,
+        productText: record.field_2327,
+        ioNumber: record.field_2469,
+        startDate: record.field_2313,
+        status: record.field_2300,
+        imageUrl: imageUrl,
+      };
+    }).filter(creative => creative.clientName);
+  }, [filteredRecords]);
 
   const handleImageClick = (creative) => {
     setSelectedImage(creative);
