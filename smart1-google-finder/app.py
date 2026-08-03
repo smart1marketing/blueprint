@@ -4,7 +4,7 @@ import secrets
 import sqlite3
 import time
 import logging
-import traceback
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 import requests
@@ -87,6 +87,32 @@ def _db():
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS saved_reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_name TEXT NOT NULL,
+            summary_title TEXT NOT NULL,
+            property_id TEXT NOT NULL,
+            google_login TEXT NOT NULL,
+            report_data TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS report_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_id INTEGER NOT NULL,
+            notification_email TEXT NOT NULL,
+            frequency TEXT NOT NULL,
+            ghl_webhook_url TEXT,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY(report_id) REFERENCES saved_reports(id)
+        )
+        """
+    )
     conn.commit()
     return conn
 
@@ -158,6 +184,20 @@ def google_get(access_token, url, params=None):
         headers={"Authorization": f"Bearer {access_token}"},
         params=params or {},
         timeout=10,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def google_post(access_token, url, json_body=None):
+    r = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        },
+        json=json_body or {},
+        timeout=15,
     )
     r.raise_for_status()
     return r.json()
@@ -393,6 +433,63 @@ def get_index(force=False):
     return items, errors
 
 
+def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown):
+    sessions_p1 = m1.get("sessions", 0)
+    sessions_p2 = m2.get("sessions", 0)
+    users_p1 = m1.get("activeUsers", 0)
+    users_p2 = m2.get("activeUsers", 0)
+    conversions_p1 = m1.get("keyEvents", 0)
+    conversions_p2 = m2.get("keyEvents", 0)
+
+    sess_change = ((sessions_p1 - sessions_p2) / sessions_p2 * 100) if sessions_p2 > 0 else 0
+    user_change = ((users_p1 - users_p2) / users_p2 * 100) if users_p2 > 0 else 0
+    conv_change = ((conversions_p1 - conversions_p2) / conversions_p2 * 100) if conversions_p2 > 0 else 0
+
+    if sess_change > 5:
+        summary_tone = "Positive Traffic Growth"
+        verdict = f"Overall traffic grew by **+{sess_change:.1f}%** during {p1_name} compared to {p2_name}."
+    elif sess_change < -5:
+        summary_tone = "Traffic Decline Warning"
+        verdict = f"Traffic decreased by **{sess_change:.1f}%** during {p1_name} compared to {p2_name}."
+    else:
+        summary_tone = "Stable Performance"
+        verdict = f"Traffic remained relatively flat (**{sess_change:+.1f}%**) between periods."
+
+    insights = [verdict]
+
+    if dimension_breakdown:
+        top_gainer = max(dimension_breakdown, key=lambda x: x.get("session_diff", 0), default=None)
+        top_loser = min(dimension_breakdown, key=lambda x: x.get("session_diff", 0), default=None)
+
+        if top_gainer and top_gainer.get("session_diff", 0) > 0:
+            insights.append(
+                f"🚀 **Primary Growth Driver:** `{top_gainer['name']}` added **+{top_gainer['session_diff']:,}** sessions "
+                f"({top_gainer['p2_sessions']:,} → {top_gainer['p1_sessions']:,})."
+            )
+
+        if top_loser and top_loser.get("session_diff", 0) < 0:
+            insights.append(
+                f"⚠️ **Largest Traffic Drop:** `{top_loser['name']}` dropped by **{top_loser['session_diff']:,}** sessions "
+                f"({top_loser['p2_sessions']:,} → {top_loser['p1_sessions']:,})."
+            )
+
+    c_rate_p1 = (conversions_p1 / sessions_p1 * 100) if sessions_p1 > 0 else 0
+    c_rate_p2 = (conversions_p2 / sessions_p2 * 100) if sessions_p2 > 0 else 0
+    if c_rate_p1 or c_rate_p2:
+        insights.append(
+            f"🎯 **Conversion Rate:** Shifted from **{c_rate_p2:.2f}%** to **{c_rate_p1:.2f}%** "
+            f"({conv_change:+.1f}% change in total key events)."
+        )
+
+    return {
+        "status": summary_tone,
+        "sess_change_pct": round(sess_change, 1),
+        "user_change_pct": round(user_change, 1),
+        "conv_change_pct": round(conv_change, 1),
+        "insights": insights,
+    }
+
+
 @app.route("/")
 def index():
     return render_template(
@@ -435,14 +532,13 @@ def oauth_callback():
         received_state = request.args.get("state")
         if not expected_state or received_state != expected_state:
             logger.error("OAuth state mismatch. expected_present=%s received_present=%s", bool(expected_state), bool(received_state))
-            return "OAuth state validation failed. Start again from Connect Google Account. If this repeats, check Render session storage/cookies.", 400
+            return "OAuth state validation failed. Start again from Connect Google Account.", 400
 
         code = request.args.get("code")
         if not code:
             return "Google returned to the callback without an authorization code.", 400
 
         redirect_uri = url_for("oauth_callback", _external=True, _scheme="https")
-        logger.info("OAuth callback reached; exchanging code. redirect_uri=%s", redirect_uri)
         token_resp = requests.post(
             "https://oauth2.googleapis.com/token",
             data={
@@ -455,19 +551,12 @@ def oauth_callback():
             timeout=10,
         )
         if not token_resp.ok:
-            try:
-                detail = token_resp.json()
-                safe_detail = {k: v for k, v in detail.items() if k not in {"access_token", "refresh_token", "id_token"}}
-            except Exception:
-                safe_detail = {"body": token_resp.text[:500]}
-            logger.error("Token exchange failed: status=%s detail=%s", token_resp.status_code, safe_detail)
-            return f"Google token exchange failed (HTTP {token_resp.status_code}). Check Render GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and the exact redirect URI. Details: {safe_detail}", 500
+            return f"Google token exchange failed (HTTP {token_resp.status_code}).", 500
 
         token = token_resp.json()
         access_token = token.get("access_token")
         refresh_token = token.get("refresh_token")
         if not access_token:
-            logger.error("Token exchange succeeded but access_token was absent")
             return "Google did not return an access token.", 500
 
         userinfo = requests.get(
@@ -476,40 +565,25 @@ def oauth_callback():
             timeout=10,
         )
         if not userinfo.ok:
-            logger.error("Userinfo lookup failed: status=%s body=%s", userinfo.status_code, userinfo.text[:500])
-            return f"Google login succeeded, but user profile lookup failed (HTTP {userinfo.status_code}).", 500
+            return f"Google login succeeded, but profile lookup failed.", 500
 
         email = userinfo.json().get("email", "").lower()
         if not email or not is_allowed(email):
-            logger.warning("OAuth login rejected by allow-list: %s", email or "<missing email>")
             return "This Google account is not allowed to connect to this finder.", 403
 
         existing = next((a for a in connected_accounts() if a.get("email", "").lower() == email), None)
         if not refresh_token and not existing:
-            return "Google authenticated the account but did not issue a refresh token. Remove this app from that Google account's connected apps, then reconnect and approve access.", 400
+            return "Google did not issue a refresh token. Remove this app from your Google account permissions, then reconnect.", 400
 
         if refresh_token:
-            try:
-                save_account(email, refresh_token)
-            except Exception as exc:
-                logger.exception("Failed to persist OAuth token for %s", email)
-                return (
-                    "Google login succeeded, but the app could not save the refresh token. "
-                    f"Check TOKEN_DB_PATH, the Render persistent disk mount, and TOKEN_ENCRYPTION_KEY. Error: {type(exc).__name__}: {exc}",
-                    500,
-                )
+            save_account(email, refresh_token)
 
         session.pop("oauth_state", None)
         CACHE.pop(email, None)
-        logger.info("OAuth account connected successfully: %s", email)
         return redirect(url_for("index"))
     except Exception as exc:
         logger.exception("Unhandled OAuth callback error")
-        return (
-            "Authentication failed inside the OAuth callback. "
-            f"Error: {type(exc).__name__}: {exc}. Check the Render logs for the full traceback.",
-            500,
-        )
+        return f"Authentication failed: {exc}", 500
 
 
 @app.route("/disconnect/<path:email>", methods=["POST"])
@@ -565,6 +639,248 @@ def api_search():
     return jsonify({"results": results[:200], "errors": errors})
 
 
+@app.route("/api/ga4/compare", methods=["POST"])
+def api_ga4_compare():
+    data = request.json or {}
+    property_id = data.get("property_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+    period_type = data.get("period_type", "previous_period")
+    scope_type = data.get("scope_type", "site")
+    page_path = data.get("page_path", "").strip()
+    source_medium = data.get("source_medium", "").strip()
+
+    p1_start = data.get("p1_start")
+    p1_end = data.get("p1_end")
+    p2_start = data.get("p2_start")
+    p2_end = data.get("p2_end")
+
+    if not property_id or not google_login:
+        return jsonify({"error": "Missing GA4 Property ID or Google Login."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(account["refresh_token"])
+    except Exception as exc:
+        return jsonify({"error": f"Failed to authenticate {google_login}: {exc}"}), 401
+
+    today = datetime.utcnow().date()
+    if not p1_start or not p1_end:
+        p1_end_dt = today - timedelta(days=1)
+        p1_start_dt = p1_end_dt - timedelta(days=29)
+        p1_start = p1_start_dt.strftime("%Y-%m-%d")
+        p1_end = p1_end_dt.strftime("%Y-%m-%d")
+    else:
+        p1_start_dt = datetime.strptime(p1_start, "%Y-%m-%d").date()
+        p1_end_dt = datetime.strptime(p1_end, "%Y-%m-%d").date()
+
+    num_days = (p1_end_dt - p1_start_dt).days + 1
+
+    if period_type == "previous_period":
+        p2_end_dt = p1_start_dt - timedelta(days=1)
+        p2_start_dt = p2_end_dt - timedelta(days=num_days - 1)
+        p2_start = p2_start_dt.strftime("%Y-%m-%d")
+        p2_end = p2_end_dt.strftime("%Y-%m-%d")
+        p2_label = f"Prior {num_days} Days ({p2_start} to {p2_end})"
+    elif period_type == "previous_year":
+        p2_start = p1_start_dt.replace(year=p1_start_dt.year - 1).strftime("%Y-%m-%d")
+        p2_end = p1_end_dt.replace(year=p1_end_dt.year - 1).strftime("%Y-%m-%d")
+        p2_label = f"Previous Year ({p2_start} to {p2_end})"
+    else:
+        p2_label = f"Custom Period ({p2_start} to {p2_end})"
+
+    p1_label = f"Selected Period ({p1_start} to {p1_end})"
+
+    dimension_name = "pagePath" if scope_type in ["page", "multiple"] else "sessionSourceMedium"
+    dimension_filter = None
+    expressions = []
+
+    if scope_type == "page" and page_path:
+        expressions.append({
+            "filter": {
+                "fieldName": "pagePath",
+                "stringFilter": {"matchType": "EXACT", "value": page_path}
+            }
+        })
+    elif scope_type == "multiple" and page_path:
+        expressions.append({
+            "filter": {
+                "fieldName": "pagePath",
+                "stringFilter": {"matchType": "PARTIAL_REGEXP", "value": page_path}
+            }
+        })
+
+    if source_medium:
+        expressions.append({
+            "filter": {
+                "fieldName": "sessionSourceMedium",
+                "stringFilter": {"matchType": "CONTAINS", "value": source_medium}
+            }
+        })
+
+    if len(expressions) == 1:
+        dimension_filter = expressions[0]["filter"]
+    elif len(expressions) > 1:
+        dimension_filter = {"andGroup": {"expressions": expressions}}
+
+    req_body = {
+        "dateRanges": [
+            {"startDate": p1_start, "endDate": p1_end, "name": "period_1"},
+            {"startDate": p2_start, "endDate": p2_end, "name": "period_2"}
+        ],
+        "dimensions": [{"name": dimension_name}],
+        "metrics": [
+            {"name": "sessions"},
+            {"name": "activeUsers"},
+            {"name": "keyEvents"}
+        ],
+        "limit": 50
+    }
+    if dimension_filter:
+        req_body["dimensionFilter"] = dimension_filter
+
+    url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+    
+    try:
+        report = google_post(access_token, url, req_body)
+    except Exception as exc:
+        return jsonify({"error": f"GA4 Data API call failed: {exc}"}), 500
+
+    m1 = {"sessions": 0, "activeUsers": 0, "keyEvents": 0}
+    m2 = {"sessions": 0, "activeUsers": 0, "keyEvents": 0}
+    breakdown_map = {}
+
+    for row in report.get("rows", []):
+        dim_val = row["dimensionValues"][0]["value"]
+        range_idx = row.get("dateRange", "period_1")
+        
+        sess = int(row["metricValues"][0]["value"])
+        users = int(row["metricValues"][1]["value"])
+        convs = int(row["metricValues"][2]["value"])
+
+        if dim_val not in breakdown_map:
+            breakdown_map[dim_val] = {"name": dim_val, "p1_sessions": 0, "p2_sessions": 0}
+
+        if range_idx == "period_1" or range_idx == "date_range_0":
+            m1["sessions"] += sess
+            m1["activeUsers"] += users
+            m1["keyEvents"] += convs
+            breakdown_map[dim_val]["p1_sessions"] += sess
+        else:
+            m2["sessions"] += sess
+            m2["activeUsers"] += users
+            m2["keyEvents"] += convs
+            breakdown_map[dim_val]["p2_sessions"] += sess
+
+    breakdown_list = []
+    for k, v in breakdown_map.items():
+        v["session_diff"] = v["p1_sessions"] - v["p2_sessions"]
+        breakdown_list.append(v)
+
+    ai_result = generate_ga4_ai_analysis(p1_label, p2_label, m1, m2, breakdown_list)
+
+    return jsonify({
+        "property_id": property_id,
+        "p1_label": p1_label,
+        "p2_label": p2_label,
+        "metrics_p1": m1,
+        "metrics_p2": m2,
+        "breakdown": sorted(breakdown_list, key=lambda x: abs(x["session_diff"]), reverse=True)[:10],
+        "ai_analysis": ai_result
+    })
+
+
+@app.route("/api/reports/save", methods=["POST"])
+def save_report():
+    data = request.json or {}
+    customer_name = data.get("customer_name", "").strip()
+    summary_title = data.get("summary_title", "").strip()
+    property_id = data.get("property_id", "").strip()
+    google_login = data.get("google_login", "").strip()
+    report_data = data.get("report_data", {})
+
+    if not customer_name or not summary_title or not report_data:
+        return jsonify({"error": "Customer name, summary title, and report payload are required."}), 400
+
+    now = int(time.time())
+    with _db() as conn:
+        cursor = conn.execute(
+            """
+            INSERT INTO saved_reports (customer_name, summary_title, property_id, google_login, report_data, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (customer_name, summary_title, property_id, google_login, json.dumps(report_data), now)
+        )
+        report_id = cursor.lastrowid
+        conn.commit()
+
+    return jsonify({"ok": True, "report_id": report_id, "message": "Report successfully saved."})
+
+
+@app.route("/api/reports/search", methods=["GET"])
+def search_reports():
+    q = (request.args.get("q") or "").strip().lower()
+    with _db() as conn:
+        if q:
+            rows = conn.execute(
+                """
+                SELECT id, customer_name, summary_title, property_id, google_login, created_at 
+                FROM saved_reports 
+                WHERE LOWER(customer_name) LIKE ? OR LOWER(summary_title) LIKE ? OR LOWER(property_id) LIKE ?
+                ORDER BY created_at DESC
+                """,
+                (f"%{q}%", f"%{q}%", f"%{q}%")
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, customer_name, summary_title, property_id, google_login, created_at FROM saved_reports ORDER BY created_at DESC LIMIT 50"
+            ).fetchall()
+
+    reports = [dict(row) for row in rows]
+    return jsonify({"reports": reports})
+
+
+@app.route("/api/reports/subscribe", methods=["POST"])
+def subscribe_alerts():
+    data = request.json or {}
+    report_id = data.get("report_id")
+    notification_email = data.get("notification_email", "").strip()
+    frequency = data.get("frequency", "weekly").lower()
+    ghl_webhook_url = data.get("ghl_webhook_url", "").strip()
+
+    if not report_id or not notification_email:
+        return jsonify({"error": "Report ID and notification email are required."}), 400
+
+    now = int(time.time())
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO report_alerts (report_id, notification_email, frequency, ghl_webhook_url, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (report_id, notification_email, frequency, ghl_webhook_url, now)
+        )
+        conn.commit()
+
+    if ghl_webhook_url:
+        try:
+            ghl_payload = {
+                "event": "report_alert_subscribed",
+                "report_id": report_id,
+                "email": notification_email,
+                "frequency": frequency,
+                "timestamp": datetime.utcnow().isoformat(),
+                "message": f"New report alert scheduled for {notification_email} ({frequency})."
+            }
+            requests.post(ghl_webhook_url, json=ghl_payload, timeout=5)
+        except Exception as exc:
+            logger.warning("Failed sending GoHighLevel webhook: %s", exc)
+
+    return jsonify({"ok": True, "message": f"Alert subscribed for {notification_email} ({frequency})."})
+
+
 @app.route("/api/refresh", methods=["POST"])
 def api_refresh():
     if not connected_accounts():
@@ -580,7 +896,6 @@ def health():
         "google_client_secret_configured": bool(GOOGLE_CLIENT_SECRET),
         "token_encryption_key_configured": bool(TOKEN_ENCRYPTION_KEY),
         "token_db_path": TOKEN_DB_PATH,
-        "token_db_directory_exists": os.path.isdir(os.path.dirname(TOKEN_DB_PATH) or "."),
         "connected_account_count": len(connected_accounts()),
     }
     checks["ok"] = all([
@@ -594,7 +909,6 @@ def health():
 @app.route("/debug/accounts")
 def debug_accounts():
     diagnostics = []
-    
     accounts = connected_accounts()
     if not accounts:
         return jsonify({"status": "No connected accounts found in token database."})
@@ -622,12 +936,6 @@ def debug_accounts():
             info["gtm_api_status"] = "SUCCESS"
         except Exception as exc:
             info["gtm_api_status"] = f"FAILED: {exc}"
-
-        try:
-            google_get(access_token, "https://mybusinessaccountmanagement.googleapis.com/v1/accounts")
-            info["gmb_api_status"] = "SUCCESS"
-        except Exception as exc:
-            info["gmb_api_status"] = f"FAILED: {exc}"
 
         try:
             google_get(access_token, "https://www.googleapis.com/webmasters/v3/sites")
