@@ -30,9 +30,65 @@ function draw(items) {
         <div class="meta"><b>Account:</b> ${esc(x.account_name)} <span>${esc(x.account_id)}</span></div>
         <div class="meta"><b>${esc(x.type)}:</b> ${esc(x.resource_id)}</div>
       </div>
-      ${x.open_url ? `<a class="open" target="_blank" rel="noopener" href="${esc(x.open_url)}">Open</a>` : ''}
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        ${x.open_url ? `<a class="open" target="_blank" rel="noopener" href="${esc(x.open_url)}">Open</a>` : ''}
+        ${x.platform === 'Google Analytics' ? `<button class="btn btn-analyze-ga4" data-id="${esc(x.resource_id)}" data-login="${esc(x.google_login)}" style="font-size:12px; padding:6px 10px; background:#1a2e58!important;">Analyze GA4 Traffic</button>` : ''}
+      </div>
     </article>
   `).join('');
+
+  // Attach auto-populate event listeners to "Analyze GA4 Traffic" buttons
+  document.querySelectorAll('.btn-analyze-ga4').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const propId = btn.dataset.id;
+      const loginEmail = btn.dataset.login;
+      populateGa4Comparator(propId, loginEmail);
+    });
+  });
+}
+
+async function populateGa4Comparator(propertyId, loginEmail) {
+  // Fill inputs
+  document.getElementById('comp-property-id').value = propertyId;
+  document.getElementById('comp-login').value = loginEmail;
+  document.getElementById('comp-period-type').value = 'previous_period';
+
+  // Calculate Last Month vs Previous Month
+  const now = new Date();
+  const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastDayLastMonth = new Date(firstDayThisMonth.getTime() - 1);
+  const firstDayLastMonth = new Date(lastDayLastMonth.getFullYear(), lastDayLastMonth.getMonth(), 1);
+
+  const formatDate = d => d.toISOString().split('T')[0];
+  document.getElementById('p1-start').value = formatDate(firstDayLastMonth);
+  document.getElementById('p1-end').value = formatDate(lastDayLastMonth);
+
+  // Smooth scroll to AI Comparator Card
+  const compCard = document.querySelector('.ai-comparator-card');
+  if (compCard) {
+    compCard.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // Auto-discover available Source/Medium channels for this property
+  const sourceSelect = document.getElementById('comp-source-medium');
+  sourceSelect.innerHTML = '<option value="">Loading available channels...</option>';
+
+  try {
+    const resp = await fetch('/api/ga4/channels', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ property_id: propertyId, google_login: loginEmail })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.channels && data.channels.length) {
+      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>' +
+        data.channels.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    } else {
+      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
+    }
+  } catch (err) {
+    sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
+  }
 }
 
 async function search() {
@@ -107,7 +163,7 @@ if (runCompBtn) {
     const period_type = document.getElementById('comp-period-type').value;
     const scope_type = document.getElementById('comp-scope-type').value;
     const page_path = document.getElementById('comp-page-path').value.trim();
-    const source_medium = document.getElementById('comp-source-medium').value.trim();
+    const source_medium = document.getElementById('comp-source-medium').value;
     const p1_start = document.getElementById('p1-start').value;
     const p1_end = document.getElementById('p1-end').value;
 
