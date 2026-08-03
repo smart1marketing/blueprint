@@ -35,6 +35,9 @@ export interface ComposeOutput {
   missingAssets: string[];
 }
 
+/** Horizontal padding inside a CTA button, total across both sides. */
+export const CTA_PADDING = 12;
+
 const ALIGN_MAP: Record<string, string> = {
   center: 'xMidYMid',
   left: 'xMinYMid',
@@ -59,7 +62,10 @@ function esc(s: string): string {
 }
 
 async function dataUri(file: string): Promise<{ uri: string; w: number; h: number } | null> {
-  if (!fs.existsSync(file)) return null;
+  // An empty reference resolves to the asset root, and reading a directory
+  // throws EISDIR rather than returning "missing". Guard both.
+  if (!file || !fs.existsSync(file)) return null;
+  if (fs.statSync(file).isDirectory()) return null;
   const buf = fs.readFileSync(file);
   const ext = path.extname(file).toLowerCase();
   const mime =
@@ -159,9 +165,9 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
     const lb = layout.logo;
     const useReverse = (copy as any).__useReverseLogo === true;
     const file = useReverse && brand.logos.reverse ? brand.logos.reverse : brand.logos.primary;
-    const img = await dataUri(abs(file));
+    const img = file ? await dataUri(abs(file)) : null;
     if (!img) {
-      missingAssets.push(file);
+      missingAssets.push(file || '(no logo supplied)');
     } else {
       // Contain within the box, preserving aspect and anchoring by align.
       const ar = img.w && img.h ? img.w / img.h : 3;
@@ -239,7 +245,7 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
     const fit = fitText({
       font,
       text: label,
-      maxWidth: cb.w - 16,
+      maxWidth: cb.w - CTA_PADDING,
       maxHeight: cb.h,
       maxLines: 1,
       sizeRange: cb.size,

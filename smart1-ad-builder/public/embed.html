@@ -155,6 +155,12 @@
 
     <fieldset>
       <legend>The campaign</legend>
+      <div class="field">
+        <label class="req" for="projectName">Project name</label>
+        <input type="text" id="projectName" name="projectName" required
+               placeholder="Spring Solar Push 2026">
+        <div class="hint">How you will look this up later. Include the season or year if you run this more than once.</div>
+      </div>
       <div class="row">
         <div class="field">
           <label class="req" for="campaignName">Campaign name</label>
@@ -228,6 +234,41 @@
     <fieldset id="brandSection" style="display:none">
       <legend>Your brand</legend>
       <div id="brandCard"></div>
+
+      <!-- Shown when discovery finds nothing, or when the customer rejects
+           what it found. Without this the flow dead-ends for any business
+           without a public brand record, which is most small businesses. -->
+      <div id="manualBrand" style="display:none">
+        <div class="row">
+          <div class="field">
+            <label for="mbName">Business name as it should appear</label>
+            <input type="text" id="mbName" placeholder="Northside Dental">
+          </div>
+          <div class="field">
+            <label for="mbHeadFont">Headline font</label>
+            <select id="mbHeadFont">
+              <option value="Montserrat">Montserrat</option>
+              <option value="Poppins">Poppins</option>
+              <option value="Open Sans">Open Sans</option>
+            </select>
+            <div class="hint">Using a different brand font? Tell us in the notes and we will add it.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Brand colours</label>
+          <div class="checks" style="gap:14px">
+            <span class="check"><input type="color" id="mbPrimary" value="#1F3A5F" style="width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:5px"> Main</span>
+            <span class="check"><input type="color" id="mbAccent" value="#F2B705" style="width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:5px"> Button</span>
+            <span class="check"><input type="color" id="mbSecondary" value="#4A6E9B" style="width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:5px"> Secondary</span>
+          </div>
+          <div class="hint">Not sure? Upload your logo below and we will take the colours from it.</div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset id="landingSection" style="display:none">
+      <legend>What we read on your page</legend>
+      <div id="landingCard"></div>
     </fieldset>
 
     <fieldset>
@@ -352,15 +393,25 @@
     });
   }
 
+  var manual = document.getElementById('manualBrand');
+
+  function showManual(reason) {
+    brandSection.style.display = '';
+    brandCard.innerHTML =
+      '<div class="brandcard"><h3>' + esc(reason) + '</h3>' +
+      '<p style="margin:0;color:#5b6b7f;font-size:13.5px">Enter your details below — it takes a moment and we will match the ads to them.</p></div>';
+    manual.style.display = '';
+    var nameField = document.getElementById('mbName');
+    if (!nameField.value) nameField.value = form.elements.business.value || '';
+    reportHeight();
+  }
+
   function renderBrand(d) {
     if (!d || !d.brand) {
-      brandSection.style.display = '';
-      brandCard.innerHTML =
-        '<div class="brandcard"><h3>We could not find your brand automatically</h3>' +
-        '<p style="margin:0;color:#5b6b7f;font-size:13.5px">No problem — upload your logo below and we will take the colours from it.</p></div>';
-      reportHeight();
+      showManual('We could not find your brand automatically');
       return;
     }
+    manual.style.display = 'none';
     var b = d.brand;
     var logos = (d.logoOptions || []).slice(0, 4);
     var html = '<div class="brandcard"><h3>We found ' + esc(b.name) + '</h3><div class="brandrow">';
@@ -408,9 +459,7 @@
     var reject = document.getElementById('rejectBrand');
     if (reject) reject.addEventListener('click', function () {
       discovered = null;
-      brandCard.innerHTML = '<div class="brandcard"><h3>No problem</h3>' +
-        '<p style="margin:0;color:#5b6b7f;font-size:13.5px">Upload your logo below and we will work from that.</p></div>';
-      reportHeight();
+      showManual('No problem — tell us about your brand');
     });
     reportHeight();
   }
@@ -434,6 +483,81 @@
   }
   website.addEventListener('blur', lookupBrand);
   website.addEventListener('change', lookupBrand);
+
+  /* ------------------------------------------- landing page suggestions */
+  // The landing page is the customer's own approved wording, so reading it
+  // gives better copy than asking them to summarise it again in a form field.
+  var landing = form.elements.landingPage;
+  var landingSection = document.getElementById('landingSection');
+  var landingCard = document.getElementById('landingCard');
+  var lastPage = '';
+  var suggestions = null;
+
+  function applySuggestion(field, value) {
+    var el = form.elements[field];
+    if (!el) return;
+    el.value = value;
+    el.focus();
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function renderLanding(a) {
+    if (!a || (!a.suggestedHeadlines.length && !a.summary)) {
+      landingSection.style.display = 'none';
+      return;
+    }
+    var chips = function (list, field, label) {
+      if (!list || !list.length) return '';
+      return '<div style="margin-top:10px"><div style="font-size:12px;color:#5b6b7f;margin-bottom:5px">' + label + '</div>' +
+        list.map(function (v) {
+          return '<button type="button" class="muted-btn" style="margin:0 6px 6px 0;font-size:13px" ' +
+            'data-apply="' + field + '" data-value="' + esc(v) + '">' + esc(v) + '</button>';
+        }).join('') + '</div>';
+    };
+    landingSection.style.display = '';
+    landingCard.innerHTML =
+      '<div class="brandcard"><h3>Here is what your page says</h3>' +
+      '<p style="margin:0 0 4px;font-size:13.5px">' + esc(a.summary) + '</p>' +
+      (a.detectedOffer ? '<p style="margin:6px 0 0;font-size:13px;color:#5b6b7f">Offer found: <b>' + esc(a.detectedOffer) + '</b></p>' : '') +
+      chips(a.suggestedHeadlines, 'benefit', 'Tap a headline to use it') +
+      chips(a.suggestedCtas, 'cta', 'Suggested calls to action') +
+      (a.warnings && a.warnings.length
+        ? '<div class="warn">' + a.warnings.map(esc).join('<br>') + '</div>' : '') +
+      '</div>';
+
+    Array.prototype.forEach.call(landingCard.querySelectorAll('[data-apply]'), function (b) {
+      b.addEventListener('click', function () {
+        var f = b.dataset.apply;
+        if (f === 'cta') {
+          var sel = form.elements.cta;
+          for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value.toLowerCase() === b.dataset.value.toLowerCase()) { sel.selectedIndex = i; break; }
+          }
+        } else {
+          applySuggestion(f, b.dataset.value);
+        }
+      });
+    });
+    reportHeight();
+  }
+
+  function readLanding() {
+    var v = (landing.value || '').trim();
+    if (!v || v === lastPage || v.indexOf('.') < 0) return;
+    lastPage = v;
+    landingSection.style.display = '';
+    landingCard.innerHTML = '<div class="brandcard"><span class="spinner"></span> Reading your landing page…</div>';
+    reportHeight();
+    fetch(API + '/api/landing/analyze', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: v })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (a) { suggestions = a; renderLanding(a); })
+      .catch(function () { landingSection.style.display = 'none'; });
+  }
+  landing.addEventListener('blur', readLanding);
+  landing.addEventListener('change', readLanding);
 
   /* -------------------------------------------------------- uploads */
   // Files go straight from the browser to Cloudinary using a signature this
@@ -531,7 +655,7 @@
     banner.innerHTML = '';
 
     var data = {};
-    var required = ['business', 'website', 'contact', 'email', 'campaignName',
+    var required = ['business', 'website', 'projectName', 'contact', 'email', 'campaignName',
                     'landingPage', 'promoting', 'objective', 'cta', 'benefit'];
     var bad = null;
 
@@ -574,7 +698,24 @@
     data.audience = form.elements.audience.value.trim();
     data.geography = form.elements.geography.value.trim();
     data.notes = form.elements.notes.value.trim();
+    data.projectName = (form.elements.projectName.value || '').trim();
     data.stockOk = document.getElementById('stockOk').checked;
+    if (suggestions) data.landingAnalysis = suggestions;
+    if (manual.style.display !== 'none') {
+      data.brandManual = true;
+      data.brand = {
+        name: document.getElementById('mbName').value.trim() || data.business,
+        domain: data.website,
+        colors: {
+          primary: document.getElementById('mbPrimary').value.toUpperCase(),
+          secondary: document.getElementById('mbSecondary').value.toUpperCase(),
+          accent: document.getElementById('mbAccent').value.toUpperCase(),
+          light: '#FFFFFF', dark: '#111111'
+        },
+        fonts: { headline: document.getElementById('mbHeadFont').value, body: 'Open Sans' },
+        logos: { primary: '' }
+      };
+    }
     data.uploads = uploaded;
     if (discovered && discovered.brand) {
       var picked = form.querySelector('input[name=pickedLogo]:checked');

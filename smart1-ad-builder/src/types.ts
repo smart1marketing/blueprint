@@ -77,8 +77,12 @@ export interface CreativeConcept {
   name: string;
   /** Which template family renders this concept, e.g. 'T01'. */
   layoutFamily: string;
-  /** Optional per-size overrides; `default` is the fallback. */
-  copy: Partial<Record<SizeKey | 'default', CopySet>>;
+  /**
+   * `default` carries the full copy set. A size key overrides it field by
+   * field, so a 320x50 entry can supply only a shorter headline and inherit
+   * the rest. Overrides are partial by design.
+   */
+  copy: { default?: CopySet } & Partial<Record<SizeKey, Partial<CopySet>>>;
   hero: HeroSet;
   /** Use the reverse (white) logo — set when the panel behind it is dark. */
   useReverseLogo?: boolean;

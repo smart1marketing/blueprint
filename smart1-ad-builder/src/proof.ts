@@ -1,0 +1,462 @@
+/**
+ * The client proof screen.
+ *
+ * Design brief, stated so the choices are checkable: the viewer is a business
+ * owner, not a designer, deciding whether these ads represent their company.
+ * The page has one job — get to a confident yes or a specific change request.
+ *
+ * Every decision below follows from one fact about the subject: display ads are
+ * seen small, in someone else's page, for about a second. A proof screen that
+ * shows them enlarged on a white void flatters the work and misleads the
+ * client. So the two signature controls are the ones a designer would actually
+ * use in a review:
+ *
+ *   Actual size    — 1:1 pixels, never scaled up. The default.
+ *   Squint test    — blurs the creative until only the focal hierarchy remains.
+ *                    This is the review technique behind "stick to one point of
+ *                    focus" and "size variation signals importance". If the ad
+ *                    still reads blurred, it will survive a glance.
+ *
+ * Palette is a deliberately neutral proofing grey. Brand colours have to read
+ * true, so the interface refuses to compete: one ink, one signal blue, and the
+ * QA traffic lights. Type pairs Poppins (the renderer's own display face, so
+ * the page shares an identity with its output) against a monospace used only
+ * for specifications, because dimensions and file weights are data.
+ */
+
+import type { Manifest, ManifestEntry } from './manifest';
+
+export interface ProofOptions {
+  /** How the browser should reach the creative files, e.g. '/files/'. */
+  fileBase?: string;
+  /** Base for the decision endpoint, e.g. '/api/proof/<projectId>'. */
+  actionBase?: string;
+}
+
+const esc = (v: unknown) =>
+  String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
+
+/** Sizes in the order a reviewer should meet them: universal first. */
+const SIZE_ORDER = ['300x250', '336x280', '728x90', '300x600', '160x600', '970x250', '320x50', '414x125'];
+
+function orderEntries(entries: ManifestEntry[]): ManifestEntry[] {
+  return [...entries].sort(
+    (a, b) => SIZE_ORDER.indexOf(a.size) - SIZE_ORDER.indexOf(b.size),
+  );
+}
+
+export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
+  const fileBase = opts.fileBase ?? '';
+
+  const byConcept = new Map<string, ManifestEntry[]>();
+  for (const e of m.entries) {
+    if (!byConcept.has(e.conceptId)) byConcept.set(e.conceptId, []);
+    byConcept.get(e.conceptId)!.push(e);
+  }
+
+  const concepts = [...byConcept.entries()].map(([id, entries]) => ({
+    id,
+    name: entries[0].conceptName,
+    family: entries[0].layoutFamily,
+    entries: orderEntries(entries),
+    hero: orderEntries(entries).find((e) => e.size === '300x250') ?? orderEntries(entries)[0],
+  }));
+
+  // Cloudinary URL once uploaded; otherwise the path relative to the reports
+  // directory this file is written into (<out>/reports/proof.html ->
+  // <out>/<platform>/<concept>/<file>).
+  const src = (e: ManifestEntry) => {
+    if (e.cloudinary?.secureUrl && !e.cloudinary.simulated) return e.cloudinary.secureUrl;
+    return fileBase + e.localFile.split('/').slice(-3).join('/');
+  };
+
+  const chooser = concepts
+    .map(
+      (c, i) => `
+      <label class="choice${i === 0 ? ' on' : ''}" data-concept="${esc(c.id)}">
+        <input type="radio" name="concept" value="${esc(c.id)}"${i === 0 ? ' checked' : ''}>
+        <span class="choice-head">
+          <span class="letter">${esc(c.id)}</span>
+          <span>
+            <b>${esc(c.name)}</b>
+            <em>${c.entries.length} sizes</em>
+          </span>
+        </span>
+        <span class="choice-art">
+          <img src="${esc(src(c.hero))}" width="${c.hero.deliveredDimensions.split('x')[0]}"
+               height="${c.hero.deliveredDimensions.split('x')[1]}" alt="Concept ${esc(c.id)} preview" loading="lazy">
+        </span>
+      </label>`,
+    )
+    .join('');
+
+  const panels = concepts
+    .map((c, i) => {
+      const tiles = c.entries
+        .map((e) => {
+          const [w, h] = e.deliveredDimensions.split('x').map(Number);
+          const issues = e.qaIssues.length
+            ? `<ul class="issues">${e.qaIssues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
+            : '';
+          return `
+        <figure class="ad" data-size="${esc(e.size)}">
+          <figcaption>
+            <span class="size">${esc(e.size)}</span>
+            <span class="spec">${esc(e.deliveredDimensions)} · ${esc(e.format)} · ${kb(e.bytes)} · ${e.wordCount} words</span>
+            <span class="dot ${esc(e.qaStatus)}" title="${esc(e.qaStatus)}"></span>
+          </figcaption>
+          <div class="frame" style="width:${w}px">
+            <img src="${esc(src(e))}" width="${w}" height="${h}" alt="${esc(e.size)} advertisement" loading="lazy">
+          </div>
+          ${issues}
+        </figure>`;
+        })
+        .join('');
+
+      const inline = c.entries.find((e) => e.size === '300x250');
+      const board = c.entries.find((e) => e.size === '728x90');
+
+      return `
+      <section class="panel${i === 0 ? ' on' : ''}" data-panel="${esc(c.id)}">
+        <div class="grid">${tiles}</div>
+
+        <div class="context" hidden>
+          <p class="context-note">Your ad as a reader meets it — inside someone else's page, at real size.</p>
+          <div class="page">
+            <div class="page-nav"><span class="page-brand">The Daily Register</span><span class="page-links">News · Local · Business</span></div>
+            ${board ? `<div class="slot"><img src="${esc(src(board))}" width="728" height="90" alt="Leaderboard in context"></div>` : ''}
+            <div class="page-body">
+              <div class="page-col">
+                <h4>City approves new transit corridor</h4>
+                <p>Council members voted late Tuesday to advance the long-debated proposal, ending months of negotiation between neighbourhood groups and the transit authority.</p>
+                <p>Construction would begin next spring under the current timetable, with the first segment opening to riders within three years.</p>
+                <p>Residents along the route have asked for noise mitigation and a guarantee that existing bus service will continue during the build.</p>
+                <p>The measure passed seven votes to two, with both dissenting members citing cost.</p>
+              </div>
+              <aside class="page-side">
+                ${inline ? `<div class="slot"><img src="${esc(src(inline))}" width="300" height="250" alt="Rectangle in context"></div>` : ''}
+                <h5>Most read</h5>
+                <ol><li>School board sets budget</li><li>Bridge repairs delayed</li><li>Weekend market returns</li></ol>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>`;
+    })
+    .join('');
+
+  const failing = m.entries.filter((e) => e.qaStatus === 'fail').length;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(m.client)} — creative proof</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* A proofing grey, not a brand colour. The interface must not compete
+       with whatever palette the creative is carrying. */
+    --paper: #E9EAEC;
+    --card: #FFFFFF;
+    --ink: #14171C;
+    --ink-2: #5C6470;
+    --rule: #D2D5DA;
+    --signal: #2C4FD6;
+    --pass: #1B7F4B;
+    --warn: #9A6400;
+    --fail: #B3261E;
+    --shadow: 0 1px 2px rgba(20,23,28,.08), 0 8px 24px rgba(20,23,28,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+  h1, h2, h3, .letter, .choice b {
+    font-family: Poppins, "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    letter-spacing: -.005em;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---- masthead ---- */
+  header.top {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline;
+    justify-content: space-between; padding: 34px 0 20px;
+    border-bottom: 1px solid var(--rule); margin-bottom: 28px;
+  }
+  header.top h1 { margin: 0; font-size: 25px; letter-spacing: -.01em; font-weight: 600; }
+  .kicker {
+    font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-2); margin-bottom: 6px;
+  }
+  .meta { color: var(--ink-2); font-size: 13px; }
+
+  /* ---- step 1: choose ---- */
+  .step { display: flex; align-items: baseline; gap: 10px; margin: 0 0 14px; }
+  .step h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .step span { color: var(--ink-2); font-size: 13.5px; }
+  .step .n {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--signal);
+    border: 1px solid var(--signal); border-radius: 3px; padding: 1px 6px;
+  }
+
+  .choices { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 40px; }
+  .choice {
+    background: var(--card); border: 1px solid var(--rule); border-radius: 10px;
+    padding: 14px; cursor: pointer; box-shadow: var(--shadow);
+    transition: border-color .15s, transform .15s;
+    display: block; position: relative;
+  }
+  .choice:hover { transform: translateY(-2px); }
+  .choice.on { border-color: var(--signal); box-shadow: 0 0 0 1px var(--signal), var(--shadow); }
+  .choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .choice-head { display: flex; gap: 11px; align-items: center; margin-bottom: 12px; }
+  .letter {
+    width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: #fff;
+    display: grid; place-items: center; font-size: 14px; font-weight: 600; flex: none;
+  }
+  .choice.on .letter { background: var(--signal); }
+  .choice b { display: block; font-size: 14.5px; font-weight: 600; }
+  .choice em { font-style: normal; font-size: 12px; color: var(--ink-2); }
+  .choice-art img { display: block; max-width: 300px; height: auto; border: 1px solid var(--rule); }
+
+  /* ---- toolbar ---- */
+  .toolbar {
+    position: sticky; top: 0; z-index: 5; background: rgba(233,234,236,.93);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule);
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    padding: 12px 0; margin-bottom: 22px;
+  }
+  .tool {
+    font: inherit; font-size: 13.5px; background: var(--card); color: var(--ink);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 7px 13px; cursor: pointer;
+  }
+  .tool:hover { border-color: var(--ink-2); }
+  .tool[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tool:focus-visible, .choice:focus-within, .act:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .toolbar .hint { color: var(--ink-2); font-size: 12.5px; margin-left: auto; }
+
+  /* ---- the ads ---- */
+  .panel { display: none; }
+  .panel.on { display: block; }
+  .grid { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+  .ad { margin: 0; max-width: 100%; }
+  figcaption {
+    display: flex; align-items: center; gap: 9px; margin-bottom: 7px;
+    font-size: 12px; color: var(--ink-2);
+  }
+  .size { font-family: "IBM Plex Mono", monospace; font-weight: 500; color: var(--ink); font-size: 12.5px; }
+  .spec { font-family: "IBM Plex Mono", monospace; font-size: 11px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; margin-left: auto; flex: none; }
+  .dot.pass { background: var(--pass); }
+  .dot.warn { background: var(--warn); }
+  .dot.fail { background: var(--fail); }
+  /* True size is the whole point, so a 970x250 is never scaled down to fit a
+     phone — that would misrepresent what the client is approving. Instead the
+     oversized unit scrolls inside its own frame and the page stays put. */
+  .frame {
+    background: var(--card); border: 1px solid var(--rule); box-shadow: var(--shadow);
+    max-width: 100%; overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .frame img { display: block; width: auto; max-width: none; height: auto; transition: filter .18s ease; }
+  body.squint .frame img { filter: blur(4px) saturate(1.05); }
+  body.squint .choice-art img { filter: blur(3px); }
+  .issues { margin: 8px 0 0; padding-left: 16px; font-size: 12px; color: var(--warn); max-width: 320px; }
+
+  /* ---- in-context ---- */
+  .context-note { color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px; }
+  .page {
+    background: #fff; border: 1px solid var(--rule); box-shadow: var(--shadow);
+    padding: 0 0 22px; max-width: 800px; overflow-x: auto;
+  }
+  .page-nav {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 14px 20px; border-bottom: 2px solid #1a1a1a;
+  }
+  .page-brand { font-family: Georgia, "Times New Roman", serif; font-size: 20px; letter-spacing: -.01em; }
+  .page-links { font-size: 11px; color: #6b7280; letter-spacing: .04em; }
+  .slot { padding: 16px 20px; display: flex; justify-content: center; }
+  .slot img { display: block; max-width: 100%; height: auto; }
+  .page-body { display: flex; gap: 26px; padding: 4px 20px 0; }
+  .page-col { flex: 1 1 60%; }
+  .page-col h4 { font-family: Georgia, serif; font-size: 21px; margin: 6px 0 10px; font-weight: 600; }
+  .page-col p { font-family: Georgia, serif; font-size: 14px; line-height: 1.65; color: #374151; margin: 0 0 11px; }
+  .page-side { flex: 0 0 300px; }
+  .page-side .slot { padding: 0 0 14px; }
+  .page-side h5 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #6b7280; margin: 4px 0 8px; }
+  .page-side ol { margin: 0; padding-left: 18px; font-family: Georgia, serif; font-size: 13.5px; color: #374151; }
+  .page-side li { margin-bottom: 6px; }
+
+  /* ---- decision ---- */
+  .decide {
+    margin-top: 46px; padding: 26px; background: var(--card);
+    border: 1px solid var(--rule); border-radius: 10px; box-shadow: var(--shadow);
+  }
+  .decide h2 { margin: 0 0 4px; font-size: 17px; }
+  .decide p { margin: 0 0 16px; color: var(--ink-2); font-size: 13.5px; }
+  textarea {
+    width: 100%; min-height: 84px; padding: 11px 12px; font: inherit; font-size: 14px;
+    border: 1px solid var(--rule); border-radius: 7px; resize: vertical; color: var(--ink);
+  }
+  textarea:focus { outline: 2px solid var(--signal); outline-offset: -1px; }
+  .acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .act {
+    font: inherit; font-weight: 600; font-size: 14.5px; border-radius: 7px;
+    padding: 11px 20px; cursor: pointer; border: 1px solid var(--rule); background: var(--card);
+  }
+  .act.primary { background: var(--signal); border-color: var(--signal); color: #fff; }
+  .act.primary:hover { filter: brightness(1.08); }
+  .banner {
+    padding: 12px 14px; border-radius: 7px; font-size: 13.5px; margin-bottom: 16px;
+  }
+  .banner.fail { background: #FCE8E6; color: var(--fail); }
+  footer { margin-top: 34px; color: var(--ink-2); font-size: 12.5px; }
+
+  .context, .grid { max-width: 100%; }
+  @media (max-width: 720px) {
+    .choice-art img { max-width: 100%; }
+    .page-body { flex-direction: column; }
+    .page-side { flex: 1 1 auto; }
+    .toolbar .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="kicker">Creative proof · ${esc(m.requestId)}</div>
+      <h1>${esc(m.client)}</h1>
+      <div class="meta">${esc(m.campaign)} · ${m.entries.length} creatives across ${
+        new Set(m.entries.map((e) => e.platform)).size
+      } platform(s)</div>
+    </div>
+    <div class="meta mono">${esc(new Date(m.generatedAt).toISOString().slice(0, 10))}</div>
+  </header>
+
+  ${
+    failing
+      ? `<div class="banner fail">${failing} creative${failing === 1 ? '' : 's'} did not pass checks and ${failing === 1 ? 'is' : 'are'} shown for review only.</div>`
+      : ''
+  }
+
+  <div class="step"><span class="n">1</span><h2>Choose a direction</h2><span>Both carry the same promise. Pick the one that sounds like you.</span></div>
+  <div class="choices">${chooser}</div>
+
+  <div class="step"><span class="n">2</span><h2>Check every size</h2><span>Shown at true pixel size — this is exactly how they will run.</span></div>
+
+  <div class="toolbar">
+    <button class="tool" id="squint" aria-pressed="false" title="Blur the creative to test whether one message still comes through">Squint test</button>
+    <button class="tool" id="context" aria-pressed="false">See it in a page</button>
+    <span class="hint">Squint until it blurs. If you can still tell what it says, it works at a glance.</span>
+  </div>
+
+  ${panels}
+
+  <div class="decide">
+    <h2>Your decision</h2>
+    <p>Approve to move into production at every size, or tell us what to change.</p>
+    <textarea id="changes" placeholder="For example: use the exterior photo instead, and make the offer bigger on the tall sizes."></textarea>
+    <div class="acts">
+      <button class="act primary" id="approve">Approve concept <span id="pickLabel">A</span></button>
+      <button class="act" id="request">Request changes</button>
+    </div>
+  </div>
+
+  <footer>Sizes and file weights meet current Google Display and Amazon DSP requirements. Colours may vary slightly between screens.</footer>
+</div>
+
+<script>
+window.PROOF_ENDPOINT = ${opts.actionBase ? JSON.stringify(opts.actionBase) : 'null'};
+(function () {
+  'use strict';
+  var body = document.body;
+
+  function setPressed(btn, on) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+
+  // Squint test. The review technique the creative guidance implies: if the
+  // focal hierarchy survives a blur, it survives a one-second glance.
+  var squint = document.getElementById('squint');
+  squint.addEventListener('click', function () {
+    var on = body.classList.toggle('squint');
+    setPressed(squint, on);
+  });
+
+  var context = document.getElementById('context');
+  context.addEventListener('click', function () {
+    var on = context.getAttribute('aria-pressed') !== 'true';
+    setPressed(context, on);
+    var panels = document.querySelectorAll('.panel');
+    for (var i = 0; i < panels.length; i++) {
+      panels[i].querySelector('.context').hidden = !on;
+      panels[i].querySelector('.grid').style.display = on ? 'none' : '';
+    }
+  });
+
+  var picked = document.querySelector('input[name=concept]:checked');
+  var label = document.getElementById('pickLabel');
+
+  function choose(id) {
+    var choices = document.querySelectorAll('.choice');
+    for (var i = 0; i < choices.length; i++) {
+      choices[i].classList.toggle('on', choices[i].dataset.concept === id);
+    }
+    var panels = document.querySelectorAll('.panel');
+    for (var j = 0; j < panels.length; j++) {
+      panels[j].classList.toggle('on', panels[j].dataset.panel === id);
+    }
+    label.textContent = id;
+  }
+
+  var radios = document.querySelectorAll('input[name=concept]');
+  for (var k = 0; k < radios.length; k++) {
+    radios[k].addEventListener('change', function () { choose(this.value); });
+  }
+
+  function decision(kind) {
+    var id = (document.querySelector('input[name=concept]:checked') || {}).value;
+    var notes = document.getElementById('changes').value.trim();
+    if (kind === 'revision' && !notes) {
+      document.getElementById('changes').focus();
+      return;
+    }
+    parent.postMessage({ type: 'smart1:decision', decision: kind, concept: id, notes: notes }, '*');
+
+    // Record it server-side. The proof may be opened from an email, so the
+    // page cannot assume a parent frame is listening.
+    if (window.PROOF_ENDPOINT) {
+      fetch(window.PROOF_ENDPOINT + '/' + (kind === 'approve' ? 'approve' : 'revision'), {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ concept: id, notes: notes })
+      }).catch(function () { /* the client already saw confirmation */ });
+    }
+    var box = document.querySelector('.decide');
+    box.innerHTML = '<h2>' + (kind === 'approve' ? 'Approved' : 'Changes requested') + '</h2>' +
+      '<p>' + (kind === 'approve'
+        ? 'Concept ' + id + ' is moving into production. We will send the finished files shortly.'
+        : 'Thanks — your notes are with the team and a revised proof is on the way.') + '</p>';
+  }
+
+  document.getElementById('approve').addEventListener('click', function () { decision('approve'); });
+  document.getElementById('request').addEventListener('click', function () { decision('revision'); });
+})();
+</script>
+</body>
+</html>`;
+}

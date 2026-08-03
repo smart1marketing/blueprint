@@ -186,6 +186,44 @@ export async function runQa(input: QaInput): Promise<QaFinding[]> {
     );
   }
 
+  /* ----------------------------------------------------- visual hierarchy */
+  // Amazon's creative guidance is explicit that size variation is how an ad
+  // signals importance without instructions: "deliberately sizing each element
+  // to signal its importance". If the headline and the supporting line render
+  // at nearly the same size, the viewer has no focal point in the second or
+  // two they give the unit.
+  const headFit = composed.fits.headline;
+  const supFit = composed.fits.support;
+  if (headFit && supFit) {
+    const ratio = headFit.fontSize / supFit.fontSize;
+    if (ratio < 1.35) {
+      warn(
+        'hierarchy',
+        `headline is only ${ratio.toFixed(2)}x the supporting text; aim for 1.4x or more so the eye has one clear entry point`,
+        { action: 'shorten', role: 'headline' },
+      );
+    } else {
+      pass('hierarchy', `headline ${ratio.toFixed(2)}x supporting text`);
+    }
+  }
+
+  // One focal point. Both sources say the same thing from different angles:
+  // "stick to one point of focus for each ad" and "minimal clutter". Offer,
+  // trust and a support line all competing below the headline is the common
+  // way a small unit turns into a brochure.
+  const secondary = (['support', 'offer', 'trust'] as const).filter(
+    (r) => layout[r] && (copy[r] ?? '').trim(),
+  );
+  const capacity = layout.canvas.w * layout.canvas.h >= 300 * 600 ? 3 : 2;
+  if (secondary.length > capacity) {
+    warn(
+      'focal-point',
+      `${secondary.length} supporting elements (${secondary.join(', ')}) compete below the headline; this canvas comfortably carries ${capacity}`,
+    );
+  } else {
+    pass('focal-point', `${secondary.length} supporting element(s)`);
+  }
+
   /* ------------------------------------------------------------ contrast */
   const lowContrast: string[] = [];
   for (const role of TEXT_ROLES) {

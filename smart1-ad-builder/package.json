@@ -15,7 +15,9 @@
     "scaffold": "tsx scripts/scaffold.ts",
     "start": "node dist/src/server.js",
     "worker": "node dist/src/worker.js",
-    "dev": "tsx watch src/server.ts"
+    "dev": "tsx watch src/server.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "diagnose": "tsx -e \"import('./src/diagnostics').then(async m=>{const r=await m.runDiagnostics({outDir:process.env.OUTPUT_DIR||'out',assetRoot:process.cwd()});console.log(JSON.stringify(r.summary),r.verdict);for(const c of r.checks)if(c.level!=='ok')console.log(c.level.toUpperCase(),c.label,'-',c.detail)})\""
   },
   "keywords": [],
   "author": "",

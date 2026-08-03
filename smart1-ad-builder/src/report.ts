@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Manifest, ManifestEntry } from './manifest';
 import type { UploadedAsset } from './cloudinary';
+import { renderProof } from './proof';
 
 const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
 
@@ -269,6 +270,8 @@ export function writeReports(m: Manifest, outDir: string): string[] {
   fs.mkdirSync(outDir, { recursive: true });
   const base = `image-report_${m.requestId}`;
   const files = [
+    // Proof first: it is the thing a person actually opens.
+    [path.join(outDir, `proof_${m.requestId}.html`), renderProof(m, { fileBase: '../' })],
     [path.join(outDir, `${base}.html`), renderImageReport(m)],
     [path.join(outDir, `${base}.csv`), renderCsv(m)],
     [path.join(outDir, `manifest_${m.requestId}.json`), JSON.stringify(m, null, 2)],

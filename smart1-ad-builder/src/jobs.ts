@@ -12,6 +12,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Campaign, RenderResult } from './types';
 import { renderPackage } from './render';
@@ -53,6 +54,66 @@ const inputs = new Map<string, JobInput>();
 const queue: string[] = [];
 let running = false;
 
+/**
+ * Durability without new infrastructure. The queue itself stays in-memory —
+ * still one instance only — but a job's state is mirrored to disk as it
+ * changes, so a restart mid-render (a Render deploy is exactly this) does not
+ * silently drop it. On boot the server calls recoverJobs(), which finds
+ * anything left 'queued' or 'running' from before the restart and requeues it
+ * from scratch. There is no partial-render resume; a requeued job re-renders
+ * everything, which is simple and safe rather than clever.
+ */
+let jobsDir = '';
+
+function jobFile(id: string): string {
+  return path.join(jobsDir, `${id}.json`);
+}
+
+function persist(id: string): void {
+  if (!jobsDir) return;
+  const job = jobs.get(id);
+  const input = inputs.get(id);
+  if (!job) return;
+  try {
+    fs.mkdirSync(jobsDir, { recursive: true });
+    fs.writeFileSync(jobFile(id), JSON.stringify({ job, input }, null, 2));
+  } catch (e: any) {
+    console.warn(`[jobs] could not persist ${id}: ${e?.message ?? e}`);
+  }
+}
+
+/** Call once at boot, before startWorkerLoop, so recovered jobs are queued
+ *  before the loop starts draining. */
+export function recoverJobs(outDir: string): { recovered: number; discarded: number } {
+  jobsDir = path.join(outDir, 'jobs');
+  fs.mkdirSync(jobsDir, { recursive: true });
+
+  let recovered = 0;
+  let discarded = 0;
+  for (const f of fs.readdirSync(jobsDir).filter((f) => f.endsWith('.json'))) {
+    try {
+      const { job, input } = JSON.parse(fs.readFileSync(path.join(jobsDir, f), 'utf8')) as {
+        job: Job; input?: JobInput;
+      };
+      if ((job.status === 'queued' || job.status === 'running') && input) {
+        job.status = 'queued';
+        job.progress = { done: 0, total: job.progress.total };
+        jobs.set(job.id, job);
+        inputs.set(job.id, input);
+        queue.push(job.id);
+        persist(job.id);
+        recovered++;
+      } else {
+        discarded++;
+      }
+    } catch {
+      discarded++;
+    }
+  }
+  if (recovered) console.log(`[jobs] recovered ${recovered} interrupted job(s) from before restart`);
+  return { recovered, discarded };
+}
+
 export function enqueue(input: JobInput): Job {
   const id = randomUUID().slice(0, 8);
   const total = input.platforms.reduce((n, p) => {
@@ -87,6 +148,7 @@ export function enqueue(input: JobInput): Job {
   jobs.set(id, job);
   inputs.set(id, input);
   queue.push(id);
+  persist(id);
   return job;
 }
 
@@ -98,6 +160,7 @@ async function runJob(id: string): Promise<void> {
   const input = inputs.get(id)!;
   job.status = 'running';
   job.startedAt = new Date().toISOString();
+  persist(id);
 
   try {
     const { campaign, platforms, upload, outDir, assetRoot } = input;
@@ -158,6 +221,7 @@ async function runJob(id: string): Promise<void> {
   } finally {
     job.finishedAt = new Date().toISOString();
     inputs.delete(id);
+    persist(id);
   }
 }
 

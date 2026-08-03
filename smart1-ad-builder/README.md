@@ -258,6 +258,63 @@ silently returns whole-canvas statistics. The crop has to be materialised to a
 buffer first. This produced phantom contrast warnings until it was caught by
 onboarding a second brand whose page average differed from its copy area.
 
+## The intake flow, in order
+
+1. **Business name and website.** The website field is where brand discovery
+   starts — it fires on blur and calls `POST /api/brand/discover`.
+2. **Confirm or correct the brand.** If Brandfetch found something, the customer
+   confirms it. If it found nothing, or they say "this is not my brand", the
+   form opens **manual entry**: business name, three colours, headline font.
+   Discovery failing is the normal case for a small business, so it returns 200
+   with `brand: null` rather than an error.
+3. **Project name.** Required, and the thing people search on later. The hint
+   asks for a season or year because clients re-run the same campaign.
+4. **Landing page.** On blur, `POST /api/landing/analyze` reads the page and
+   returns suggested headlines and CTAs as tappable chips.
+5. **Uploads** go straight to Cloudinary via a server-signed request.
+
+## Landing page analysis
+
+The landing page is the customer's own approved wording, so reading it beats
+asking them to summarise it again in a form field. `src/landing.ts` strips
+scripts, nav and footer (a footer full of location links otherwise skews every
+suggestion toward geography), then takes one of two paths:
+
+- **OpenAI** when `OPENAI_API_KEY` is set, using Structured Outputs so the
+  application receives fields rather than prose. The prompt forbids inventing
+  an offer, price or credential the page does not state.
+- **A heuristic reader** otherwise — weaker, and it says so in `source` and in
+  a warning, but a missing key degrades the suggestions rather than breaking
+  intake.
+
+A 429, a timeout, or a page that renders entirely client-side all fall back to
+the heuristic with the reason attached. Verified against a stub; **never called
+against the live OpenAI API**, since this sandbox has no route to it.
+
+Analysis is cached on the project, and runs in the background on submission so
+the customer is not left waiting on a third-party fetch.
+
+## Projects: dated and searchable
+
+Every submission creates a `Project` in `out/projects/`, keyed
+`<client>_<project-name>_<date>` so re-running "Spring Promotion" next year
+does not overwrite this year's. Each record carries:
+
+- created and updated timestamps, and a dated `RenderBatch` per render
+- the Cloudinary folder, plus `AssetLink`s recording what each asset is and
+  where it came from (`upload`, `brandfetch`, `generated`, `placeholder`)
+- the landing page URL and its cached analysis
+- the brand, flagged when it was entered by hand
+- keywords lifted from the brief, which is what makes free-text search useful
+
+`GET /api/projects?q=&client=&status=&from=&to=` searches across project name,
+client, campaign, domain, landing page and keywords — every term must match, so
+narrowing a search narrows the results. Newest first.
+
+Storage is a JSON file per project plus an index: correct for one instance,
+wrong the moment there are two. The read/write surface is narrow so it can move
+to Postgres without touching callers.
+
 ## Brand discovery and asset uploads
 
 `POST /api/brand/discover` takes a domain and returns a `Brand` mapped from
@@ -302,12 +359,270 @@ renderer can read, with caching. `prepareLogo()` rasterises SVG logos, which
 sharp cannot composite directly. `validateAsset()` rejects unreadable files and
 anything under 200px before it reaches a creative.
 
+## Security
+
+Internal routes — the build screen, diagnostics, campaign read/write, project
+search, render queue and `/files/` — require `ADMIN_TOKEN`. It is a shared
+secret, which is the right weight for a handful of staff; it is not a user
+system, so there are no accounts, roles or audit trail. Set it to something
+long and random:
+
+```
+ADMIN_TOKEN=$(openssl rand -hex 32)
+```
+
+**Without it, those routes are closed to everyone, including you.** That is
+deliberate — the alternative is a build screen anyone can read by guessing the
+URL.
+
+A token can arrive as a Bearer header, an `X-Admin-Token` header, a `?token=`
+query parameter, or the `s1_admin` cookie. The query form exists so a bookmark
+works; the server then sets a cookie so the token stops appearing in the
+address bar and referrer headers. Comparison is timing-safe.
+
+Public routes stay open because an embedded form on a customer's site calls
+them, so they get rate limiting instead. `POST /api/assets/upload-signature`
+has the tightest budget: each signature is permission to write into your
+Cloudinary account, so an open one is somebody else's free file storage on your
+bill.
+
+## Diagnostics
+
+`/diagnostics` runs every check live and reports what is actually working
+right now. It exists because every failure in this system has been silent from
+the outside: a missing font fell back and rendered the wrong typeface, a stale
+build served a 404, a CSP default showed a blank iframe.
+
+It checks the runtime and memory headroom, that each registered font renders
+glyphs, that no template has overlapping or out-of-bounds boxes, platform
+limits still marked unverified, the admin token and embed origins, disk space
+and how much output is being retained, every integration credential, a live
+outbound call to each third party, and finally a full end-to-end render.
+
+Every failure states the fix inline. `?format=json` returns the same report and
+answers **503 when broken**, so an uptime monitor can watch it directly.
+
+One detail worth keeping: a 403 from an integration is reported as *unproven*
+rather than reachable, because a proxy or firewall answering on the service's
+behalf looks identical to success otherwise.
+
+## Tests
+
+```bash
+npm test
+```
+
+29 tests, run against the real renderer. They exist because of bugs that
+actually shipped — widening the CTA buttons pushed a headline underneath one,
+and repositioning a trust line broke a passing campaign. Both were invisible to
+QA, which checks each box against its own rectangle and cannot see two elements
+sharing space.
+
+The suite covers layout geometry (overlap, safe area, canvas dimensions), that
+the longest CTA the form offers fits every button, typesetting, font health,
+contrast maths, offer-token extraction, brand mapping, landing extraction,
+Cloudinary signatures, auth and rate limiting, and a full clean render of both
+sample campaigns on both platforms.
+
+It has already earned its place: adding the three new template families, it
+immediately caught five safe-area breaches and a CTA that could not hold
+"Schedule Now".
+
+## The four screens
+
+| Screen | Route | Who opens it |
+|---|---|---|
+| Intake form | `/embed` | The customer, embedded on the marketing site |
+| **Build screen** | `/build` | Smart 1 staff, to edit and re-render |
+| Client proof | `out/reports/proof_<id>.html` | The customer, to approve or request changes |
+| Image report + gallery | `out/reports/` | Internal record and asset library view |
+
+## The build screen
+
+`/build` is the operator's workbench and the only screen where creative is
+changed. It opens any campaign that intake has built, and every edit re-renders
+through the real pipeline — the preview is the actual renderer output at
+delivery scale, not a CSS approximation, so what you approve is what ships.
+
+A dark studio rather than the proof screen's light gallery, because an operator
+spends an hour here judging brand colour and a bright surround skews that all
+day. The canvas sits on a neutral mid-grey that does not tint the creative, with
+a **Dark page / Light page** toggle for checking how a creative holds up on
+either kind of publisher, and the same **Squint** test as the proof screen.
+
+Three things worth knowing about how it behaves:
+
+**Copy edits are per size.** The model is a default copy set plus per-size
+overrides. The editor shows the effective value for the size on screen and
+writes to that size's override, so shortening the 320x50 headline cannot
+silently rewrite the 300x600. Clearing a field falls back to the default.
+
+**QA fixes are one click.** Findings carry a machine-readable
+`{ action: 'shorten', role, maxWords }`, so the checks panel offers a
+"Shorten headline to 2 words" button rather than making the operator work out
+what "does not fit" means in words. This is the same instruction the AI
+copywriter will consume when that step lands.
+
+**Switching layout family re-renders every size**, and the rail shows which
+sizes that family actually covers — swapping to T04 drops from eight sizes to
+four, visibly.
+
+`Render all sizes` saves the campaign and queues the full package through the
+same job runner as the CLI.
+
+## The client proof screen
+
+`src/proof.ts` generates `out/reports/proof_<requestId>.html` on every run.
+It is the page a customer opens to approve work, so it is built around one
+fact about the subject: display ads are seen small, inside someone else's
+page, for about a second.
+
+Two controls follow from that, and both are review techniques rather than
+decoration:
+
+**Actual size, always.** Creatives render at true pixel dimensions and are
+never scaled up. On a phone an oversized unit scrolls inside its own frame
+rather than shrinking — scaling it down would misrepresent what the client is
+approving.
+
+**Squint test.** Blurs every creative until only the focal hierarchy survives.
+This is the manual version of the guidance that an ad needs one point of focus
+and must read at a glance; if the message still comes through blurred, it will
+survive a second of attention.
+
+**See it in a page** drops the 300x250 and 728x90 into a mock article layout,
+because an ad on a white void flatters itself.
+
+The interface palette is a deliberately neutral proofing grey. Brand colours
+have to read true, so the surrounding chrome refuses to compete.
+
+## Design rules the QA now enforces
+
+Drawn from Amazon's creative guide and WordStream's teardown of display ads
+that worked:
+
+- **Hierarchy.** Amazon is explicit that size variation is how an ad signals
+  importance without instructions. QA warns when the headline is less than
+  1.4x the supporting line. This immediately caught my own 728x90, where the
+  ratio had drifted to 1.25x.
+- **One focal point.** Both sources say the same thing from opposite ends —
+  "stick to one point of focus" and "minimal clutter". QA warns when offer,
+  trust and support all compete below the headline on a canvas too small to
+  carry them.
+- **Match creative to the size, don't squeeze.** Already the architecture:
+  every size has its own layout and its own copy budget.
+
+## Wired together
+
+Everything below used to be a standalone piece; this is how they now connect.
+
+**Copy generation is live in intake.** `buildCampaign` calls `generateCopy`
+directly — the placeholder word-truncation is now only the fallback for a
+missing key or a failed call, not the default path. Because word-budget
+compliance doesn't guarantee pixel width ("Check Availability" fits every
+budget and overflows several buttons), AI-written CTAs still pass through the
+same `shortCta` clamp the deterministic path always used.
+
+**Submission to proof is automatic.** A renderable request is queued the
+moment it arrives; nobody has to notice it first. The submission response
+returns immediately — rendering happens after, via the existing job queue —
+and a notification fires once the proof is ready, or if the render failed, or
+if the submission wasn't renderable at all (usually a missing logo), so staff
+know a customer is waiting either way.
+
+**Approvals and revisions notify, and revisions surface.** Both proof-screen
+buttons now trigger a notification. `GET /api/campaigns` sorts anything with
+an open revision to the top, and the build screen's campaign picker marks it
+"⚠ NEEDS REVISION" so it can't be scrolled past.
+
+## Notifications
+
+`src/notify.ts` follows the same pattern as every other integration here: a
+real transport when configured, an honest fallback otherwise. Two transports,
+because small teams split roughly in half between email and Slack:
+
+- **Resend**, via `RESEND_API_KEY` + `EMAIL_TO` — a plain REST call, no SDK.
+- **A webhook**, via `NOTIFY_WEBHOOK_URL` — Slack-compatible payload, works
+  with any incoming webhook.
+
+Both can be set at once. If neither is set, nothing is lost: the message is
+appended to `out/notifications/outbox.jsonl` instead, and diagnostics flags
+the missing configuration.
+
+## Job durability
+
+The queue is still in-memory and still single-instance — that has not
+changed, and still needs Redis or Postgres before running two web processes.
+What changed is narrower: **a job's state now mirrors to disk as it changes**,
+so a restart mid-render (a Render deploy is exactly this) no longer drops it
+silently. On boot, `recoverJobs()` finds anything left `queued` or `running`
+from before the restart and requeues it from scratch — there is no partial
+resume, a recovered job re-renders everything, which is simple and safe rather
+than clever.
+
+Tested by killing the process with `SIGKILL` mid-render and confirming the job
+came back and completed after restart.
+
+## The projects screen
+
+`/projects` — search and filter past work, click through to reopen it in the
+build screen. Same dark palette as the build screen on purpose: this is staff
+tooling opened in the same session, and a palette switch between the two would
+read as leaving the app rather than moving within it.
+
+## Platform limits, now fully confirmed
+
+The two "unverified" Amazon limits turned out to need more than confirming a
+number:
+
+- **336x280 is not an Amazon DSP placement.** It is absent from Amazon's own
+  spec page entirely — a Google-only size that had been carried into the
+  Amazon config by mistake. Removed; Amazon renders now produce 7 sizes for a
+  full campaign rather than 8, and none of them is a size Amazon has nowhere
+  to run.
+- **414x125 was wrong, not just unconfirmed.** Configured at 50KB; Amazon's
+  page states 100KB. The error was in the safe direction — the app would have
+  forced smaller files than necessary, not shipped oversized ones — but it was
+  still incorrect data.
+
+Every remaining Amazon and Google limit was checked directly against
+[advertising.amazon.com/resources/ad-specs/dsp/desktop](https://advertising.amazon.com/resources/ad-specs/dsp/desktop)
+and matched exactly. Diagnostics no longer shows any unverified platform
+limit.
+
+## Copy generation
+
+`src/copywriter.ts` replaces the deterministic word-trimming that stood in for
+copywriting. It writes per size rather than shrinking one headline, because a
+320x50 carries about five words and a 300x600 carries twenty-four.
+
+The model is constrained hard: it may never state a price, rating, guarantee or
+credential that is not in the brief or the landing page, headlines start with
+an active verb where natural, and pressure language is stripped on the way out
+because Amazon rejects it. Everything returned is then measured, wrapped and QA
+checked exactly like hand-written copy.
+
+Without `OPENAI_API_KEY` it falls back to the form-derived copy and says so.
+Verified against a stub, including trimming an over-length headline and
+removing a banned word; **never called against the live API** from here.
+
+## Retention
+
+Rendered files are written locally before upload and nothing pruned them, which
+on a shared box means this service slowly eats the volume its neighbours live
+on. `src/retention.ts` sweeps daily: renders older than
+`RENDER_RETENTION_DAYS` (30) and cached downloads older than
+`CACHE_RETENTION_DAYS` (7). Projects, campaigns, requests and reports are never
+touched — they are small and they are the audit trail.
+
+`POST /api/maintenance/sweep` previews what would go; add `?dry=0` to act.
+
 ## What this does not do yet
 
 - **The form does not trigger a render.** `POST /api/requests` writes the
   submission to disk; nothing consumes it. Bridging intake to a campaign JSON
   is the next piece.
-- OpenAI creative-plan generation and image generation
+- OpenAI **image** generation (copy generation is built; imagery is still placeholders)
 - Cloudinary smart cropping (upload, folders and search are done)
 - the proof screen, natural-language revisions, approval flow
 - HighLevel custom object sync and status workflows

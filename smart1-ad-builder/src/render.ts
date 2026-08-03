@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import sharp from 'sharp';
 import type {
+  QaFinding,
   Brand,
   CopySet,
   CreativeConcept,
@@ -122,6 +123,56 @@ export async function renderOne(opts: RenderOneOptions): Promise<RenderResult> {
     wordCount: composed.wordCount,
     qa,
     status: rollUp(qa),
+  };
+}
+
+/**
+ * Render one creative to a buffer without touching disk. This is what makes a
+ * build screen possible: an editor needs a new preview on every keystroke, and
+ * writing a file per keystroke is both slow and messy.
+ */
+export async function renderPreview(opts: {
+  brand: Brand;
+  concept: CreativeConcept;
+  platform: string;
+  size: SizeKey;
+  assetRoot?: string;
+}): Promise<{ png: Buffer; width: number; height: number; qa: QaFinding[]; status: 'pass' | 'warn' | 'fail'; wordCount: number }> {
+  const { brand, concept, platform, size, assetRoot } = opts;
+  const template = getTemplate(concept.layoutFamily);
+  const layout = template.sizes[size];
+  if (!layout) throw new Error(`${template.id} has no layout for ${size}`);
+  const rule = getPlatform(platform).sizes[size];
+  if (!rule) throw new Error(`${platform} does not define ${size}`);
+
+  const scale = rule.deliverScale;
+  const copy = copyForSize(concept, size);
+  (copy as any).__useReverseLogo = concept.useReverseLogo ?? layout.background === 'dark';
+
+  const composed = await compose({
+    layout, brand, copy, hero: concept.hero, scale,
+    noBakedCta: rule.noBakedCta, assetRoot,
+  });
+  const bgPass = await compose({
+    layout, brand, copy, hero: concept.hero, scale,
+    includeText: false, noBakedCta: rule.noBakedCta, assetRoot,
+  });
+  const backgroundPng = await sharp(Buffer.from(bgPass.svg)).png().toBuffer();
+
+  // Preview is always PNG: the editor cares about layout, not the compression
+  // ladder, and re-running that ladder on every keystroke would be wasteful.
+  const png = await sharp(Buffer.from(composed.svg)).png().toBuffer();
+  const raster = { buffer: png, format: 'png' as const, bytes: png.length, overweight: false, attempts: 1 };
+
+  const qa = await runQa({ layout, brand, copy, rule, composed, raster, backgroundPng, scale });
+
+  return {
+    png,
+    width: layout.canvas.w * scale,
+    height: layout.canvas.h * scale,
+    qa,
+    status: rollUp(qa),
+    wordCount: composed.wordCount,
   };
 }
 
