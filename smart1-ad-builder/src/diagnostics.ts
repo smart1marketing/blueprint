@@ -242,11 +242,31 @@ async function pingCloudinary(): Promise<Check> {
       level: 'ok', detail: `authenticated, ${found.length} project folder(s) under ${cld.root}`,
     };
   } catch (e: any) {
-    const msg = String(e?.message ?? e);
+    // The Cloudinary Admin API rejects with { error: { message, http_code } },
+    // not a plain Error — e.message is undefined, so naively stringifying `e`
+    // produced the literal text "[object Object]" here previously.
+    const inner = e?.error ?? e;
+    const httpCode: number | undefined = inner?.http_code ?? e?.http_code;
+    const msg: string = typeof inner?.message === 'string' ? inner.message
+      : typeof e?.message === 'string' ? e.message
+      : (() => { try { return JSON.stringify(e); } catch { return String(e); } })();
+
+    // Cloudinary does not pre-create folders — they exist only once something
+    // has been uploaded into them. A 404 on the root folder is therefore the
+    // expected state for an account that has never received an upload, not a
+    // connectivity or credentials problem.
+    if (httpCode === 404 || /can't find folder|not found/i.test(msg)) {
+      return {
+        id: 'cloudinary.ping', group: 'Integrations', label: 'Cloudinary reachable',
+        level: 'ok',
+        detail: `authenticated; the "${cld.root}" folder does not exist yet because nothing has been uploaded`,
+      };
+    }
+
     return {
       id: 'cloudinary.ping', group: 'Integrations', label: 'Cloudinary reachable',
-      level: 'fail', detail: msg,
-      fix: /401|403|signature|api_key/i.test(msg)
+      level: 'fail', detail: httpCode ? `HTTP ${httpCode}: ${msg}` : msg,
+      fix: httpCode === 401 || httpCode === 403 || /signature|api_key/i.test(msg)
         ? 'Credentials were rejected. Check CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET.'
         : 'Could not reach Cloudinary. Check outbound network access from this host.',
     };
