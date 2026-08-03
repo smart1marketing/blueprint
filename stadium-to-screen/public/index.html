@@ -392,6 +392,19 @@
   .lead-success{margin-top:6px;border:1px solid var(--turf);background:rgba(47,208,122,.08);border-radius:14px;padding:18px 20px;font-size:1rem;color:var(--chalk)}
   .lead-success b{color:var(--turf-soft)}
   @media(max-width:560px){.lf-grid{grid-template-columns:1fr}}
+  /* gated report reveal */
+  .lock-pill{font-family:'JetBrains Mono';font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;background:rgba(139,160,184,.18);color:var(--steel);padding:.28em .6em;border-radius:20px;margin-left:8px}
+  .lock-pill.open{background:rgba(47,208,122,.16);color:var(--turf-soft)}
+  .gated{position:relative;border-radius:14px;overflow:hidden}
+  .gated .gated-content{filter:blur(7px);opacity:.5;pointer-events:none;user-select:none;transition:filter .45s ease,opacity .45s ease}
+  .gated .gate-overlay{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:18px;background:linear-gradient(180deg,rgba(10,22,38,.25),rgba(10,22,38,.6))}
+  .gated .gate-card{max-width:36ch}
+  .gated .gate-card svg{margin-bottom:8px}
+  .gated .gate-title{font-family:'Archivo';font-weight:800;font-size:1.12rem;margin-bottom:6px}
+  .gated .gate-sub{font-size:.88rem;color:var(--steel)}
+  .gated.unlocked .gated-content{filter:none;opacity:1;pointer-events:auto;user-select:auto}
+  .gated.unlocked .gate-overlay{display:none}
+  .lf-trust{font-size:.76rem;color:var(--steel-dim);margin-top:10px}
 </style>
 </head>
 <body>
@@ -907,6 +920,7 @@
 ============================================================================ */
 const BACKEND_URL = ""; // empty = curated lists only
 // Leads POST to BACKEND_URL + "/api/lead" (server builds the PDF, stores it in Cloudinary, forwards to GHL_WEBHOOK_URL).
+const CALENDAR_URL = ""; // optional "Book a strategy call" calendar link (server can also supply via /api/lead)
 
 const AVG_HH_SIZE = 2.5;
 const DEVICE_PER_HH = { phones:2.6, computers:1.6, tablets:0.9, connectedTV:2.3 };
@@ -1142,6 +1156,7 @@ async function buildProposal(){
   const m=computeMetrics(team,state.scope);
   const pkg=recommendPackage(state.focus);
   box.innerHTML=`<div class="spinner"><div class="ball"></div><div>Sizing the ${m.scopeLabel} audience and matching inventory…</div></div>`;
+  const _warm=setTimeout(()=>{const t=box.querySelector(".spinner div:last-child");if(t)t.textContent="Waking up the server… first load can take up to 30s";},4500);
   box.scrollIntoView({behavior:'smooth',block:'center'});
 
   let rec, aiGenerated=false;
@@ -1153,87 +1168,143 @@ async function buildProposal(){
   }catch(e){ rec=fallbackRecommendations(state.focus); aiGenerated=false; }
   lastRec=rec;
 
+  clearTimeout(_warm);
   render(team,m,pkg,rec,aiGenerated);
+  gtm("proposal_built",{team:team.name,league:state.league,scope:state.scope,focus:state.focus});
 }
 function list(items,sub){ return (items||[]).map(i=>`<li>${i.name}${i[sub]?` <em>· ${i[sub]}</em>`:''}</li>`).join('') || '<li><em>None matched</em></li>'; }
+function rangeFmt(n){ if(n==null||isNaN(n)) return "—"; return fmt(Math.round(n*0.88))+"–"+fmt(Math.round(n*1.12)); }
+function gtm(event,data){ try{ window.dataLayer=window.dataLayer||[]; window.dataLayer.push(Object.assign({event:event},data||{})); }catch(e){} }
+
+function downloadPdf(b64, filename){
+  try{
+    const bin=atob(b64), len=bin.length, bytes=new Uint8Array(len);
+    for(let i=0;i<len;i++) bytes[i]=bin.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+    const a=document.createElement("a"); a.href=url; a.download=filename||"company-stadium-report.pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+  }catch(e){ console.error("download failed",e); }
+}
+
 function render(team,m,pkg,rec,ai){
   const wantAudio=state.focus==='audio'||state.focus==='both';
   const scopeName={local:'Local',regional:'Regional',national:'National'}[state.scope];
   const badge=ai?'<span class="badge ai">\u25C6 AI-matched</span>':'<span class="badge static">Curated fallback</span>';
   const podcastsBlock=wantAudio?`
-    <div class="block-title">Suggested podcasts (DSP) ${badge}</div>
-    <ul class="rec-list">${list(rec.podcasts,'network')}</ul>`:'';
+          <div class="block-title">Suggested podcasts (DSP) ${badge}</div>
+          <ul class="rec-list">${list(rec.podcasts,'network')}</ul>`:'';
   document.getElementById('proposal').innerHTML=`
     <div class="prop">
       <div class="prop-eyebrow">Proposed Game Plan · ${scopeName} · ${state.league==='pro'?'pro':'college'} football</div>
       <h3>The ${team.name} Play</h3>
       <div class="prop-meta"><b>${m.scopeLabel}</b> &nbsp;·&nbsp; ${team.venue} &nbsp;·&nbsp; targeting ${m.geo}</div>
-      <div class="block-title">Audience size <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--steel-dim)">— modeled from market data</span></div>
-      <div class="metrics">
-        <div class="metric"><div class="n">${fmt(m.fanBase)}</div><div class="l">Est. reachable fan base</div></div>
-        <div class="metric"><div class="n">${fmt(m.households)}</div><div class="l">Households in scope</div></div>
-      </div>
-      <div class="device-row">
-        <div class="device"><div class="n">${fmt(m.devices.phones)}</div><div class="l">Phones</div></div>
-        <div class="device"><div class="n">${fmt(m.devices.computers)}</div><div class="l">Computers</div></div>
-        <div class="device"><div class="n">${fmt(m.devices.tablets)}</div><div class="l">Tablets</div></div>
-        <div class="device"><div class="n">${fmt(m.devices.connectedTV)}</div><div class="l">Connected TV</div></div>
-      </div>
-      <div class="metrics" style="margin-top:10px">
-        <div class="metric wide"><div class="n">${fmt(m.matchable)}</div><div class="l">Realistically matchable programmatic audience (devices)</div></div>
-      </div>
-      <div class="block-title">Matched streaming services ${badge}</div>
-      <ul class="rec-list">${list(rec.streamingServices,'why')}</ul>
-      ${podcastsBlock}
-      <div class="rec-cols" style="margin-top:4px">
-        <div><div class="block-title">Sports networks</div><ul class="rec-list">${list(rec.sportsNetworks,'why')}</ul></div>
-        <div><div class="block-title">Related audiences</div><ul class="rec-list">${list(rec.relatedAudiences,'why')}</ul></div>
-      </div>
+
       <div class="prop-rec">
         <div><div class="rl">Recommended package</div><div class="rn">${pkg.name}</div></div>
         <div class="rp">${pkg.price}</div>
       </div>
       <div class="prop-note">${pkg.note}</div>
-      <div class="block-title">Get your full proposal</div>
-      <p class="prop-note" style="margin-bottom:14px">Add a few details and a Smart 1 strategist will build out the complete ${team.name} media plan — exact inventory, flight dates, and pricing.</p>
+
+      <div class="block-title">Audience size <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--steel-dim)">— modeled from market data</span></div>
+      <div class="metrics">
+        <div class="metric"><div class="n">${rangeFmt(m.fanBase)}</div><div class="l">Est. reachable fan base</div></div>
+        <div class="metric"><div class="n">${rangeFmt(m.households)}</div><div class="l">Households in scope</div></div>
+      </div>
+
+      <div class="block-title">Device breakdown &amp; media plan <span class="lock-pill" id="lockPill">Locked</span></div>
+      <div class="gated" id="gated">
+        <div class="gated-content">
+          <div class="device-row">
+            <div class="device"><div class="n">${fmt(m.devices.phones)}</div><div class="l">Phones</div></div>
+            <div class="device"><div class="n">${fmt(m.devices.computers)}</div><div class="l">Computers</div></div>
+            <div class="device"><div class="n">${fmt(m.devices.tablets)}</div><div class="l">Tablets</div></div>
+            <div class="device"><div class="n">${fmt(m.devices.connectedTV)}</div><div class="l">Connected TV</div></div>
+          </div>
+          <div class="metrics" style="margin-top:10px">
+            <div class="metric wide"><div class="n">${rangeFmt(m.matchable)}</div><div class="l">Realistically matchable programmatic audience (devices)</div></div>
+          </div>
+          <div class="block-title">Matched streaming services ${badge}</div>
+          <ul class="rec-list">${list(rec.streamingServices,'why')}</ul>
+          ${podcastsBlock}
+          <div class="rec-cols" style="margin-top:4px">
+            <div><div class="block-title">Sports networks</div><ul class="rec-list">${list(rec.sportsNetworks,'why')}</ul></div>
+            <div><div class="block-title">Related audiences</div><ul class="rec-list">${list(rec.relatedAudiences,'why')}</ul></div>
+          </div>
+        </div>
+        <div class="gate-overlay" id="gateOverlay">
+          <div class="gate-card">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#5ee39a" stroke-width="1.6"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            <div class="gate-title">Unlock the full breakdown</div>
+            <div class="gate-sub">Add your details below to reveal the full device breakdown and media plan — and download your PDF report.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="block-title" id="formTitle">Get your full proposal</div>
+      <p class="prop-note" id="formIntro" style="margin-bottom:14px">Tell us where to send it. A Smart 1 strategist will follow up with the complete ${team.name} media plan — exact inventory, flight dates, and pricing.</p>
       <form class="lead-form" id="leadForm" novalidate>
+        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
         <div class="lf-grid">
           <div class="lf-field"><label>Full name *</label><input type="text" name="name" autocomplete="name" placeholder="Jane Smith"></div>
           <div class="lf-field"><label>Work email *</label><input type="text" name="email" autocomplete="email" placeholder="jane@company.com"></div>
-          <div class="lf-field"><label>Company</label><input type="text" name="company" autocomplete="organization" placeholder="Company name"></div>
+          <div class="lf-field"><label>Company *</label><input type="text" name="company" autocomplete="organization" placeholder="Company name"></div>
           <div class="lf-field"><label>Phone</label><input type="text" name="phone" autocomplete="tel" placeholder="(555) 555-5555"></div>
           <div class="lf-field"><label>Monthly budget</label><select name="budget"><option value="">Select…</option><option>$2,500–$4,500</option><option>$4,500–$6,000</option><option>$6,000+</option><option>Not sure yet</option></select></div>
           <div class="lf-field"><label>Timeline</label><select name="timeline"><option value="">Select…</option><option>ASAP / this season</option><option>Next 1–3 months</option><option>Just exploring</option></select></div>
           <div class="lf-field lf-full"><label>Anything else we should know?</label><textarea name="notes" rows="2" placeholder="Goals, target markets, questions…"></textarea></div>
         </div>
         <div class="lf-actions">
-          <button type="submit" class="btn btn-turf" id="leadSubmit">Send me the full proposal →</button>
+          <button type="submit" class="btn btn-turf" id="leadSubmit">Unlock full report →</button>
           <a href="#packages" class="btn btn-ghost">Compare packages</a>
         </div>
         <div class="lf-msg" id="leadMsg"></div>
+        <p class="lf-trust">We only use your details to build your plan — no spam. Trusted by brands advertising to college &amp; pro football fans.</p>
       </form>
       <div class="disclaimer">
         Audience figures are <b>modeled planning estimates</b> — computed from baseline market data (Nielsen-style DMA / Census households) and industry-average device and match-rate assumptions, not guaranteed delivery. Streaming, podcast, network, and audience lists are ${ai?'AI-generated suggestions':'curated suggestions'} to validate against live DSP availability. A Smart 1 strategist confirms exact inventory, reach, and pricing for ${team.name} on your call.
       </div>
     </div>`;
-  const leadCtx={team:team.name,league:state.league,scope:state.scope,scopeLabel:m.scopeLabel,focus:state.focus,dma:team.dma,city:team.city,venue:team.venue,recommendedPackage:pkg.name,packagePrice:pkg.price,estFanBase:m.fanBase,estHouseholds:m.households,estMatchable:m.matchable,estDevicesTotal:m.devices.total,page:"football-audio-video-playbook",source:"Stadium to Screen proposal builder"};
+  const leadCtx={team:team.name,league:state.league,scope:state.scope,scopeLabel:m.scopeLabel,focus:state.focus,dma:team.dma,city:team.city,venue:team.venue,recommendedPackage:pkg.name,packagePrice:pkg.price,estFanBase:m.fanBase,estHouseholds:m.households,estMatchable:m.matchable,estDevicesTotal:m.devices.total,estDevicesPhones:m.devices.phones,estDevicesComputers:m.devices.computers,estDevicesTablets:m.devices.tablets,estDevicesCTV:m.devices.connectedTV,page:"football-audio-video-playbook",source:"Stadium to Screen proposal builder"};
   const lf=document.getElementById("leadForm");
   lf.addEventListener("submit",async(ev)=>{
     ev.preventDefault();
     const d=Object.fromEntries(new FormData(lf).entries());
     const msg=document.getElementById("leadMsg");
-    if(!d.name||!d.name.trim()||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((d.email||"").trim())){ msg.innerHTML='<span class="lf-err">Please add your name and a valid work email.</span>'; return; }
-    const btn=document.getElementById("leadSubmit"); const label=btn.textContent; btn.disabled=true; btn.textContent="Sending…"; msg.innerHTML="";
+    const emailOk=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((d.email||"").trim());
+    if(!d.name||!d.name.trim()||!emailOk||!d.company||!d.company.trim()){
+      msg.innerHTML='<span class="lf-err">Please add your name, work email, and company to unlock the full report.</span>'; return;
+    }
+    const btn=document.getElementById("leadSubmit"); const label=btn.textContent; btn.disabled=true; btn.textContent="Unlocking…"; msg.innerHTML="";
+    gtm("unlock_started",{team:leadCtx.team});
+    const _sub=setTimeout(()=>{ if(btn) btn.textContent="Still working…"; },4500);
     const payload=Object.assign({},d,leadCtx,{recommendations:lastRec,submittedAt:new Date().toISOString()});
-    const done=()=>{ const first=(d.name||"there").trim().split(" ")[0]; lf.outerHTML='<div class="lead-success">\u2713 Thanks, '+first+' — a Smart 1 strategist will send your full '+leadCtx.team+' proposal to <b>'+d.email+'</b> shortly.</div>'; };
+    let pdfBase64=null,pdfUrl=null,reportFilename="company-stadium-report.pdf",calendarUrl=CALENDAR_URL;
     try{
       const r=await fetch((BACKEND_URL||"").replace(/\/$/,"")+"/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
       if(!r.ok) throw new Error("bad status");
-      done();
+      const j=await r.json(); pdfBase64=j.pdfBase64||null; pdfUrl=j.pdfUrl||null; if(j.reportFilename)reportFilename=j.reportFilename; if(j.calendarUrl)calendarUrl=j.calendarUrl;
     }catch(err){
-      if(!BACKEND_URL){ done(); }
-      else{ btn.disabled=false; btn.textContent=label; msg.innerHTML='<span class="lf-err">Couldn\u2019t send just now — please try again in a moment.</span>'; }
+      clearTimeout(_sub);
+      if(BACKEND_URL){ btn.disabled=false; btn.textContent=label; msg.innerHTML='<span class="lf-err">Couldn\u2019t submit just now — please try again in a moment.</span>'; return; }
     }
+    clearTimeout(_sub);
+    const gated=document.getElementById("gated"); if(gated) gated.classList.add("unlocked");
+    const pill=document.getElementById("lockPill"); if(pill){ pill.textContent="Unlocked"; pill.classList.add("open"); }
+    const fi=document.getElementById("formIntro"); if(fi) fi.remove();
+    const ft=document.getElementById("formTitle"); if(ft) ft.textContent="Your report is ready";
+    const first=(d.name||"there").trim().split(" ")[0];
+    const hasPdf=!!(pdfBase64||pdfUrl);
+    const dl=pdfBase64?'<button class="btn btn-ghost" id="dlReport">\u2193 Download PDF report</button>'
+            :(pdfUrl?'<a class="btn btn-ghost" href="'+pdfUrl+'" target="_blank" rel="noopener">\u2193 Download PDF report</a>':'');
+    const book=calendarUrl?'<a class="btn btn-turf" id="bookCall" href="'+calendarUrl+'" target="_blank" rel="noopener">Book a strategy call \u2192</a>':'';
+    lf.outerHTML='<div class="lead-success">\u2713 Thanks, '+first+' — the full '+leadCtx.team+' breakdown is unlocked above'+(hasPdf?', and your PDF report is ready to download':'')+'.</div>'
+      +'<div class="lf-actions" style="margin-top:14px">'+book+dl+'<a href="#packages" class="btn btn-ghost">Compare packages</a></div>';
+    gtm("lead_submitted",{team:leadCtx.team,package:leadCtx.recommendedPackage,scope:leadCtx.scope,focus:leadCtx.focus});
+    const dlBtn=document.getElementById("dlReport");
+    if(dlBtn&&pdfBase64) dlBtn.addEventListener("click",()=>{downloadPdf(pdfBase64,reportFilename);gtm("report_downloaded",{team:leadCtx.team});});
+    const bookBtn=document.getElementById("bookCall");
+    if(bookBtn) bookBtn.addEventListener("click",()=>gtm("book_call_clicked",{team:leadCtx.team}));
   });
 }
 
