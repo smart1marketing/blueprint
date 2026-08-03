@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works — Smart 1 Radio Studio</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter+Tight:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --console:#0c1017; --panel:#151b26; --panel2:#1c2432; --edge:#2b3547; --edge-hot:#3d4a61;
+  --tape:#e8e2d4; --dim:#9aa4b4; --signal:#ff6b1a; --vu:#7be0c9;
+  --openai:#ff6b1a; --brandfetch:#8b7be8; --eleven:#7be0c9; --cloudinary:#4fa8ff; --ghl:#ffc94a;
+  --display:'Archivo Black',Arial Black,sans-serif; --body:'Inter Tight',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:0 0 70px;background:
+    radial-gradient(1100px 520px at 50% -8%,#1a2333 0,transparent 70%),
+    repeating-linear-gradient(180deg,transparent 0 3px,rgba(255,255,255,.012) 3px 4px),var(--console);
+  color:var(--tape);font-family:var(--body);line-height:1.55;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:940px;margin:0 auto;padding:0 18px}
+h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;line-height:1.06;text-transform:uppercase}
+h1{font-size:clamp(2rem,6vw,3.4rem);letter-spacing:-.02em}
+h2{font-size:clamp(1.1rem,3vw,1.4rem)}
+h3{font-size:1.02rem;text-transform:none;font-family:var(--body);font-weight:700}
+p{margin:0 0 .6rem}
+.mono{font-family:var(--mono)}
+.dim{color:var(--dim)}
+.sm{font-size:.87rem}
+.xs{font-size:.76rem}
+
+/* header */
+header{padding:44px 0 6px;text-align:center}
+.mark{display:inline-flex;align-items:baseline;gap:8px;font-family:var(--display);text-transform:uppercase;margin-bottom:16px}
+.mark .one{background:var(--signal);color:#0c1017;padding:2px 9px;border-radius:5px}
+.eyebrow{font-family:var(--mono);font-size:.64rem;letter-spacing:.26em;text-transform:uppercase;color:var(--signal)}
+.lede{max-width:620px;margin:14px auto 0;color:var(--dim)}
+
+/* service legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:26px 0 8px}
+.chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;
+  text-transform:uppercase;border:1px solid var(--edge);border-radius:999px;padding:5px 12px;color:var(--dim);white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;flex:none}
+.chip.oa{border-color:rgba(255,107,26,.5);color:var(--openai)} .chip.oa i{background:var(--openai)}
+.chip.bf{border-color:rgba(139,123,232,.5);color:var(--brandfetch)} .chip.bf i{background:var(--brandfetch)}
+.chip.el{border-color:rgba(123,224,201,.5);color:var(--eleven)} .chip.el i{background:var(--eleven)}
+.chip.cl{border-color:rgba(79,168,255,.5);color:var(--cloudinary)} .chip.cl i{background:var(--cloudinary)}
+.chip.gh{border-color:rgba(255,201,74,.5);color:var(--ghl)} .chip.gh i{background:var(--ghl)}
+
+/* dial */
+.dial{position:relative;height:66px;border-radius:10px;margin:30px 0 8px;overflow:hidden;
+  background:linear-gradient(180deg,#1b2331,#10151d);border:1px solid var(--edge)}
+.dial .ticks{position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,rgba(232,226,212,.16) 0 1px,transparent 1px 14px);opacity:.5}
+.dial .band{position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,107,26,.32),rgba(123,224,201,.14))}
+.dial .stations{position:absolute;inset:0;display:flex;align-items:center}
+.dial .st{flex:1;text-align:center;font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);line-height:1.5}
+.dial .st b{display:block;font-size:.72rem;color:var(--tape)}
+.dial .st:nth-child(odd) b{color:var(--signal)}
+
+/* signal path */
+.path{position:relative;margin:34px 0 0;padding-left:0}
+.stn{position:relative;display:grid;grid-template-columns:96px 1fr;gap:18px;
+  border:1px solid var(--edge);border-radius:10px;background:linear-gradient(180deg,var(--panel2),var(--panel));
+  padding:18px;margin-bottom:12px;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+.stn::after{content:'';position:absolute;left:56px;bottom:-13px;width:2px;height:12px;background:var(--edge-hot)}
+.stn:last-of-type::after{display:none}
+.freq{text-align:center;border-right:1px solid var(--edge);padding-right:16px}
+.freq b{display:block;font-family:var(--display);font-size:1.28rem;color:var(--signal);line-height:1}
+.freq span{font-family:var(--mono);font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+.freq .n{display:block;font-family:var(--mono);font-size:.6rem;color:var(--edge-hot);margin-top:8px}
+.does{margin:.5rem 0 .7rem}
+.ret{border-left:2px solid var(--vu);padding-left:11px;color:var(--dim);font-size:.86rem}
+.ret b{color:var(--vu);font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+@media(max-width:620px){
+  .stn{grid-template-columns:1fr;gap:10px}
+  .freq{text-align:left;border-right:none;border-bottom:1px solid var(--edge);padding:0 0 10px}
+  .freq b{display:inline;font-size:1.1rem;margin-right:8px}.freq .n{display:inline;margin-left:10px}
+  .stn::after{left:24px}
+}
+
+/* background lane */
+.bg{display:grid;grid-template-columns:96px 1fr;gap:18px;border:1px dashed var(--edge-hot);border-radius:10px;
+  padding:14px 18px;margin:-4px 0 12px;background:rgba(255,107,26,.05)}
+.bg .tagcol{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--signal);text-align:center;padding-right:16px}
+@media(max-width:620px){.bg{grid-template-columns:1fr;gap:8px}.bg .tagcol{text-align:left}}
+
+/* generic panel */
+.panel{border:1px solid var(--edge);border-radius:10px;background:linear-gradient(180deg,var(--panel2),var(--panel));padding:22px;margin:14px 0}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.cols{grid-template-columns:1fr}}
+pre{font-family:var(--mono);font-size:.72rem;line-height:1.75;color:var(--dim);background:#0d121a;border:1px solid var(--edge);
+  border-radius:8px;padding:14px;overflow-x:auto;margin:0}
+pre b{color:var(--cloudinary);font-weight:400}
+pre i{color:var(--vu);font-style:normal}
+.kv{width:100%;border-collapse:collapse;font-size:.84rem}
+.kv th,.kv td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--edge);vertical-align:top}
+.kv th{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);white-space:nowrap;width:118px}
+footer{text-align:center;margin-top:34px;color:var(--dim);font-size:.8rem}
+footer a{color:var(--signal)}
+@media (prefers-reduced-motion:no-preference){
+  .lamp{animation:th 1.3s ease-in-out infinite}@keyframes th{50%{opacity:.3}}
+}
+.lamp{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--signal);box-shadow:0 0 12px var(--signal);vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="mark"><span class="one">S1</span><span>Radio Studio</span></div>
+  <div class="eyebrow">Signal path</div>
+  <h1>From a web address<br>to a recorded spot</h1>
+  <p class="lede">Seven stations on the dial. The client only ever answers one question at a time — everything expensive happens off to the side while they're busy.</p>
+  <div class="legend">
+    <span class="chip oa"><i></i>OpenAI</span>
+    <span class="chip bf"><i></i>Brandfetch</span>
+    <span class="chip el"><i></i>ElevenLabs</span>
+    <span class="chip cl"><i></i>Cloudinary</span>
+    <span class="chip gh"><i></i>GoHighLevel</span>
+    <span class="chip"><i style="background:var(--dim)"></i>ffmpeg</span>
+  </div>
+</header>
+
+<div class="dial">
+  <div class="band"></div><div class="ticks"></div>
+  <div class="stations">
+    <div class="st"><b>88.1</b>Setup</div>
+    <div class="st"><b>91.3</b>Brief</div>
+    <div class="st"><b>94.7</b>Copy</div>
+    <div class="st"><b>98.5</b>Cast</div>
+    <div class="st"><b>101.9</b>Booth</div>
+    <div class="st"><b>105.3</b>Package</div>
+    <div class="st"><b>108.1</b>Send</div>
+  </div>
+</div>
+<p class="xs dim mono" style="text-align:center;letter-spacing:.14em">The progress bar is the tuner. The needle slides as they go.</p>
+
+<div class="path">
+
+  <div class="stn">
+    <div class="freq"><b>88.1</b><span>Setup</span><span class="n">01</span></div>
+    <div>
+      <h3>Client and brand</h3>
+      <p class="does sm">They type seven things: contact, email, Smart 1 team member, project name, home page, landing page, promotion details. Or they search a past playlist and start from those settings instead.</p>
+      <div class="chips"><span class="chip bf"><i></i>brand lookup by domain</span></div>
+      <p class="ret"><b>Back:</b> business name, logo file, brand colors, industry and location — auto-filled into the form.</p>
+    </div>
+  </div>
+
+  <div class="bg">
+    <div class="tagcol"><span class="lamp"></span><br>Background</div>
+    <div>
+      <p class="sm" style="margin:0"><b>The site review starts the moment they hit submit.</b> Home page and landing page are fetched, stripped to text, and read alongside the promotion notes — while the client is already on the next screen picking a tone.</p>
+      <div class="chips" style="margin:10px 0 0"><span class="chip oa"><i></i>read pages → creative brief</span></div>
+    </div>
+  </div>
+
+  <div class="stn">
+    <div class="freq"><b>91.3</b><span>Brief</span><span class="n">02</span></div>
+    <div>
+      <h3>How should this one sound?</h3>
+      <p class="does sm">Fifteen tones as radio buttons — Upbeat, Trusted Authority, Urgent Deal, Cinematic, Quirky, Nostalgic and the rest. When the review lands, three of the fifteen get marked <span class="mono xs" style="color:var(--vu)">TOP PICK</span> / <span class="mono xs" style="color:var(--vu)">SUGGESTED</span> and the brief appears above them.</p>
+      <div class="chips"><span class="chip oa"><i></i>summary · listener · offer · proof points · 3 tone picks</span></div>
+      <p class="ret"><b>Back:</b> the client picks one tone. That single choice sets the script, the voice and the banner for this spot.</p>
+    </div>
+  </div>
+
+  <div class="bg">
+    <div class="tagcol"><span class="lamp"></span><br>Background</div>
+    <div>
+      <p class="sm" style="margin:0"><b>Two jobs fire the instant a tone is chosen.</b> The companion banner is painted and the voice is cast — both finished long before the client reaches the studio.</p>
+      <div class="chips" style="margin:10px 0 0">
+        <span class="chip oa"><i></i>banner art + headline</span>
+        <span class="chip cl"><i></i>logo lockup, 300×250 + 640×640</span>
+        <span class="chip oa"><i></i>casting suggestion</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stn">
+    <div class="freq"><b>94.7</b><span>Copy</span><span class="n">03</span></div>
+    <div>
+      <h3>The :15 and the :30</h3>
+      <p class="does sm">A matched pair written to the clock off one shared hook — 35–42 words and 70–85 words. Brand name twice in the :30, call to action last, nothing invented that wasn't on the page.</p>
+      <div class="chips"><span class="chip oa"><i></i>write both lengths together</span></div>
+      <p class="ret"><b>Three doors:</b> <b>Approve</b> → into the studio. <b>Not this one</b> → dropped. <b>Suggest a change</b> → their note goes back with the old draft, and both lengths are rewritten so they still match.</p>
+      <p class="sm dim" style="margin-top:10px">When both are approved: <em>“Is this everything you want to record?”</em> — add another tone, or roll.</p>
+    </div>
+  </div>
+
+  <div class="stn">
+    <div class="freq"><b>98.5</b><span>Cast</span><span class="n">04</span></div>
+    <div>
+      <h3>Pick the voice</h3>
+      <p class="does sm">Five radio-button groups — voice, age, accent, energy, delivery — already pre-selected from the casting suggestion that ran in the background. They adjust or accept.</p>
+      <div class="chips">
+        <span class="chip el"><i></i>score the voice library against the picks</span>
+        <span class="chip el"><i></i>or paste a specific voice ID</span>
+      </div>
+      <p class="ret"><b>Back:</b> three voices with preview clips. They assign one to each approved spot, keeping the voice matched to the tone it was written in.</p>
+    </div>
+  </div>
+
+  <div class="bg">
+    <div class="tagcol"><span class="lamp"></span><br>Background</div>
+    <div>
+      <p class="sm" style="margin:0"><b>Audio starts rendering the second voices are assigned</b> — the client walks into the listening room while the first spot is still bouncing. Each finished MP3 uploads straight to the client's folder.</p>
+      <div class="chips" style="margin:10px 0 0">
+        <span class="chip"><i style="background:var(--dim)"></i>rewrite for the ear</span>
+        <span class="chip el"><i></i>render the read</span>
+        <span class="chip el"><i></i>compose the bed</span>
+        <span class="chip"><i style="background:var(--dim)"></i>bed, duck, master</span>
+        <span class="chip cl"><i></i>upload MP3</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stn">
+    <div class="freq"><b>101.9</b><span>Booth</span><span class="n">05</span></div>
+    <div>
+      <h3>Listening room</h3>
+      <p class="does sm">One spot at a time. Play the audio, look at the companion banner that runs beside it on the listener's screen, then decide.</p>
+      <p class="ret"><b>Two doors:</b> <b>Approve</b> → straight to the playlist. <b>Try a different voice</b> → back to casting, re-render, same script.</p>
+    </div>
+  </div>
+
+  <div class="stn">
+    <div class="freq"><b>105.3</b><span>Package</span><span class="n">06</span></div>
+    <div>
+      <h3>The playlist</h3>
+      <p class="does sm">Every approved spot, its banner, the scripts, the voices, the brief — laid out on one page with download links.</p>
+      <div class="chips">
+        <span class="chip cl"><i></i>file the folder + copy the logo in</span>
+        <span class="chip gh"><i></i>create the opportunity</span>
+      </div>
+      <p class="ret"><b>Back:</b> a permanent Cloudinary folder and a GoHighLevel opportunity carrying every URL.</p>
+    </div>
+  </div>
+
+  <div class="stn">
+    <div class="freq"><b>108.1</b><span>Send</span><span class="n">07</span></div>
+    <div>
+      <h3>Who signs off?</h3>
+      <p class="does sm">Name the reviewer, add a note about the flight or which cut to lead with, and send.</p>
+      <div class="chips"><span class="chip gh"><i></i>approval webhook, all links attached</span></div>
+      <p class="ret"><b>Back:</b> the project lands in the searchable library, ready to be reused as the starting point for the client's next campaign.</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="cols">
+  <div class="panel">
+    <div class="eyebrow">What gets saved</div>
+    <h2>One folder, everything in it</h2>
+    <pre>smart1-radio-studio/
+└── <b>greenwald-realty</b>/
+    └── <b>fall-push-2026-08-02</b>/
+        ├── audio/
+        │   ├── <i>upbeat-15s.mp3</i>
+        │   ├── <i>upbeat-30s.mp3</i>
+        │   └── <i>warm-30s.mp3</i>
+        ├── banners/
+        │   ├── <i>banner-art-upbeat</i>
+        │   └── <i>banner-art-warm</i>
+        └── <i>client-logo</i></pre>
+    <p class="xs dim" style="margin-top:10px">Client name, project name, date. One banner per tone — a :15 and :30 in the same tone share it.</p>
+  </div>
+
+  <div class="panel">
+    <div class="eyebrow">Where the wait goes</div>
+    <h2>Nobody watches a spinner</h2>
+    <table class="kv">
+      <tr><th>Site review</th><td>runs while they choose a tone</td></tr>
+      <tr><th>Banner art</th><td>runs while they read scripts</td></tr>
+      <tr><th>Casting</th><td>runs while they read scripts</td></tr>
+      <tr><th>Audio render</th><td>runs while they walk to the booth</td></tr>
+    </table>
+    <p class="sm dim" style="margin-top:12px">When there <em>is</em> a wait, a themed SVG plays — a broadcast tower, a turning record, a VU needle, tape reels, a waveform, a live mic — with captions that match the job. <span class="mono xs">“Counting words per second…” · “Rolling tape…”</span></p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="eyebrow">Under the floor</div>
+  <h2>The things that keep it from breaking</h2>
+  <div class="cols" style="margin-top:6px">
+    <div>
+      <table class="kv">
+        <tr><th>Resume</th><td>The project id lives in the URL. Refresh, lose signal, close the tab — the link puts you back on the same station.</td></tr>
+        <tr><th>Sign-in</th><td>One shared team password. Reviewers never need it; their link carries its own token.</td></tr>
+        <tr><th>Runtime</th><td>Every render is measured. Over the slot gets flagged with how many words to cut. A long read is never trimmed mid-word.</td></tr>
+        <tr><th>Restarts</th><td>Jobs interrupted by a redeploy are marked on boot and show a retry button.</td></tr>
+      </table>
+    </div>
+    <div>
+      <table class="kv">
+        <tr><th>Pronunciation</th><td>Phone numbers, URLs, prices and dates are rewritten into spoken words before the voice sees them — and shown to the client.</td></tr>
+        <tr><th>Music beds</th><td>Pick from the library, compose one with Eleven Music, or upload a track you licensed. Composed beds are forced instrumental with an open midrange.</td></tr>
+        <tr><th>Mastering</th><td>Bed underneath, ducked by the read, mastered to &minus;16 LUFS, padded to the exact slot.</td></tr>
+        <tr><th>Editing</th><td>Type into the script with a live words-to-clock meter. Every version is kept and restorable.</td></tr>
+        <tr><th>Sign-off</th><td>The reviewer gets Approve and Request changes, and the answer comes back into the project.</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="eyebrow">Outside the wizard</div>
+  <h2>Three more rooms</h2>
+  <table class="kv">
+    <tr><th>Library</th><td>Every saved playlist, searchable by client, business, project or team member. Expand any project to hear the spots. Feeds the “reuse a previous playlist” shortcut back at 88.1.</td></tr>
+    <tr><th>Review page</th><td>What the client sees. Branded, read-only, one link, no password — every spot and banner with Approve and Request changes on the bottom.</td></tr>
+    <tr><th>Diagnostics</th><td>Live tests against all five services, ffmpeg, music beds and sign-in, a list of anything missing from the environment, webhook test buttons, and a rolling error log. Check it before a client ever sees a failure.</td></tr>
+  </table>
+</div>
+
+<footer>
+  Smart 1 Radio Studio · Node + Express on Render · <a href="/">Open the studio</a>
+</footer>
+
+</div>
+</body>
+</html>

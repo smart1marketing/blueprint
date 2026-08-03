@@ -32,7 +32,7 @@ Fourteen things were added after the first build, in three groups.
 **So it sounds like a commercial**
 
 - **A pronunciation pass.** Phone numbers, web addresses, emails, prices, percentages, dates and everyday abbreviations are rewritten into spoken words before ElevenLabs sees them. `614-536-0768` becomes "six one four, five three six, zero seven six eight." Every substitution is shown to the client under "How it will be read," and any word can be overridden per project — useful for a business name TTS keeps mangling.
-- **Music bed and mastering.** ffmpeg lays a bed underneath, ducks it out of the way of the read with a sidechain compressor, masters to −16 LUFS with a −1.5 dBTP ceiling, and pads to the exact slot length. Beds come from your own Cloudinary folder, so nothing unlicensed ships. If ffmpeg or the bed fails, the dry take still goes through — mastering never loses a render.
+- **Music beds, three ways.** Pick from the library, compose one with Eleven Music, or upload a track you licensed. Composed beds are constrained to instrumental with an open midrange so they never fight the read. **Mastering:** ffmpeg lays the bed underneath, ducks it out of the way of the read with a sidechain compressor, masters to −16 LUFS with a −1.5 dBTP ceiling, and pads to the exact slot length. Beds come from your own Cloudinary folder, so nothing unlicensed ships. If ffmpeg or the bed fails, the dry take still goes through — mastering never loses a render.
 - **Direct editing.** Type into the script with a live words-to-clock meter that turns red as you cross the slot. A one-word change no longer needs a full regenerate.
 
 **So the loop closes**
@@ -78,7 +78,17 @@ Optional: `OPENAI_MODEL`, `OPENAI_IMAGE_MODEL`, `ELEVENLABS_MODEL`, `CLOUDINARY_
 
 ### Music beds
 
-Upload licensed instrumental beds to the Cloudinary folder named in `CLOUDINARY_BED_FOLDER`. They appear as choices in the recording studio. Ten to fifteen seconds is enough — beds loop automatically to fill the slot. Nothing ships with the app, so you are never distributing music you do not have rights to.
+The recording studio offers three sources, as tabs:
+
+**Library** — everything already in the Cloudinary folder named by `CLOUDINARY_BED_FOLDER`, including anything composed or uploaded previously. Beds are reusable across clients.
+
+**Compose one** — Eleven Music writes an instrumental bed to order (`POST /v1/music`). The model first suggests a prompt based on the tone and the listener, with two alternates to click. Every generated prompt is wrapped with hard constraints before it is sent: fully instrumental, no vocals or vocal samples, steady energy for looping, and an uncluttered midrange so the read sits on top rather than under. Default length is 35 seconds, which covers a :30 with padding.
+
+**Upload a track** — MP3, WAV, M4A or OGG up to 20 MB, for music the agency already licensed or the client supplied.
+
+All three land in the same Cloudinary folder and are tagged by origin, so the library shows whether a bed was composed, uploaded or pre-existing.
+
+On licensing: Eleven Music is trained on licensed material and generations are cleared for broad commercial use on paid plans, with film, TV and large studio game rights requiring Enterprise. Streaming radio spots fall inside the standard commercial grant, but check the current Eleven Music terms for your own use. Nothing ships with the app, so you never distribute music you do not have rights to.
 
 ## Deploying to Render from GitHub
 
