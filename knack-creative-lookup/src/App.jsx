@@ -35,13 +35,15 @@ const App = () => {
     try {
       const apiKey = process.env.REACT_APP_KNACK_API_KEY;
       const appId = process.env.REACT_APP_KNACK_APP_ID;
-      const objectId = process.env.REACT_APP_KNACK_IO_OBJECT_ID; // e.g., "object_234"
       
-      if (!apiKey || !appId || !objectId) {
+      if (!apiKey || !appId) {
         throw new Error(
-          'Missing required Knack credentials. Check: REACT_APP_KNACK_API_KEY, REACT_APP_KNACK_APP_ID, REACT_APP_KNACK_IO_OBJECT_ID'
+          'Missing required Knack credentials. Check: REACT_APP_KNACK_API_KEY, REACT_APP_KNACK_APP_ID'
         );
       }
+
+      // Query object_135 (Campaign/Product records)
+      const objectId = 'object_135';
 
       const response = await axios.get(
         `https://api.knack.com/v1/objects/${objectId}/records`,
@@ -60,11 +62,11 @@ const App = () => {
       const records = response.data.records || [];
       setIoRecords(records);
 
-      // Extract unique clients
+      // Extract unique clients from field_2384 (no duplicates)
       const uniqueClients = [...new Set(
         records
-          .map(r => r.field_2243) // Client Organization Name
-          .filter(Boolean)
+          .map(r => r.field_2384) // Client lookup field
+          .filter(client => client && client.toString().trim() !== '') // Remove empty/null
       )].sort();
 
       setClients(
@@ -73,6 +75,13 @@ const App = () => {
           value: client
         }))
       );
+
+      // Set default dates to start of month to today
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDate(firstDayOfMonth);
+      setEndDate(today);
+
     } catch (err) {
       console.error('Error fetching records:', err);
       setError(err.message || 'Failed to fetch data from Knack');
@@ -83,47 +92,65 @@ const App = () => {
 
   // Filter records based on date range and client
   const filteredRecords = ioRecords.filter(record => {
-    // Filter by client
-    if (selectedClient && record.field_2243 !== selectedClient.value) {
+    // Filter by client (field_2384 - Client lookup)
+    if (selectedClient && record.field_2384 !== selectedClient.value) {
       return false;
     }
 
-    // Filter by date range
+    // Filter by date range (field_2313 - Start/End Date)
     if (startDate || endDate) {
-      const recordDate = parseISO(record.field_2234); // Date Created
-      
-      if (startDate && isBefore(recordDate, startDate)) {
-        return false;
-      }
-      
-      if (endDate && isAfter(recordDate, endDate)) {
-        return false;
+      try {
+        const recordDate = parseISO(record.field_2313); // Start Date / End Date
+        
+        if (startDate && isBefore(recordDate, startDate)) {
+          return false;
+        }
+        
+        if (endDate && isAfter(recordDate, endDate)) {
+          return false;
+        }
+      } catch (err) {
+        // If date parsing fails, include the record
+        console.warn('Could not parse date for record:', record.id);
       }
     }
 
     return true;
   });
 
-  // Extract creatives (images) from filtered records
+  // Extract creatives (images) from filtered records (object_135)
   const creatives = filteredRecords.map(record => {
-    // Try multiple potential image fields
+    // Try multiple potential creative/image fields in priority order
     const imageUrl = 
-      record.field_2264 || // Uploaded Files
-      record.field_149 ||  // Upload Your Logo
-      record.field_2977 || // Dashboard URL Text
+      record.field_2409 || // Creative upload
+      record.field_2427 || // Creative Pickup
+      record.field_3422 || // External Creative Link 1
+      record.field_3425 || // External Creative Link 2
+      record.field_3426 || // External Creative Link 3
+      record.field_3427 || // External Creative Link 4
       null;
 
     return {
       id: record.id,
-      clientName: record.field_2243,
-      campaignName: record.field_2233,
-      dateCreated: record.field_2234,
-      ioNumber: record.field_2426,
+      clientName: record.field_2384,     // Client lookup
+      ioCampaignName: record.field_2309,  // IO Campaign Name
+      productCampaignName: record.field_3340,  // Product Campaign Name
+      displayCampaignName: record.field_3341,  // Display Campaign Name
+      creativeUpload: record.field_2409,
+      creativePickup: record.field_2427,
+      externalLink1: record.field_3422,
+      externalLink2: record.field_3425,
+      externalLink3: record.field_3426,
+      externalLink4: record.field_3427,
+      prodCreativePickup: record.field_2748,   // Prod# - Creative Pickup
+      productText: record.field_2327,
+      ioNumber: record.field_2469,  // IO #
+      startDate: record.field_2313,  // Start Date
+      status: record.field_2300,     // Status
       imageUrl: imageUrl,
-      status: record.field_2254,
       record: record
     };
-  }).filter(creative => creative.imageUrl); // Only show records with images
+  }).filter(creative => creative.clientName); // Only show records with client info
 
   const handleImageClick = (creative) => {
     setSelectedImage(creative);
@@ -270,13 +297,20 @@ const CreativeCard = ({ creative, onImageClick }) => {
       </div>
       
       <div className="creative-info">
-        <h3 title={creative.campaignName}>{creative.campaignName || 'Untitled'}</h3>
+        <h3 title={creative.ioCampaignName}>
+          {creative.ioCampaignName || creative.productCampaignName || 'Untitled'}
+        </h3>
         <p className="client-name">{creative.clientName}</p>
+        {creative.productText && (
+          <p className="product-text" title={creative.productText}>
+            {creative.productText}
+          </p>
+        )}
         <p className="meta">
-          <strong>IO:</strong> {creative.ioNumber}
+          <strong>IO:</strong> {creative.ioNumber || 'N/A'}
         </p>
         <p className="meta">
-          <strong>Date:</strong> {creative.dateCreated}
+          <strong>Date:</strong> {creative.startDate || 'N/A'}
         </p>
         <p className="meta">
           <strong>Status:</strong> 
