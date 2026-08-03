@@ -37,7 +37,6 @@ function draw(items) {
     </article>
   `).join('');
 
-  // Attach auto-populate event listeners to "Analyze GA4 Traffic" buttons
   document.querySelectorAll('.btn-analyze-ga4').forEach(btn => {
     btn.addEventListener('click', () => {
       const propId = btn.dataset.id;
@@ -48,28 +47,25 @@ function draw(items) {
 }
 
 async function populateGa4Comparator(propertyId, loginEmail) {
-  // Fill inputs
   document.getElementById('comp-property-id').value = propertyId;
   document.getElementById('comp-login').value = loginEmail;
   document.getElementById('comp-period-type').value = 'previous_period';
 
-  // Calculate Last Month vs Previous Month
+  // Calculate Last Month (P1) and Previous Month (P2)
   const now = new Date();
   const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const lastDayLastMonth = new Date(firstDayThisMonth.getTime() - 1);
+  const lastDayLastMonth = new Date(firstDayThisMonth.getTime() - 86400000);
   const firstDayLastMonth = new Date(lastDayLastMonth.getFullYear(), lastDayLastMonth.getMonth(), 1);
 
   const formatDate = d => d.toISOString().split('T')[0];
   document.getElementById('p1-start').value = formatDate(firstDayLastMonth);
   document.getElementById('p1-end').value = formatDate(lastDayLastMonth);
 
-  // Smooth scroll to AI Comparator Card
   const compCard = document.querySelector('.ai-comparator-card');
   if (compCard) {
     compCard.scrollIntoView({ behavior: 'smooth' });
   }
 
-  // Auto-discover available Source/Medium channels for this property
   const sourceSelect = document.getElementById('comp-source-medium');
   sourceSelect.innerHTML = '<option value="">Loading available channels...</option>';
 
@@ -189,6 +185,7 @@ if (runCompBtn) {
     const ai = data.ai_analysis;
     const m1 = data.metrics_p1;
     const m2 = data.metrics_p2;
+    const breakdown = data.breakdown || [];
 
     resBox.innerHTML = `
       <div class="ai-box">
@@ -199,18 +196,49 @@ if (runCompBtn) {
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb; font-size:13px;">
           <div>
-            <strong>${esc(data.p1_label)}</strong>
+            <strong style="color:#1a2e58;">${esc(data.p1_label)}</strong>
             <div>Sessions: <b>${m1.sessions.toLocaleString()}</b></div>
             <div>Active Users: <b>${m1.activeUsers.toLocaleString()}</b></div>
             <div>Key Events: <b>${m1.keyEvents.toLocaleString()}</b></div>
           </div>
           <div>
-            <strong>${esc(data.p2_label)}</strong>
+            <strong style="color:#1a2e58;">${esc(data.p2_label)}</strong>
             <div>Sessions: <b>${m2.sessions.toLocaleString()}</b></div>
             <div>Active Users: <b>${m2.activeUsers.toLocaleString()}</b></div>
             <div>Key Events: <b>${m2.keyEvents.toLocaleString()}</b></div>
           </div>
         </div>
+
+        ${breakdown.length ? `
+          <div style="margin-top:14px; background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb;">
+            <h5 style="margin:0 0 8px; font-size:13px; color:#1a2e58;">Top Source / Medium Performance Breakdown</h5>
+            <table style="width:100%; border-collapse:collapse; font-size:12px; text-align:left;">
+              <thead>
+                <tr style="border-bottom:2px solid #e1e7ef; color:#58677e;">
+                  <th style="padding:6px;">Source / Medium</th>
+                  <th style="padding:6px; text-align:right;">Selected Period</th>
+                  <th style="padding:6px; text-align:right;">Prior Period</th>
+                  <th style="padding:6px; text-align:right;">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${breakdown.map(b => {
+                  const diff = b.session_diff;
+                  const diffColor = diff > 0 ? '#137333' : (diff < 0 ? '#c5221f' : '#58677e');
+                  const diffSign = diff > 0 ? '+' : '';
+                  return `
+                    <tr style="border-bottom:1px solid #f0f4f9;">
+                      <td style="padding:6px;"><code>${esc(b.name)}</code></td>
+                      <td style="padding:6px; text-align:right;"><b>${b.p1_sessions.toLocaleString()}</b></td>
+                      <td style="padding:6px; text-align:right;">${b.p2_sessions.toLocaleString()}</td>
+                      <td style="padding:6px; text-align:right; font-weight:bold; color:${diffColor};">${diffSign}${diff.toLocaleString()}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
 
         <div style="margin-top:14px; padding:12px; background:#eaf2ff; border:1px solid #b8d2f8; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
           <span style="font-size:13px; color:#1a2e58; font-weight:600;">Would you like to save this report for future comparison and automated alerts?</span>
