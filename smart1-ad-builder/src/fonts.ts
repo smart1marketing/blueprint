@@ -30,7 +30,6 @@ function findNodeModules(): string {
 }
 
 const NM = findNodeModules();
-const SYS = '/usr/share/fonts/truetype';
 
 export interface FamilySpec {
   family: string;
@@ -62,9 +61,9 @@ const REGISTRY: FamilySpec[] = [
   {
     family: 'Poppins',
     files: {
-      regular: `${SYS}/google-fonts/Poppins-Regular.ttf`,
-      medium: `${SYS}/google-fonts/Poppins-Medium.ttf`,
-      bold: `${SYS}/google-fonts/Poppins-Bold.ttf`,
+      regular: `${NM}/@fontsource/poppins/files/poppins-latin-400-normal.woff`,
+      medium: `${NM}/@fontsource/poppins/files/poppins-latin-500-normal.woff`,
+      bold: `${NM}/@fontsource/poppins/files/poppins-latin-700-normal.woff`,
     },
   },
 ];
