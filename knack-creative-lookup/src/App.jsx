@@ -47,10 +47,10 @@ const App = () => {
       let allRecords = [];
       let pageNumber = 1;
       let hasMore = true;
-      const batchSize = 500; // Fetch in smaller batches to prevent memory issues
+      const batchSize = 250; // Smaller batch size to be safe with memory
 
       // Paginate through records
-      while (hasMore && pageNumber <= 20) { // Max 20 pages = 10,000 records
+      while (hasMore && pageNumber <= 10) { // Max 10 pages = 2,500 records
         try {
           const response = await axios.get(
             `https://api.knack.com/v1/objects/${objectId}/records`,
@@ -63,7 +63,8 @@ const App = () => {
               params: {
                 rows_per_page: batchSize,
                 page: pageNumber
-              }
+              },
+              timeout: 10000 // 10 second timeout per request
             }
           );
 
