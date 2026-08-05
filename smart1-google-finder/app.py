@@ -49,7 +49,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/tagmanager.readonly",
     "https://www.googleapis.com/auth/tagmanager.edit.containers",
     "https://www.googleapis.com/auth/business.manage",
-    "https://www.googleapis.com/auth/webmasters.readonly",
+    "https://www.googleapis.com/auth/webmasters",
 ]
 
 CACHE = {}
@@ -217,6 +217,20 @@ def google_post(access_token, url, json_body=None):
     )
     r.raise_for_status()
     return r.json()
+
+
+def google_put(access_token, url, json_body=None):
+    r = requests.put(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        },
+        json=json_body or {},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.text
 
 
 def fetch_ga_items(access_token, google_login):
@@ -520,6 +534,16 @@ def index():
         "index.html",
         accounts=[a.get("email", "") for a in connected_accounts()],
     )
+
+
+@app.route("/reports")
+def view_reports_page():
+    return render_template("reports.html")
+
+
+@app.route("/gtm-logs")
+def view_gtm_logs_page():
+    return render_template("gtm_logs.html")
 
 
 @app.route("/login")
@@ -871,6 +895,64 @@ def search_gtm_logs():
         logs.append(d)
 
     return jsonify({"logs": logs})
+
+
+@app.route("/api/gsc/site/add", methods=["POST"])
+def api_gsc_add_site():
+    data = request.json or {}
+    google_login = data.get("google_login", "").strip().lower()
+    site_url = data.get("site_url", "").strip()
+
+    if not google_login or not site_url:
+        return jsonify({"error": "Google Login email and Site URL are required."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(account["refresh_token"])
+        
+        if not site_url.startswith("http") and not site_url.startswith("sc-domain:"):
+            site_url = f"https://{site_url.strip('/')}/"
+
+        encoded_site = urlencode({'': site_url})[1:]
+        url = f"https://www.googleapis.com/webmasters/v3/sites/{encoded_site}"
+        google_put(access_token, url)
+
+        return jsonify({"ok": True, "message": f"Successfully added {site_url} to Search Console for {google_login}."})
+    except Exception as exc:
+        logger.warning("Failed to add site to Search Console: %s", exc)
+        return jsonify({"error": f"Failed to add site property: {exc}"}), 500
+
+
+@app.route("/api/gsc/sitemap/submit", methods=["POST"])
+def api_gsc_submit_sitemap():
+    data = request.json or {}
+    google_login = data.get("google_login", "").strip().lower()
+    site_url = data.get("site_url", "").strip()
+    sitemap_url = data.get("sitemap_url", "").strip()
+
+    if not google_login or not site_url or not sitemap_url:
+        return jsonify({"error": "Google Login, GSC Site URL, and Sitemap URL are required."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(account["refresh_token"])
+        
+        encoded_site = urlencode({'': site_url})[1:]
+        encoded_sitemap = urlencode({'': sitemap_url})[1:]
+        
+        url = f"https://www.googleapis.com/webmasters/v3/sites/{encoded_site}/sitemaps/{encoded_sitemap}"
+        google_put(access_token, url)
+
+        return jsonify({"ok": True, "message": f"Successfully submitted sitemap {sitemap_url} to {site_url}."})
+    except Exception as exc:
+        logger.warning("Failed to submit sitemap to Search Console: %s", exc)
+        return jsonify({"error": f"Failed to submit sitemap: {exc}"}), 500
 
 
 @app.route("/api/ga4/ask", methods=["POST"])
@@ -1322,12 +1404,3 @@ def debug_accounts():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "10000")))
-    @app.route("/reports")
-def view_reports_page():
-    """Renders the standalone Historical Saved Reports page."""
-    return render_template("reports.html")
-
-@app.route("/gtm-logs")
-def view_gtm_logs_page():
-    """Renders the standalone GTM Audit Logs page."""
-    return render_template("gtm_logs.html")
