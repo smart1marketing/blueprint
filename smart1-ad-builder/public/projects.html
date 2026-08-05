@@ -25,6 +25,23 @@
   .lockup a{color:var(--ink);text-decoration:none}
   .lockup span{color:var(--ink-2);font-weight:500}
 
+
+  /* ---- shared app nav ---- */
+  .appnav { display: flex; align-items: center; gap: 2px; margin-right: 8px; }
+  .appnav a {
+    color: var(--ink-2); text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 6px 11px; border-radius: 6px;
+  }
+  .appnav a:hover { color: var(--ink); background: var(--panel-2); }
+  .appnav a.here { color: var(--ink); background: var(--panel-2); }
+  .health { display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+    font-size: 12px; color: var(--ink-2); padding: 5px 10px; border-radius: 6px; }
+  .health:hover { background: var(--panel-2); }
+  .health .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .health.healthy .dot { background: var(--pass); }
+  .health.degraded .dot { background: var(--warn); }
+  .health.broken .dot { background: var(--fail); animation: pulse 1.2s ease infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
   .wrap{max-width:1100px;margin:0 auto;padding:26px 20px 80px}
 
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
@@ -70,7 +87,13 @@
 <body>
 
 <div class="bar">
-  <div class="lockup"><a href="/build">Ad Builder</a> <span>/ Projects</span></div>
+  <div class="lockup"><a href="/build">Ad Builder</a></div>
+  <nav class="appnav">
+    <a href="/build">Build</a>
+    <a href="/projects" class="here">Projects</a>
+    <a href="/diagnostics">Diagnostics</a>
+  </nav>
+  <a class="health" id="health" href="/diagnostics" title="Checking…"><span class="dot"></span><span class="lbl">…</span></a>
 </div>
 
 <div class="wrap">
@@ -164,6 +187,25 @@
   $('status').addEventListener('change', load);
   load();
 })();
+
+  /* ---- health dot: quiet poll of diagnostics, click through when off ---- */
+  (function () {
+    var el = document.getElementById('health');
+    if (!el) return;
+    function check() {
+      fetch('/api/diagnostics', { headers: { accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          el.className = 'health ' + d.verdict;
+          el.title = d.summary.fail + ' failing, ' + d.summary.warn + ' warning';
+          el.querySelector('.lbl').textContent =
+            d.verdict === 'healthy' ? 'Healthy' : d.verdict === 'degraded' ? 'Degraded' : 'Broken';
+        })
+        .catch(function () { /* leave the last state */ });
+    }
+    check();
+    setInterval(check, 5 * 60 * 1000);
+  })();
 </script>
 </body>
 </html>

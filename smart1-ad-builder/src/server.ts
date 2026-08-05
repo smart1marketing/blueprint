@@ -26,6 +26,9 @@ import { checkAuth, denied, rateLimit, sessionCookie, configuredToken, sweepBuck
 import { runDiagnostics } from './diagnostics';
 import { renderDiagnostics } from './diagnostics-page';
 import { scheduleSweep, sweep } from './retention';
+import { deliverProject, latestManifest } from './deliver';
+import { getPlatform } from './registry';
+import sharp from 'sharp';
 import { notify } from './notify';
 import { discoverBrand, normalizeDomain } from './brandfetch';
 import { ALLOWED_FORMATS, folderFor, signUpload, type AssetKind } from './assets';
@@ -427,6 +430,121 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, signed, cors);
     }
 
+    /* ------------------------------------------------------------- delivery */
+    const deliverMatch = url.pathname.match(/^\/api\/project\/([\w.-]+)\/deliver$/);
+    if (deliverMatch && req.method === 'POST') {
+      const project = projects.get(deliverMatch[1]);
+      if (!project) return json(res, 404, { error: 'No such project' });
+      const body = JSON.parse((await readBody(req, 20_000)) || '{}') as { concept?: string };
+      try {
+        const out = await deliverProject(project, { outDir: OUT, conceptId: body.concept });
+        project.status = 'complete';
+        project.delivered = project.delivered ?? [];
+        project.delivered.push({ at: new Date().toISOString(), zipUrl: out.zipUrl, fileCount: out.fileCount });
+        project.notes.push(
+          `[${new Date().toISOString()}] Delivered ${out.fileCount} file(s)` +
+          (out.overrideCount ? ` (${out.overrideCount} manually edited)` : '') +
+          (out.skipped.length ? `; skipped ${out.skipped.map((s) => s.size).join(', ')}` : ''),
+        );
+        projects.save(project);
+        await notify(
+          {
+            subject: `Delivered — ${project.client} / ${project.projectName}`,
+            body: `${out.fileCount} finished file(s) packaged for ${project.client}.` +
+              (out.skipped.length ? `\nNot included: ${out.skipped.map((s) => `${s.size} (${s.reason})`).join('; ')}` : ''),
+            url: `${PUBLIC_URL}${out.zipUrl}`,
+          },
+          OUT,
+        );
+        return json(res, 200, out);
+      } catch (e: any) {
+        return json(res, 422, { error: e?.message ?? 'Delivery failed' });
+      }
+    }
+
+    /* ------------------------------------------------- manual overrides */
+    // The last 5% of real agency work: "the 300x600 needs the photo nudged —
+    // I'll fix it in Photoshop." That file needs somewhere to go. The upload
+    // is validated against the same platform rules as rendered output, so an
+    // override cannot smuggle in a wrong-sized or overweight creative.
+    const overrideMatch = url.pathname.match(/^\/api\/project\/([\w.-]+)\/override$/);
+    if (overrideMatch && req.method === 'POST') {
+      const project = projects.get(overrideMatch[1]);
+      if (!project) return json(res, 404, { error: 'No such project' });
+
+      const body = JSON.parse(await readBody(req, 5_000_000)) as {
+        conceptId?: string; platform?: string; size?: string;
+        filename?: string; dataBase64?: string; remove?: boolean;
+      };
+      const { conceptId, platform, size } = body;
+      if (!conceptId || !platform || !size) {
+        return json(res, 400, { error: 'conceptId, platform and size are required' });
+      }
+
+      project.overrides = project.overrides ?? [];
+
+      if (body.remove) {
+        const before = project.overrides.length;
+        project.overrides = project.overrides.filter(
+          (o) => !(o.conceptId === conceptId && o.platform === platform && o.size === size),
+        );
+        projects.save(project);
+        return json(res, 200, { removed: before !== project.overrides.length });
+      }
+
+      if (!body.dataBase64) return json(res, 400, { error: 'No file supplied' });
+      const data = Buffer.from(body.dataBase64, 'base64');
+
+      const rule = getPlatform(platform)?.sizes[size as keyof ReturnType<typeof getPlatform>['sizes']];
+      if (!rule) return json(res, 400, { error: `${platform} does not define ${size}` });
+
+      // Validate exactly what the renderer's own output must satisfy.
+      if (data.length > rule.maxFileBytes) {
+        return json(res, 422, {
+          error: `File is ${(data.length / 1024).toFixed(1)} KB; ${platform} allows ${(rule.maxFileBytes / 1024).toFixed(0)} KB for ${size}.`,
+        });
+      }
+      let meta: { width?: number; height?: number; format?: string };
+      try {
+        meta = await sharp(data).metadata();
+      } catch {
+        return json(res, 422, { error: 'That file is not a readable image.' });
+      }
+      const wantW = rule.w * rule.deliverScale;
+      const wantH = rule.h * rule.deliverScale;
+      if (meta.width !== wantW || meta.height !== wantH) {
+        return json(res, 422, {
+          error: `Image is ${meta.width}x${meta.height}; ${platform}/${size} must be exactly ${wantW}x${wantH}` +
+            (rule.deliverScale > 1 ? ` (${size} at ${rule.deliverScale}x)` : '') + '.',
+        });
+      }
+      const fmt = meta.format === 'jpeg' ? 'jpg' : meta.format;
+      if (!rule.formats.includes(fmt as any)) {
+        return json(res, 422, { error: `${platform}/${size} accepts ${rule.formats.join(', ')}, not ${fmt}.` });
+      }
+
+      const dir = path.join(OUT, 'overrides', project.requestId);
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `${conceptId}_${platform}_${size}.${fmt}`);
+      fs.writeFileSync(file, data);
+
+      // Replace any prior override for the same slot.
+      project.overrides = project.overrides.filter(
+        (o) => !(o.conceptId === conceptId && o.platform === platform && o.size === size),
+      );
+      project.overrides.push({
+        conceptId, platform, size, file,
+        originalName: body.filename ?? 'upload',
+        bytes: data.length,
+        uploadedAt: new Date().toISOString(),
+      });
+      project.notes.push(
+        `[${new Date().toISOString()}] ${platform}/${size} (concept ${conceptId}) replaced with a manually edited file: ${body.filename ?? 'upload'}`,
+      );
+      projects.save(project);
+      return json(res, 200, { saved: true, file: path.basename(file), bytes: data.length });
+    }
+
     /* ------------------------------------------------------------ approvals */
     // Posted by the proof screen. Public on purpose: the customer opening a
     // proof link is not an authenticated user. The project id in the URL is
@@ -442,6 +560,7 @@ const server = http.createServer(async (req, res) => {
 
       if (kind === 'approve') {
         project.status = 'approved';
+        if (body.concept) project.approvedConcept = body.concept;
         project.notes.push(`[${at}] Concept ${body.concept ?? '?'} approved by the client.`);
       } else {
         project.status = 'proof-sent';
@@ -580,6 +699,7 @@ const server = http.createServer(async (req, res) => {
             concepts: (d.campaign?.concepts ?? []).length,
             notes: (d.notes ?? []).length,
             status: proj?.status ?? 'draft',
+            projectId: proj?.projectId,
             updated: fs.statSync(path.join(dir, f)).mtime.toISOString(),
           };
         })
@@ -715,6 +835,41 @@ if (process.env.WORKER_MODE !== 'external') startWorkerLoop();
 
 // Expired rate-limit buckets would otherwise accumulate for every client seen.
 setInterval(() => sweepBuckets(), 10 * 60 * 1000).unref();
+
+// Watch our own health. The diagnostics page is thorough but passive — someone
+// has to remember to look. This runs the same checks on a timer and pushes ONE
+// notification when the verdict transitions to broken (and one when it
+// recovers), so a font failure at 2am pages someone instead of waiting for a
+// customer to find it. Transition-only, because a broken check repeating every
+// three hours trains people to ignore the channel.
+let lastVerdict: string | null = null;
+const HEALTH_EVERY_MS = Number(process.env.HEALTH_CHECK_HOURS ?? 3) * 3_600_000;
+if (HEALTH_EVERY_MS > 0) {
+  setInterval(async () => {
+    try {
+      const report = await runDiagnostics({ outDir: OUT, assetRoot: ROOT });
+      if (report.verdict === 'broken' && lastVerdict !== 'broken') {
+        const fails = report.checks.filter((c) => c.level === 'fail');
+        await notify(
+          {
+            subject: `Ad Builder is broken — ${fails.length} failing check(s)`,
+            body: fails.map((f) => `${f.label}: ${f.detail}`).join('\n'),
+            url: `${PUBLIC_URL}/diagnostics`,
+          },
+          OUT,
+        );
+      } else if (report.verdict !== 'broken' && lastVerdict === 'broken') {
+        await notify(
+          { subject: 'Ad Builder recovered', body: 'All previously failing checks now pass.', url: `${PUBLIC_URL}/diagnostics` },
+          OUT,
+        );
+      }
+      lastVerdict = report.verdict;
+    } catch (e: any) {
+      console.warn(`[health] self-check crashed: ${e?.message ?? e}`);
+    }
+  }, HEALTH_EVERY_MS).unref();
+}
 
 // Rendered files are kept after upload; without this they accumulate until the
 // volume fills. Cloudinary holds the permanent copies.

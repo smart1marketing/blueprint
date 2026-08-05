@@ -512,6 +512,53 @@ that worked:
 - **Match creative to the size, don't squeeze.** Already the architecture:
   every size has its own layout and its own copy budget.
 
+## Final delivery
+
+`POST /api/project/:id/deliver` — or the **Deliver final files** button that
+appears in the build screen once a project is approved — packages the approved
+concept into one client-ready zip:
+
+    <client>-<campaign>/
+      google/<client>_300x250.jpg     files named for the platform-ops person
+      google/<client>_728x90.jpg      who uploads them, not for internal ids
+      ...
+      README.txt                      per-file specs, weights, and platform
+
+Failing creatives never ship; they are listed in the README under "not
+included", because silently delivering a broken ad is worse than delivering one
+size short. Delivery flips the project to `complete`, records the zip on the
+project, and notifies with the download link.
+
+The zip is written by a small STORE-method writer (no dependency, no zip
+binary needed on the host; the payload is already-compressed JPG/PNG so
+compression would buy nothing). Verified against both `unzip -t` and Python's
+`zipfile`.
+
+## Manual overrides
+
+The last 5% of real agency work: "the 300x600 needs the photo nudged — I'll
+fix it in Photoshop." That file now has somewhere to go. **Replace with edited
+file…** on the build screen (or `POST /api/project/:id/override`) uploads a
+finished creative against the size on screen.
+
+The upload is validated against the same platform rules as rendered output —
+exact delivered pixel dimensions (including 2x sizes), the platform's
+file-weight ceiling, and its allowed formats — so an override cannot smuggle
+in a wrong-sized or overweight creative. An amber note under the preview shows
+when the current size ships an override, with one-click removal. Overrides
+win at delivery time and the README flags them as manually edited.
+
+## Health you can see
+
+Every staff screen now shares one top nav (Build · Projects · Diagnostics) and
+a **health dot** that quietly polls diagnostics every five minutes: green
+healthy, amber degraded, pulsing red broken; click through for the full page.
+
+The server also watches itself: every `HEALTH_CHECK_HOURS` (default 3) it runs
+the full diagnostic suite and sends **one** notification when the verdict
+transitions to broken, and one when it recovers. Transition-only on purpose —
+a repeating alarm trains people to ignore the channel.
+
 ## Wired together
 
 Everything below used to be a standalone piece; this is how they now connect.

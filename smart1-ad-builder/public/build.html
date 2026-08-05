@@ -47,10 +47,11 @@
 
   /* ---------- top bar ---------- */
   .bar {
-    display: flex; align-items: center; gap: 14px; flex: none;
-    padding: 0 18px; height: 56px; background: var(--panel);
-    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px; flex: none;
+    padding: 0 16px; height: 56px; background: var(--panel);
+    border-bottom: 1px solid var(--line); white-space: nowrap; overflow-x: auto;
   }
+  .bar .btn, .bar select { flex: none; }
   .lockup { font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
   .lockup span { color: var(--ink-2); font-weight: 500; }
   .bar select, .bar button { font: inherit; }
@@ -71,6 +72,23 @@
   .btn.primary:hover { filter: brightness(1.08); }
   .btn[disabled] { opacity: .5; cursor: not-allowed; }
   .saved { color: var(--pass); font-size: 12.5px; opacity: 0; transition: opacity .2s; }
+
+  /* ---- shared app nav ---- */
+  .appnav { display: flex; align-items: center; gap: 2px; margin-right: 8px; }
+  .appnav a {
+    color: var(--ink-2); text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 6px 11px; border-radius: 6px;
+  }
+  .appnav a:hover { color: var(--ink); background: var(--panel-2); }
+  .appnav a.here { color: var(--ink); background: var(--panel-2); }
+  .health { display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+    font-size: 12px; color: var(--ink-2); padding: 5px 10px; border-radius: 6px; }
+  .health:hover { background: var(--panel-2); }
+  .health .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .health.healthy .dot { background: var(--pass); }
+  .health.degraded .dot { background: var(--warn); }
+  .health.broken .dot { background: var(--fail); animation: pulse 1.2s ease infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
   .pill { font-size: 11.5px; padding: 4px 10px; border-radius: 20px; font-weight: 600; }
   .pill.revision { background: rgba(224,167,43,.16); color: var(--warn); }
   .pill.approved { background: rgba(53,192,137,.16); color: var(--pass); }
@@ -181,7 +199,13 @@
 <body>
 
 <div class="bar">
-  <div class="lockup">Ad Builder <span id="who">— no campaign open</span></div><a href="/projects" style="color:var(--ink-2);font-size:13px;text-decoration:none;margin-left:6px">Projects</a>
+  <div class="lockup" style="flex:none">Ad Builder</div><span id="who" style="display:none"></span>
+  <nav class="appnav">
+    <a href="/build" class="here">Build</a>
+    <a href="/projects">Projects</a>
+    <a href="/diagnostics">Diagnostics</a>
+  </nav>
+  <a class="health" id="health" href="/diagnostics" title="Checking…"><span class="dot"></span><span class="lbl">…</span></a>
   <select id="campaignPick" style="width:auto;min-width:230px"></select>
   <select id="conceptPick" style="width:auto"></select>
   <select id="platformPick" style="width:auto">
@@ -193,6 +217,7 @@
   <span class="saved" id="saved">Saved</span>
   <button class="btn" id="save">Save</button>
   <a class="btn" id="proofLink" href="#" target="_blank" style="display:none">Open proof</a>
+  <button class="btn" id="deliver" style="display:none;border-color:var(--pass);color:var(--pass)">Deliver final files</button>
   <button class="btn primary" id="renderAll">Render all sizes</button>
 </div>
 
@@ -205,7 +230,10 @@
       <button class="chip" id="squint" aria-pressed="false">Squint</button>
       <button class="chip" id="onDark" aria-pressed="false">Dark page</button>
       <button class="chip" id="onLight" aria-pressed="true">Light page</button>
+      <button class="chip" id="overrideBtn" title="Ship a hand-edited file for this size instead of the rendered one">Replace with edited file…</button>
+      <input type="file" id="overrideInput" accept="image/png,image/jpeg" style="display:none">
     </div>
+    <div class="dim mono" id="overrideNote" style="display:none;color:#7A4E00;background:rgba(224,167,43,.14);padding:4px 10px;border-radius:5px"></div>
   </div>
   <div class="col right" id="rail"></div>
 </div>
@@ -413,6 +441,7 @@
       el.addEventListener('click', function () {
         state.size = el.dataset.size;
         drawControls(); drawRail(); preview();
+        refreshOverrideNote();
       });
     });
     markRail();
@@ -493,6 +522,7 @@
         var t = state.templates.filter(function (x) { return x.id === doc.campaign.concepts[0].layoutFamily; })[0];
         if (t && t.sizes.indexOf(state.size) < 0) state.size = t.sizes[0];
         drawControls(); drawRail(); preview();
+        refreshDeliver(); refreshOverrideNote();
       });
   }
 
@@ -537,6 +567,92 @@
       .catch(function () { btn.disabled = false; btn.textContent = 'Render all sizes'; });
   });
 
+  /* ------------------------------------------------------- delivery */
+  function projectIdOf() {
+    var le = (window.__campaignList || []).filter(function (c) { return c.requestId === state.requestId; })[0];
+    return le && le.projectId;
+  }
+  function refreshDeliver() {
+    var le = (window.__campaignList || []).filter(function (c) { return c.requestId === state.requestId; })[0];
+    var btn = $('deliver');
+    btn.style.display = le && (le.status === 'approved' || le.status === 'complete') ? '' : 'none';
+    btn.textContent = le && le.status === 'complete' ? 'Deliver again' : 'Deliver final files';
+  }
+  $('deliver').addEventListener('click', function () {
+    var pid = projectIdOf();
+    if (!pid) { alert('No project record found for this campaign.'); return; }
+    var btn = this; btn.disabled = true; btn.textContent = 'Packaging…';
+    fetch('/api/project/' + encodeURIComponent(pid) + '/deliver', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ concept: state.conceptId })
+    })
+      .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) { btn.textContent = 'Deliver final files'; alert(res.b.error || 'Delivery failed'); return; }
+        btn.textContent = 'Delivered ✓';
+        var a = document.createElement('a');
+        a.href = res.b.zipUrl; a.download = '';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { btn.textContent = 'Deliver again'; }, 2400);
+      })
+      .catch(function () { btn.disabled = false; btn.textContent = 'Deliver final files'; });
+  });
+
+  /* ------------------------------------------------- manual override */
+  function refreshOverrideNote() {
+    var pid = projectIdOf();
+    var note = $('overrideNote');
+    if (!pid) { note.style.display = 'none'; return; }
+    fetch('/api/project/' + encodeURIComponent(pid))
+      .then(function (r) { return r.json(); })
+      .then(function (p) {
+        var o = (p.overrides || []).filter(function (o) {
+          return o.conceptId === state.conceptId && o.size === state.size && o.platform === state.platform;
+        })[0];
+        if (o) {
+          note.style.display = '';
+          note.innerHTML = 'This size ships a manually edited file: <b>' + o.originalName +
+            '</b> &nbsp;<a href="#" id="dropOverride" style="color:inherit">remove</a>';
+          note.querySelector('#dropOverride').addEventListener('click', function (e) {
+            e.preventDefault();
+            fetch('/api/project/' + encodeURIComponent(pid) + '/override', {
+              method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ conceptId: state.conceptId, platform: state.platform, size: state.size, remove: true })
+            }).then(function () { refreshOverrideNote(); });
+          });
+        } else {
+          note.style.display = 'none';
+        }
+      })
+      .catch(function () { note.style.display = 'none'; });
+  }
+
+  $('overrideBtn').addEventListener('click', function () { $('overrideInput').click(); });
+  $('overrideInput').addEventListener('change', function () {
+    var file = this.files[0]; this.value = '';
+    if (!file) return;
+    var pid = projectIdOf();
+    if (!pid) { alert('No project record found for this campaign.'); return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      var b64 = String(reader.result).split(',')[1];
+      fetch('/api/project/' + encodeURIComponent(pid) + '/override', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          conceptId: state.conceptId, platform: state.platform, size: state.size,
+          filename: file.name, dataBase64: b64
+        })
+      })
+        .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
+        .then(function (res) {
+          if (!res.ok) { alert(res.b.error || 'That file was rejected.'); return; }
+          refreshOverrideNote();
+        });
+    };
+    reader.readAsDataURL(file);
+  });
+
   window.addEventListener('beforeunload', function (e) {
     if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
   });
@@ -563,6 +679,25 @@
     loadCampaign(pre && list.some(function (c) { return c.requestId === pre; }) ? pre : list[0].requestId);
   });
 })();
+
+  /* ---- health dot: quiet poll of diagnostics, click through when off ---- */
+  (function () {
+    var el = document.getElementById('health');
+    if (!el) return;
+    function check() {
+      fetch('/api/diagnostics', { headers: { accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          el.className = 'health ' + d.verdict;
+          el.title = d.summary.fail + ' failing, ' + d.summary.warn + ' warning';
+          el.querySelector('.lbl').textContent =
+            d.verdict === 'healthy' ? 'Healthy' : d.verdict === 'degraded' ? 'Degraded' : 'Broken';
+        })
+        .catch(function () { /* leave the last state */ });
+    }
+    check();
+    setInterval(check, 5 * 60 * 1000);
+  })();
 </script>
 </body>
 </html>

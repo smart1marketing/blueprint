@@ -24,6 +24,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Brand, RenderResult } from './types';
+
+export interface CreativeOverride {
+  conceptId: string;
+  platform: string;
+  size: string;
+  /** Absolute path of the uploaded replacement on disk. */
+  file: string;
+  originalName: string;
+  bytes: number;
+  uploadedAt: string;
+}
 import { slug } from './cloudinary';
 
 export interface AssetLink {
@@ -68,6 +79,14 @@ export interface Project {
   brand?: Brand;
   /** True when the customer typed the brand in rather than Brandfetch finding it. */
   brandEnteredManually?: boolean;
+
+  /** Which concept the client approved, recorded at approval time so delivery
+   *  does not have to guess from the notes. */
+  approvedConcept?: string;
+  /** Hand-edited files that replace a rendered creative for one size. */
+  overrides?: CreativeOverride[];
+  /** Set once a delivery zip has been produced. */
+  delivered?: { at: string; zipUrl: string; fileCount: number }[];
 
   cloudinaryFolder?: string;
   assets: AssetLink[];

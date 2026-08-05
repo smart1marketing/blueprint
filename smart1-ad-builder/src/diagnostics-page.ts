@@ -92,6 +92,11 @@ export function renderDiagnostics(r: Report): string {
 </style>
 </head><body><div class="wrap">
 
+  <nav style="display:flex;gap:2px;margin:0 0 18px">
+    <a href="/build" style="color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:600;padding:6px 11px;border-radius:6px">Build</a>
+    <a href="/projects" style="color:var(--ink-2);text-decoration:none;font-size:13px;font-weight:600;padding:6px 11px;border-radius:6px">Projects</a>
+    <a href="/diagnostics" style="color:var(--ink);background:var(--panel);text-decoration:none;font-size:13px;font-weight:600;padding:6px 11px;border-radius:6px">Diagnostics</a>
+  </nav>
   <h1>Diagnostics</h1>
   <div class="meta">${esc(r.host)} · ${esc(r.generatedAt)} · up ${Math.floor(r.uptimeSec / 60)}m</div>
 
