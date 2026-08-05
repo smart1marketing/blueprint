@@ -1322,3 +1322,12 @@ def debug_accounts():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "10000")))
+    @app.route("/reports")
+def view_reports_page():
+    """Renders the standalone Historical Saved Reports page."""
+    return render_template("reports.html")
+
+@app.route("/gtm-logs")
+def view_gtm_logs_page():
+    """Renders the standalone GTM Audit Logs page."""
+    return render_template("gtm_logs.html")
