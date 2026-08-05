@@ -1,16 +1,8 @@
 services:
   - type: web
-    name: smart1-image-optimizer
-    runtime: docker
+    name: smart-1-image-optimizer
+    runtime: python
     plan: free
-    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
     healthCheckPath: /health
-    envVars:
-      - key: MAX_UPLOAD_MB
-        value: "40"
-      - key: DEFAULT_TARGET_KB
-        value: "150"
-      - key: BRAND_NAME
-        value: "Smart 1 Marketing"
-      - key: APP_NAME
-        value: "Image Optimizer"

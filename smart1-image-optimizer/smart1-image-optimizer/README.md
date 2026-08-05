@@ -1,78 +1,36 @@
-# Smart 1 Image Optimizer
+# Smart 1 Image Optimizer & Resizer
 
-Embeddable Flask image optimizer for GIF, JPG/JPEG, and PNG. The default target is 150 KB and the original format is preserved. Animated GIFs remain animated.
+A drop-in Flask/Render image utility that:
 
-## GitHub
+- Uploads PNG, JPG/JPEG, and GIF files
+- Includes an interactive drag-to-crop tool
+- Supports freeform, square, 16:9, 4:5, and 1.91:1 crop presets
+- Resizes by width and height
+- Locks aspect ratio
+- Includes common size presets
+- Saves as PNG, JPG, or GIF
+- Optimizes toward a target size, defaulting to 150 KB
+- Preserves animated GIFs when output is GIF
+- Flattens transparent images onto white when converting to JPG
 
-Upload the contents of this folder to the root of a GitHub repository, for example `smart1-image-optimizer`.
+## Render settings
 
-## Render — recommended Docker setup
+- Runtime: Python
+- Build command: `pip install -r requirements.txt`
+- Start command: `gunicorn app:app`
+- Health check: `/health`
 
-Create **New > Web Service**, connect the GitHub repository, then use:
+The included `render.yaml` can configure these automatically.
 
-- **Language / Runtime:** Docker
-- **Branch:** main
-- **Root Directory:** leave blank if these files are at the repo root
-- **Dockerfile Path:** `./Dockerfile`
-- **Docker Build Context Directory:** `.`
-- **Build Command:** leave blank / not applicable for Docker
-- **Start Command / Docker Command:** leave blank; the Dockerfile `CMD` starts Gunicorn
-- **Health Check Path:** `/health`
-- **Auto Deploy:** On Commit
+## Replace the existing deployment
 
-The Dockerfile runs:
+1. Back up the existing GitHub repository.
+2. Copy these files into the repository root.
+3. Commit and push.
+4. In Render, redeploy the latest commit.
+5. Confirm `/health` returns `{"status":"ok"}`.
+6. Test PNG, JPG, static GIF, and animated GIF output.
 
-```bash
-gunicorn app:app --bind 0.0.0.0:${PORT} --workers 2 --threads 4 --timeout 120
-```
+## Notes
 
-Render provides `PORT` automatically. The Dockerfile defaults it to `10000` for local use.
-
-## Render environment variables
-
-None are secret or strictly required. Recommended:
-
-```env
-MAX_UPLOAD_MB=40
-DEFAULT_TARGET_KB=150
-BRAND_NAME=Smart 1 Marketing
-APP_NAME=Image Optimizer
-```
-
-Do **not** manually set `PORT` unless you have a specific reason.
-
-## Local Docker test
-
-```bash
-docker build -t smart1-image-optimizer .
-docker run --rm -p 10000:10000 smart1-image-optimizer
-```
-
-Then open `http://localhost:10000`.
-
-## API
-
-`POST /api/optimize`
-
-Multipart fields:
-
-- `file`: GIF, JPG, JPEG, or PNG
-- `target_kb`: optional integer; defaults to `DEFAULT_TARGET_KB`
-
-## Smart 1 Suite iframe
-
-After Render deploys the app, embed the service URL in an HTML/code block:
-
-```html
-<iframe
-  src="https://YOUR-SERVICE.onrender.com/"
-  width="100%"
-  height="650"
-  style="border:0;border-radius:16px;overflow:hidden"
-  loading="lazy"
-></iframe>
-```
-
-## Cloudinary
-
-Cloudinary is not required for strict 150 KB compression. Add it later only if you want permanent hosted assets, a media library, CDN delivery, or alternate derivative formats.
+A strict 150 KB limit cannot always be met without changing image dimensions. When optimization is enabled, the app first adjusts JPG quality, then progressively reduces dimensions when needed. PNG and GIF compression may also require dimension reduction.
