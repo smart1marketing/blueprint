@@ -8,71 +8,70 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter+Tight:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --console:#0c1017; --panel:#151b26; --panel2:#1c2432; --edge:#2b3547; --edge-hot:#3d4a61;
-  --tape:#e8e2d4; --dim:#9aa4b4; --signal:#ff6b1a; --vu:#7be0c9;
-  --openai:#ff6b1a; --brandfetch:#8b7be8; --eleven:#7be0c9; --cloudinary:#4fa8ff; --ghl:#ffc94a;
-  --display:'Archivo Black',Arial Black,sans-serif; --body:'Inter Tight',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+  --navy:#1b2e4e; --blue:#1b3a6b; --teal:#1cd3a2; --cyan:#29abe2; --yellow:#ffc20e;
+  --page:#eef2f7; --card:#ffffff; --soft:#f7f9fc;
+  --edge:#e2e8f0; --edge-hot:#cbd5e0; --ink:#2d3748; --dim:#8b97a8;
+  --copy:#29abe2; --brand:#7c6cf0; --voice:#1cd3a2; --files:#1b3a6b; --crm:#f5a623; --master:#5f6f85;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
-body{
-  margin:0;padding:0 0 70px;background:
-    radial-gradient(1100px 520px at 50% -8%,#1a2333 0,transparent 70%),
-    repeating-linear-gradient(180deg,transparent 0 3px,rgba(255,255,255,.012) 3px 4px),var(--console);
-  color:var(--tape);font-family:var(--body);line-height:1.55;-webkit-font-smoothing:antialiased;
-}
-.wrap{max-width:940px;margin:0 auto;padding:0 18px}
-h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;line-height:1.06;text-transform:uppercase}
-h1{font-size:clamp(2rem,6vw,3.4rem);letter-spacing:-.02em}
-h2{font-size:clamp(1.1rem,3vw,1.4rem)}
-h3{font-size:1.02rem;text-transform:none;font-family:var(--body);font-weight:700}
+body{margin:0;padding:0 0 70px;background:var(--page);color:#4a5568;font-family:var(--sans);
+  line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:940px;margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:var(--sans);color:var(--blue);margin:0;line-height:1.18;font-weight:700}
+h1{font-size:clamp(1.8rem,5vw,2.9rem);letter-spacing:-.015em}
+h2{font-size:clamp(1.15rem,3vw,1.5rem)}
+h3{font-size:1.02rem}
 p{margin:0 0 .6rem}
-.mono{font-family:var(--mono)}
-.dim{color:var(--dim)}
-.sm{font-size:.87rem}
-.xs{font-size:.76rem}
+.mono{font-family:var(--mono)}.dim{color:var(--dim)}.sm{font-size:.88rem}.xs{font-size:.76rem}
 
 /* header */
-header{padding:44px 0 6px;text-align:center}
-.mark{display:inline-flex;align-items:baseline;gap:8px;font-family:var(--display);text-transform:uppercase;margin-bottom:16px}
-.mark .one{background:var(--signal);color:#0c1017;padding:2px 9px;border-radius:5px}
-.eyebrow{font-family:var(--mono);font-size:.64rem;letter-spacing:.26em;text-transform:uppercase;color:var(--signal)}
-.lede{max-width:620px;margin:14px auto 0;color:var(--dim)}
+header{padding:52px 0 8px;text-align:center}
+.mark{display:inline-flex;align-items:baseline;gap:9px;margin-bottom:18px}
+.mark .one{background:var(--cyan);color:#fff;padding:3px 9px;border-radius:5px;font-weight:800;font-size:1.05rem}
+.mark span:last-child{font-size:1.15rem;color:var(--blue);font-weight:300}
+.eyebrow{font-size:.71rem;letter-spacing:.21em;text-transform:uppercase;color:var(--cyan);font-weight:700}
+.lede{max-width:640px;margin:16px auto 0;color:#4a5568;font-size:1.02rem}
 
-/* service legend */
-.legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:26px 0 8px}
-.chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;
-  text-transform:uppercase;border:1px solid var(--edge);border-radius:999px;padding:5px 12px;color:var(--dim);white-space:nowrap}
+/* capability legend */
+.legend{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:28px 0 8px}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:.68rem;letter-spacing:.08em;font-weight:700;
+  text-transform:uppercase;border:1px solid var(--edge);background:#fff;border-radius:999px;padding:6px 13px;
+  color:var(--dim);white-space:nowrap}
 .chip i{width:8px;height:8px;border-radius:50%;flex:none}
-.chip.oa{border-color:rgba(255,107,26,.5);color:var(--openai)} .chip.oa i{background:var(--openai)}
-.chip.bf{border-color:rgba(139,123,232,.5);color:var(--brandfetch)} .chip.bf i{background:var(--brandfetch)}
-.chip.el{border-color:rgba(123,224,201,.5);color:var(--eleven)} .chip.el i{background:var(--eleven)}
-.chip.cl{border-color:rgba(79,168,255,.5);color:var(--cloudinary)} .chip.cl i{background:var(--cloudinary)}
-.chip.gh{border-color:rgba(255,201,74,.5);color:var(--ghl)} .chip.gh i{background:var(--ghl)}
+.chip.oa{border-color:#bfe4f6;color:#1a7fae} .chip.oa i{background:var(--copy)}
+.chip.bf{border-color:#d4cff8;color:#5a49c9} .chip.bf i{background:var(--brand)}
+.chip.el{border-color:#9ce3ce;color:#0fa383} .chip.el i{background:var(--voice)}
+.chip.cl{border-color:#c2d0e4;color:var(--files)} .chip.cl i{background:var(--files)}
+.chip.gh{border-color:#f6d9a6;color:#b97d12} .chip.gh i{background:var(--crm)}
 
 /* dial */
-.dial{position:relative;height:66px;border-radius:10px;margin:30px 0 8px;overflow:hidden;
-  background:linear-gradient(180deg,#1b2331,#10151d);border:1px solid var(--edge)}
-.dial .ticks{position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,rgba(232,226,212,.16) 0 1px,transparent 1px 14px);opacity:.5}
-.dial .band{position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,107,26,.32),rgba(123,224,201,.14))}
+.dial{position:relative;height:66px;border-radius:9px;margin:32px 0 8px;overflow:hidden;
+  background:#fff;border:1px solid var(--edge);box-shadow:0 4px 16px rgba(27,46,78,.07)}
+.dial .ticks{position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,rgba(27,46,78,.07) 0 1px,transparent 1px 14px)}
+.dial .band{position:absolute;inset:0;background:linear-gradient(90deg,#d4f5ec,#eaf7fd)}
 .dial .stations{position:absolute;inset:0;display:flex;align-items:center}
-.dial .st{flex:1;text-align:center;font-family:var(--mono);font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);line-height:1.5}
-.dial .st b{display:block;font-size:.72rem;color:var(--tape)}
-.dial .st:nth-child(odd) b{color:var(--signal)}
+.dial .st{flex:1;text-align:center;font-size:.56rem;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--dim);font-weight:700;line-height:1.5}
+.dial .st b{display:block;font-size:.74rem;color:var(--blue)}
+.dial .st:nth-child(odd) b{color:var(--cyan)}
 
 /* signal path */
-.path{position:relative;margin:34px 0 0;padding-left:0}
-.stn{position:relative;display:grid;grid-template-columns:96px 1fr;gap:18px;
-  border:1px solid var(--edge);border-radius:10px;background:linear-gradient(180deg,var(--panel2),var(--panel));
-  padding:18px;margin-bottom:12px;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+.path{position:relative;margin:36px 0 0}
+.stn{position:relative;display:grid;grid-template-columns:96px 1fr;gap:20px;
+  border:1px solid var(--edge);border-radius:9px;background:#fff;
+  padding:20px;margin-bottom:12px;box-shadow:0 4px 16px rgba(27,46,78,.06)}
 .stn::after{content:'';position:absolute;left:56px;bottom:-13px;width:2px;height:12px;background:var(--edge-hot)}
 .stn:last-of-type::after{display:none}
 .freq{text-align:center;border-right:1px solid var(--edge);padding-right:16px}
-.freq b{display:block;font-family:var(--display);font-size:1.28rem;color:var(--signal);line-height:1}
-.freq span{font-family:var(--mono);font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+.freq b{display:block;font-size:1.3rem;color:var(--cyan);line-height:1;font-weight:800}
+.freq span{font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:700}
 .freq .n{display:block;font-family:var(--mono);font-size:.6rem;color:var(--edge-hot);margin-top:8px}
 .does{margin:.5rem 0 .7rem}
-.ret{border-left:2px solid var(--vu);padding-left:11px;color:var(--dim);font-size:.86rem}
-.ret b{color:var(--vu);font-weight:700}
+.ret{border-left:3px solid var(--teal);background:#eefaf6;border-radius:0 6px 6px 0;
+  padding:11px 14px;color:#4a5568;font-size:.86rem}
+.ret b{color:#0fa383;font-weight:700}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 @media(max-width:620px){
   .stn{grid-template-columns:1fr;gap:10px}
@@ -82,28 +81,32 @@ header{padding:44px 0 6px;text-align:center}
 }
 
 /* background lane */
-.bg{display:grid;grid-template-columns:96px 1fr;gap:18px;border:1px dashed var(--edge-hot);border-radius:10px;
-  padding:14px 18px;margin:-4px 0 12px;background:rgba(255,107,26,.05)}
-.bg .tagcol{font-family:var(--mono);font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:var(--signal);text-align:center;padding-right:16px}
+.bg{display:grid;grid-template-columns:96px 1fr;gap:20px;border:1px dashed var(--edge-hot);border-radius:9px;
+  padding:16px 20px;margin:-4px 0 12px;background:var(--soft)}
+.bg .tagcol{font-size:.56rem;letter-spacing:.15em;text-transform:uppercase;color:var(--cyan);
+  font-weight:700;text-align:center;padding-right:16px}
 @media(max-width:620px){.bg{grid-template-columns:1fr;gap:8px}.bg .tagcol{text-align:left}}
 
-/* generic panel */
-.panel{border:1px solid var(--edge);border-radius:10px;background:linear-gradient(180deg,var(--panel2),var(--panel));padding:22px;margin:14px 0}
+/* panels */
+.panel{border:1px solid var(--edge);border-radius:9px;background:#fff;padding:24px;margin:14px 0;
+  box-shadow:0 4px 16px rgba(27,46,78,.06)}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:700px){.cols{grid-template-columns:1fr}}
-pre{font-family:var(--mono);font-size:.72rem;line-height:1.75;color:var(--dim);background:#0d121a;border:1px solid var(--edge);
-  border-radius:8px;padding:14px;overflow-x:auto;margin:0}
-pre b{color:var(--cloudinary);font-weight:400}
-pre i{color:var(--vu);font-style:normal}
-.kv{width:100%;border-collapse:collapse;font-size:.84rem}
-.kv th,.kv td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--edge);vertical-align:top}
-.kv th{font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);white-space:nowrap;width:118px}
-footer{text-align:center;margin-top:34px;color:var(--dim);font-size:.8rem}
-footer a{color:var(--signal)}
+pre{font-family:var(--mono);font-size:.72rem;line-height:1.75;color:#4a5568;background:var(--soft);
+  border:1px solid var(--edge);border-radius:7px;padding:15px;overflow-x:auto;margin:0}
+pre b{color:var(--files);font-weight:700}
+pre i{color:#0fa383;font-style:normal}
+.kv{width:100%;border-collapse:collapse;font-size:.85rem}
+.kv th,.kv td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--edge);vertical-align:top}
+.kv th{font-size:.6rem;letter-spacing:.13em;text-transform:uppercase;color:#5f6f85;font-weight:700;
+  white-space:nowrap;width:120px}
+footer{text-align:center;margin-top:36px;color:var(--dim);font-size:.8rem}
+footer a{color:var(--cyan)}
 @media (prefers-reduced-motion:no-preference){
   .lamp{animation:th 1.3s ease-in-out infinite}@keyframes th{50%{opacity:.3}}
 }
-.lamp{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--signal);box-shadow:0 0 12px var(--signal);vertical-align:middle}
+.lamp{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 10px rgba(41,174,226,.6);vertical-align:middle}
 </style>
 </head>
 <body>
@@ -115,12 +118,12 @@ footer a{color:var(--signal)}
   <h1>From a web address<br>to a recorded spot</h1>
   <p class="lede">Seven stations on the dial. The client only ever answers one question at a time — everything expensive happens off to the side while they're busy.</p>
   <div class="legend">
-    <span class="chip oa"><i></i>OpenAI</span>
-    <span class="chip bf"><i></i>Brandfetch</span>
-    <span class="chip el"><i></i>ElevenLabs</span>
-    <span class="chip cl"><i></i>Cloudinary</span>
-    <span class="chip gh"><i></i>GoHighLevel</span>
-    <span class="chip"><i style="background:var(--dim)"></i>ffmpeg</span>
+    <span class="chip oa"><i></i>AI copy</span>
+    <span class="chip bf"><i></i>Brand lookup</span>
+    <span class="chip el"><i></i>Voice &amp; music</span>
+    <span class="chip cl"><i></i>File delivery</span>
+    <span class="chip gh"><i></i>CRM handoff</span>
+    <span class="chip"><i style="background:var(--master)"></i>Mastering</span>
   </div>
 </header>
 
@@ -209,10 +212,10 @@ footer a{color:var(--signal)}
     <div>
       <p class="sm" style="margin:0"><b>Audio starts rendering the second voices are assigned</b> — the client walks into the listening room while the first spot is still bouncing. Each finished MP3 uploads straight to the client's folder.</p>
       <div class="chips" style="margin:10px 0 0">
-        <span class="chip"><i style="background:var(--dim)"></i>rewrite for the ear</span>
+        <span class="chip"><i style="background:var(--master)"></i>rewrite for the ear</span>
         <span class="chip el"><i></i>render the read</span>
         <span class="chip el"><i></i>compose the bed</span>
-        <span class="chip"><i style="background:var(--dim)"></i>bed, duck, master</span>
+        <span class="chip"><i style="background:var(--master)"></i>bed, duck, master</span>
         <span class="chip cl"><i></i>upload MP3</span>
       </div>
     </div>
@@ -234,9 +237,9 @@ footer a{color:var(--signal)}
       <p class="does sm">Every approved spot, its banner, the scripts, the voices, the brief — laid out on one page with download links.</p>
       <div class="chips">
         <span class="chip cl"><i></i>file the folder + copy the logo in</span>
-        <span class="chip gh"><i></i>create the opportunity</span>
+        <span class="chip gh"><i></i>create the CRM record</span>
       </div>
-      <p class="ret"><b>Back:</b> a permanent Cloudinary folder and a GoHighLevel opportunity carrying every URL.</p>
+      <p class="ret"><b>Back:</b> a permanent client folder and a CRM record carrying every file link.</p>
     </div>
   </div>
 
@@ -245,7 +248,7 @@ footer a{color:var(--signal)}
     <div>
       <h3>Who signs off?</h3>
       <p class="does sm">Name the reviewer, add a note about the flight or which cut to lead with, and send.</p>
-      <div class="chips"><span class="chip gh"><i></i>approval webhook, all links attached</span></div>
+      <div class="chips"><span class="chip gh"><i></i>approval sent, all links attached</span></div>
       <p class="ret"><b>Back:</b> the project lands in the searchable library, ready to be reused as the starting point for the client's next campaign.</p>
     </div>
   </div>
@@ -256,7 +259,7 @@ footer a{color:var(--signal)}
   <div class="panel">
     <div class="eyebrow">What gets saved</div>
     <h2>One folder, everything in it</h2>
-    <pre>smart1-radio-studio/
+    <pre>client-files/
 └── <b>greenwald-realty</b>/
     └── <b>fall-push-2026-08-02</b>/
         ├── audio/
@@ -298,7 +301,7 @@ footer a{color:var(--signal)}
     <div>
       <table class="kv">
         <tr><th>Pronunciation</th><td>Phone numbers, URLs, prices and dates are rewritten into spoken words before the voice sees them — and shown to the client.</td></tr>
-        <tr><th>Music beds</th><td>Pick from the library, compose one with Eleven Music, or upload a track you licensed. Composed beds are forced instrumental with an open midrange.</td></tr>
+        <tr><th>Music beds</th><td>Pick from the library, compose one on demand, or upload a track you licensed. Composed beds are forced instrumental with an open midrange.</td></tr>
         <tr><th>Mastering</th><td>Bed underneath, ducked by the read, mastered to &minus;16 LUFS, padded to the exact slot.</td></tr>
         <tr><th>Editing</th><td>Type into the script with a live words-to-clock meter. Every version is kept and restorable.</td></tr>
         <tr><th>Sign-off</th><td>The reviewer gets Approve and Request changes, and the answer comes back into the project.</td></tr>
@@ -313,7 +316,7 @@ footer a{color:var(--signal)}
   <table class="kv">
     <tr><th>Library</th><td>Every saved playlist, searchable by client, business, project or team member. Expand any project to hear the spots. Feeds the “reuse a previous playlist” shortcut back at 88.1.</td></tr>
     <tr><th>Review page</th><td>What the client sees. Branded, read-only, one link, no password — every spot and banner with Approve and Request changes on the bottom.</td></tr>
-    <tr><th>Diagnostics</th><td>Live tests against all five services, ffmpeg, music beds and sign-in, a list of anything missing from the environment, webhook test buttons, and a rolling error log. Check it before a client ever sees a failure.</td></tr>
+    <tr><th>Diagnostics</th><td>Live tests against every connected service, mastering, music beds and sign-in, a list of anything missing from the environment, webhook test buttons, and a rolling error log. Check it before a client ever sees a failure.</td></tr>
   </table>
 </div>
 
