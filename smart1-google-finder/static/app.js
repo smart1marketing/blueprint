@@ -747,3 +747,22 @@ if (manualBtn && manualInput) {
     `;
   });
 }
+// Automatically trigger background refresh on page load
+window.addEventListener('DOMContentLoaded', async () => {
+  const statusEl = document.getElementById('status');
+  if (statusEl) {
+    statusEl.textContent = 'Auto-refreshing Google accounts in background...';
+  }
+  
+  try {
+    const r = await fetch('/api/refresh', { method: 'POST' });
+    const data = await r.json();
+    if (statusEl) {
+      statusEl.textContent = `Google accounts refreshed (${data.count || 0} assets indexed). Start typing to search...`;
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = 'Start typing to search all connected accounts.';
+    }
+  }
+});
