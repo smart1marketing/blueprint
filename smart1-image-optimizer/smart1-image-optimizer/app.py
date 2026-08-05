@@ -1,6 +1,7 @@
 
 import io
 import os
+import re
 from pathlib import Path
 from typing import List, Tuple
 
@@ -12,6 +13,19 @@ app.config["MAX_CONTENT_LENGTH"] = 40 * 1024 * 1024
 
 ALLOWED_FORMATS = {"PNG", "JPEG", "GIF"}
 MAX_DIMENSION = 12000
+
+
+def sanitize_filename(value: str | None, fallback: str = "optimized-image") -> str:
+    value = (value or "").strip()
+    if not value:
+        value = fallback
+
+    # Remove an extension supplied by the user because the selected output
+    # format determines the final extension.
+    value = Path(value).stem
+    value = re.sub(r"[^A-Za-z0-9._ -]+", "-", value)
+    value = re.sub(r"\s+", " ", value).strip(" .-_")
+    return value[:120] or fallback
 
 
 def validate_dimension(value: str | None, label: str) -> int | None:
@@ -167,6 +181,7 @@ def process_image():
         target_kb = int(request.form.get("target_kb", "150"))
         quality = int(request.form.get("quality", "82"))
         output_format = request.form.get("format", "PNG").upper()
+        requested_name = request.form.get("output_name")
 
         if output_format == "JPG":
             output_format = "JPEG"
@@ -231,8 +246,10 @@ def process_image():
                 result = save_static(frame, output_format, quality)
 
         extension = {"JPEG": "jpg", "PNG": "png", "GIF": "gif"}[output_format]
-        stem = Path(upload.filename).stem or "optimized-image"
-        filename = f"{stem}-resized.{extension}"
+        original_stem = Path(upload.filename).stem or "optimized-image"
+        default_stem = f"{original_stem}-resized"
+        stem = sanitize_filename(requested_name, default_stem)
+        filename = f"{stem}.{extension}"
         mime = {"JPEG": "image/jpeg", "PNG": "image/png", "GIF": "image/gif"}[output_format]
 
         return send_file(

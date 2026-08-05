@@ -80,7 +80,17 @@
         </div>
 
         <div class="section-title">Output settings</div>
-        <div class="grid three">
+
+        <label class="filename-field">
+          <span>Rename downloaded image</span>
+          <div class="filename-control">
+            <input id="output_name" name="output_name" type="text" maxlength="120" placeholder="Enter a new file name">
+            <b id="extension-preview">.png</b>
+          </div>
+          <small>The selected output format determines the file extension.</small>
+        </label>
+
+        <div class="grid three output-grid">
           <label>
             <span>Save as</span>
             <select id="format" name="format">

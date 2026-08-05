@@ -9,6 +9,7 @@ A drop-in Flask/Render image utility that:
 - Locks aspect ratio
 - Includes common size presets
 - Saves as PNG, JPG, or GIF
+- Rename downloaded files before saving
 - Optimizes toward a target size, defaulting to 150 KB
 - Preserves animated GIFs when output is GIF
 - Flattens transparent images onto white when converting to JPG

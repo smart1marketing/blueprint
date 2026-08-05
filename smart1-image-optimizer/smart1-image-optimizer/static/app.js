@@ -13,6 +13,8 @@ const widthInput = document.getElementById("width");
 const heightInput = document.getElementById("height");
 const lockAspect = document.getElementById("lock_aspect");
 const format = document.getElementById("format");
+const outputName = document.getElementById("output_name");
+const extensionPreview = document.getElementById("extension-preview");
 const quality = document.getElementById("quality");
 const qualityOutput = document.getElementById("quality-output");
 const target = document.getElementById("target_kb");
@@ -30,6 +32,17 @@ let crop = {x: 0, y: 0, width: 0, height: 0};
 let startPoint = {x: 0, y: 0};
 
 quality.addEventListener("input", () => qualityOutput.value = `${quality.value}%`);
+
+function selectedExtension() {
+  return format.value === "JPG" ? ".jpg" : `.${format.value.toLowerCase()}`;
+}
+
+function updateExtensionPreview() {
+  extensionPreview.textContent = selectedExtension();
+}
+
+format.addEventListener("change", updateExtensionPreview);
+updateExtensionPreview();
 
 function displayScale() {
   return {
@@ -99,6 +112,8 @@ function setFile(file) {
     widthInput.value = originalWidth;
     heightInput.value = originalHeight;
     fileName.textContent = file.name;
+    const originalStem = file.name.replace(/\.[^/.]+$/, "");
+    outputName.value = `${originalStem}-resized`;
     details.textContent = `${originalWidth} × ${originalHeight}px · ${(file.size / 1024).toFixed(1)} KB`;
     previewWrap.classList.remove("hidden");
     resetCrop();
@@ -262,6 +277,7 @@ form.addEventListener("submit", async e => {
   body.append("crop_height", Math.round(crop.height));
   body.append("lock_aspect", String(lockAspect.checked));
   body.append("format", format.value);
+  body.append("output_name", outputName.value.trim());
   body.append("quality", quality.value);
   body.append("target_kb", target.value);
   body.append("optimize", String(optimize.checked));
