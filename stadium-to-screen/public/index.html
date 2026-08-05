@@ -32,6 +32,7 @@
     line-height:1.55;
     -webkit-font-smoothing:antialiased;
     overflow-x:hidden;
+    width:100vw;margin-left:calc(50% - 50vw);   /* full-bleed inside GHL's constrained column */
   }
   h1,h2,h3,.display{font-family:'Archivo',sans-serif;line-height:1.02;letter-spacing:-.01em}
   .mono{font-family:'JetBrains Mono',monospace}
@@ -50,7 +51,7 @@
 
   /* yard-line rail down the page edge (desktop) */
   .yardrail{
-    position:fixed;top:0;left:0;bottom:0;width:64px;z-index:5;pointer-events:none;
+    display:none;position:absolute;top:0;left:0;bottom:0;width:64px;z-index:5;pointer-events:none;
     display:flex;flex-direction:column;justify-content:center;gap:34px;
     padding-left:14px;mix-blend-mode:screen;opacity:.5;
   }
@@ -62,7 +63,7 @@
 
   /* ---------- NAV ---------- */
   header.nav{
-    position:sticky;top:0;z-index:40;
+    position:relative;z-index:40;
     backdrop-filter:blur(14px);
     background:rgba(6,15,29,.72);
     border-bottom:1px solid var(--line);
@@ -396,13 +397,14 @@
   .lock-pill{font-family:'JetBrains Mono';font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;background:rgba(139,160,184,.18);color:var(--steel);padding:.28em .6em;border-radius:20px;margin-left:8px}
   .lock-pill.open{background:rgba(47,208,122,.16);color:var(--turf-soft)}
   .gated{position:relative;border-radius:14px;overflow:hidden}
-  .gated .gated-content{filter:blur(7px);opacity:.5;pointer-events:none;user-select:none;transition:filter .45s ease,opacity .45s ease}
+  .gated .gated-content{filter:blur(6px);opacity:.5;pointer-events:none;user-select:none;max-height:200px;overflow:hidden;transition:filter .45s ease,opacity .45s ease}
   .gated .gate-overlay{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:18px;background:linear-gradient(180deg,rgba(10,22,38,.25),rgba(10,22,38,.6))}
   .gated .gate-card{max-width:36ch}
   .gated .gate-card svg{margin-bottom:8px}
   .gated .gate-title{font-family:'Archivo';font-weight:800;font-size:1.12rem;margin-bottom:6px}
   .gated .gate-sub{font-size:.88rem;color:var(--steel)}
-  .gated.unlocked .gated-content{filter:none;opacity:1;pointer-events:auto;user-select:auto}
+  .gated .gate-cta{margin-top:14px;font-size:.92rem}
+  .gated.unlocked .gated-content{filter:none;opacity:1;pointer-events:auto;user-select:auto;max-height:none;overflow:visible}
   .gated.unlocked .gate-overlay{display:none}
   .lf-trust{font-size:.76rem;color:var(--steel-dim);margin-top:10px}
 </style>
@@ -1237,6 +1239,7 @@ function render(team,m,pkg,rec,ai){
             <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#5ee39a" stroke-width="1.6"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
             <div class="gate-title">Unlock the full breakdown</div>
             <div class="gate-sub">Add your details below to reveal the full device breakdown and media plan — and download your PDF report.</div>
+            <button type="button" class="btn btn-turf gate-cta" id="gateCta">Enter your details below →</button>
           </div>
         </div>
       </div>
@@ -1267,6 +1270,8 @@ function render(team,m,pkg,rec,ai){
     </div>`;
   const leadCtx={team:team.name,league:state.league,scope:state.scope,scopeLabel:m.scopeLabel,focus:state.focus,dma:team.dma,city:team.city,venue:team.venue,recommendedPackage:pkg.name,packagePrice:pkg.price,estFanBase:m.fanBase,estHouseholds:m.households,estMatchable:m.matchable,estDevicesTotal:m.devices.total,estDevicesPhones:m.devices.phones,estDevicesComputers:m.devices.computers,estDevicesTablets:m.devices.tablets,estDevicesCTV:m.devices.connectedTV,page:"football-audio-video-playbook",source:"Stadium to Screen proposal builder"};
   const lf=document.getElementById("leadForm");
+  const gc=document.getElementById("gateCta");
+  if(gc) gc.addEventListener("click",()=>{ const ft=document.getElementById("formTitle"); if(ft) ft.scrollIntoView({behavior:"smooth",block:"start"}); setTimeout(()=>{ try{ const ni=lf.querySelector('input[name="name"]'); ni&&ni.focus(); }catch(e){} },450); });
   lf.addEventListener("submit",async(ev)=>{
     ev.preventDefault();
     const d=Object.fromEntries(new FormData(lf).entries());
