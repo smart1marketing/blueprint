@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Marketing Efficiency Audit™ | Smart 1 Marketing</title>
-<meta name="description" content="A five-minute marketing audit for accounting and bookkeeping professionals. Score a client's marketing efficiency, benchmark spend by industry, and identify profit leaks.">
+<meta name="description" content="A marketing audit for accounting and bookkeeping professionals. Score a client's marketing efficiency, benchmark spend and audience size by industry, scan their website for conversion points, and identify profit leaks.">
 <link rel="icon" href="/img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,13 +33,13 @@
       <div>
         <span class="eyebrow light">Marketing Efficiency Audit™</span>
         <h1>Find out what your client's marketing is <span class="hl">actually producing</span></h1>
-        <p class="lead">Answer 24 questions about a client's marketing spend and results. You get a Marketing Efficiency Score™, an industry benchmark comparison, the cost-per-lead and ROI math, and a findings summary you can bring to your next client meeting.</p>
+        <p class="lead">Seven short sections on a client's marketing spend, competition, and results. You get a Marketing Efficiency Score™, industry benchmarks, a website conversion scan, an audience size estimate, and a findings summary you can bring to your next client meeting.</p>
         <div class="hero-cta">
           <a href="#" class="btn btn-primary" data-goto="step1">Start the audit →</a>
           <a href="#how" class="btn btn-ghost">See how it works</a>
         </div>
         <div class="hero-trust">
-          <span><span class="dot">●</span> About five minutes</span>
+          <span><span class="dot">●</span> About ten minutes</span>
           <span><span class="dot">●</span> Benchmarked across 20 industries</span>
           <span><span class="dot">●</span> Findings in plain financial language</span>
         </div>
@@ -52,6 +52,8 @@
         <div class="rev-row"><span class="lab">Marketing ROI</span><span class="val green">%</span></div>
         <div class="rev-row"><span class="lab">Spend vs. benchmark range</span><span class="val">% of revenue</span></div>
         <div class="rev-row"><span class="lab">Growth opportunity</span><span class="val green">$ / year</span></div>
+        <div class="rev-row"><span class="lab">Website conversion scan</span><span class="val">Gaps &amp; fixes</span></div>
+        <div class="rev-row"><span class="lab">Reachable audience estimate</span><span class="val">People</span></div>
         <p class="card-note">Directional assessment. Not a substitute for detailed analysis.</p>
       </aside>
     </div>
@@ -81,9 +83,9 @@
       </div>
       <div class="steps">
         <div class="step"><div class="n">1</div><h4>Client snapshot</h4><p>Industry, revenue, locations, and vendor count. Selects the right benchmark set.</p></div>
-        <div class="step"><div class="n">2</div><h4>Warning signs</h4><p>Ten weighted questions from the Client Profit Leak Assessment™.</p></div>
-        <div class="step"><div class="n">3</div><h4>Investment</h4><p>Monthly spend across ten marketing categories, straight off the books.</p></div>
-        <div class="step"><div class="n">4</div><h4>Performance</h4><p>Leads, customers, average sale, and lifetime value drive the ROI math.</p></div>
+        <div class="step"><div class="n">2</div><h4>How they buy</h4><p>Agency or in house, vendors, traditional media, events, and consistency.</p></div>
+        <div class="step"><div class="n">3</div><h4>Competition &amp; site</h4><p>Named competitors, plus a scan of the client's own site for conversion points.</p></div>
+        <div class="step"><div class="n">4</div><h4>Numbers</h4><p>Warning signs, spend by category, and the performance figures behind the ROI math.</p></div>
       </div>
       <div class="center mt40">
         <a href="#" class="btn btn-primary" data-goto="step1">Start the audit →</a>
@@ -97,7 +99,7 @@
   <div class="wrap">
     <div class="pbar"><div class="pfill" id="pfill"></div></div>
     <div class="psteps" id="psteps">
-      <span data-s="1">Snapshot</span><span data-s="2">Warning signs</span><span data-s="3">Investment</span><span data-s="4">Performance</span><span data-s="5">Results</span>
+      <span data-s="1">Snapshot</span><span data-s="2">Profile</span><span data-s="3">Competition</span><span data-s="4">Warning signs</span><span data-s="5">Investment</span><span data-s="6">Performance</span><span data-s="7">Market</span><span data-s="8">Results</span>
     </div>
   </div>
 </div>
@@ -116,30 +118,252 @@
       <label class="field"><span>Current marketing vendors</span><input id="vendors" type="number" min="0" step="1" placeholder="2"></label>
       <label class="field"><span>Prepared by <em>(partner name)</em></span><input id="preparedBy" type="text" placeholder="Jane Doe, CPA"></label>
       <label class="field"><span>Partner firm</span><input id="partnerFirm" type="text" placeholder="Doe CPA Group"></label>
+      <label class="field"><span>Client website</span><input id="website" type="text" placeholder="acmeplumbing.com"></label>
+      <label class="field"><span>Client ZIP code</span><input id="zipCode" type="text" inputmode="numeric" maxlength="10" placeholder="43215"></label>
+      <label class="field"><span>Primary city / market</span><input id="cityMarket" type="text" placeholder="Columbus, OH"></label>
+      <label class="field"><span>Service-area population <em>(if known)</em></span><input id="areaPopulation" type="number" min="0" step="1000" placeholder="850,000"></label>
     </div>
     <p class="micro">The partner name and firm appear on the PDF report and are attached to the referral record.</p>
-    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="intro">Back</button><button class="btn btn-primary" data-goto="step2">Continue</button></div>
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="intro">Back</button><button class="btn btn-primary" data-goto="profile">Continue</button></div>
   </div>
 </section>
 
-<!-- ============ STEP 2 ============ -->
-<section id="step2" class="screen pad">
+<!-- ============ PROFILE (Section 2) ============ -->
+<section id="profile" class="screen pad">
   <div class="wrap narrow">
     <span class="step-no">Section 2</span>
+    <h2>How the client buys marketing</h2>
+    <p class="sub">This shapes which benchmarks apply and what the findings focus on.</p>
+
+    <div class="qcard">
+      <h4>Scale of spend</h4>
+      <div class="qrow">
+        <p>Do they spend more than $2,500 a month on <b>digital</b> marketing?</p>
+        <div class="toggle tri" data-q="digitalOver2500">
+          <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+        </div>
+      </div>
+      <div class="qrow">
+        <p>Do they spend more than $2,500 a month on <b>traditional</b> marketing?</p>
+        <div class="toggle tri" data-q="traditionalOver2500">
+          <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+        </div>
+      </div>
+      <div class="qrow">
+        <p>Do they buy <b>lead services</b> (purchased or shared leads)?</p>
+        <div class="toggle tri" data-q="buysLeadServices">
+          <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="qcard">
+      <h4>Who runs the marketing</h4>
+      <label class="field"><span>How do they buy their marketing?</span>
+        <select id="buyingModel">
+          <option value="">Select one</option>
+          <option>Through an agency</option>
+          <option>In house</option>
+          <option>Both — agency and in house</option>
+          <option>Not sure</option>
+        </select>
+      </label>
+      <div id="trainingWrap" hidden>
+        <div class="qrow">
+          <p>Since some or all is in house, do they provide <b>marketing training</b> for those employees?</p>
+          <div class="toggle tri" data-q="providesTraining">
+            <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+          </div>
+        </div>
+      </div>
+      <label class="field mt16"><span>Digital vendors they spend with</span>
+        <textarea id="digitalVendors" rows="3" placeholder="Google Ads, Meta, Yelp, Angi, a local SEO firm — list whatever you know, one per line or comma separated"></textarea>
+      </label>
+    </div>
+
+    <div class="qcard">
+      <h4>Traditional media</h4>
+      <p class="sub mb12">Which traditional channels do they buy? Select all that apply.</p>
+      <div class="chips" id="traditionalMedia"></div>
+      <label class="field mt16"><span>Anything else on traditional media</span>
+        <input id="traditionalOther" type="text" placeholder="Sponsorships, church bulletins, stadium signage…">
+      </label>
+    </div>
+
+    <div class="qcard">
+      <h4>In-house team and live events</h4>
+      <div class="grid-2">
+        <label class="field"><span>Employees working on marketing</span><input id="marketingHeadcount" type="number" min="0" step="0.5" placeholder="1.5"></label>
+        <label class="field"><span>Monthly cost of those employees</span><div class="prefix"><i>$</i><input id="marketingPayroll" type="number" min="0" step="100" placeholder="6,500"></div></label>
+      </div>
+      <p class="micro">Wages, taxes, and benefits for time spent on marketing. This is counted separately from media spend so both views are visible.</p>
+      <div class="qrow">
+        <p>Do they run or sponsor <b>live events</b> — shows, festivals, open houses, seminars?</p>
+        <div class="toggle tri" data-q="liveEvents">
+          <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+        </div>
+      </div>
+      <div id="eventsWrap" hidden>
+        <div class="grid-2 mt16">
+          <label class="field"><span>Which events, and how often?</span><input id="eventsDetail" type="text" placeholder="Home &amp; Garden Show, two county fairs, quarterly open house"></label>
+          <label class="field"><span>Approximate annual event cost</span><div class="prefix"><i>$</i><input id="eventsCost" type="number" min="0" step="500" placeholder="12,000"></div></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="qcard">
+      <h4>Control and follow-up</h4>
+      <label class="field"><span>Who owns the website, domain, and ad accounts?</span>
+        <select id="assetOwnership">
+          <option value="">Select one</option>
+          <option>The client owns everything</option>
+          <option>The agency or vendor owns some of it</option>
+          <option>The agency or vendor owns most of it</option>
+          <option>Nobody is sure</option>
+        </select>
+      </label>
+      <div class="grid-2 mt16">
+        <label class="field"><span>Typical response time to a new lead</span>
+          <select id="leadResponseTime">
+            <option value="">Select one</option>
+            <option>Within 5 minutes</option>
+            <option>Within an hour</option>
+            <option>Same day</option>
+            <option>Next business day or longer</option>
+            <option>Not tracked</option>
+          </select>
+        </label>
+        <label class="field"><span>Do they track leads to closed sale in a CRM?</span>
+          <select id="crmTracking">
+            <option value="">Select one</option>
+            <option>Yes, in a CRM</option>
+            <option>Yes, but on paper or in a spreadsheet</option>
+            <option>No</option>
+            <option>Not sure</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="qcard">
+      <h4>Timing and consistency</h4>
+      <div class="qrow">
+        <p>Do they run <b>seasonal</b> marketing pushes?</p>
+        <div class="toggle tri" data-q="seasonalMarketing">
+          <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+        </div>
+      </div>
+      <div id="seasonWrap" hidden>
+        <label class="field mt16"><span>Which months or seasons?</span>
+          <input id="seasonDetail" type="text" placeholder="Spring AC tune-ups, November–December, tax season…">
+        </label>
+      </div>
+      <div class="qrow">
+        <p>Is marketing spent <b>consistently each month</b>, or does it start and stop?</p>
+        <div class="toggle tri wide-toggle" data-q="monthlyConsistency">
+          <button type="button" data-v="consistent">Consistent</button><button type="button" data-v="semi">Semi-consistent</button><button type="button" data-v="sporadic">Starts and stops</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step1">Back</button><button class="btn btn-primary" data-goto="compete">Continue</button></div>
+  </div>
+</section>
+
+<!-- ============ COMPETITION (Section 3) ============ -->
+<section id="compete" class="screen pad">
+  <div class="wrap narrow">
+    <span class="step-no">Section 3</span>
+    <h2>Competition and website</h2>
+    <p class="sub">Who they are up against, and what their own site does with the traffic it gets.</p>
+
+    <div class="qcard">
+      <h4>Known competitors</h4>
+      <div class="qrow">
+        <p>Does the client know who their main competitors are?</p>
+        <div class="toggle tri" data-q="knowsCompetitors">
+          <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+        </div>
+      </div>
+      <div id="compWrap" hidden>
+        <p class="sub mt16 mb12">List them with websites where you have them. Add up to five.</p>
+        <div id="competitorRows"></div>
+        <button type="button" class="btn btn-ghost dark small" id="addCompetitor">Add another competitor</button>
+      </div>
+      <label class="field mt16"><span>What do they believe sets them apart from those competitors?</span>
+        <textarea id="differentiation" rows="3" placeholder="Only shop in the county with 24/7 live dispatch. Third-generation family business. Ten-year warranty…"></textarea>
+      </label>
+      <label class="field mt16"><span>Are they losing work to anyone in particular, and on what?</span>
+        <input id="losingTo" type="text" placeholder="Losing price-shoppers to a franchise that advertises heavily on radio">
+      </label>
+    </div>
+
+    <div class="qcard">
+      <h4>Website conversion scan</h4>
+      <p class="sub">We read the home page for the ways a visitor can actually become a lead, and for whether any of it is being measured.</p>
+      <div class="scan-row">
+        <div class="prefix scan-input"><i>@</i><input id="scanUrl" type="text" placeholder="acmeplumbing.com"></div>
+        <button type="button" class="btn btn-primary" id="scanBtn">Scan the site</button>
+      </div>
+      <p class="micro">Reads the served home page only. A site that builds itself in the browser will under-report, and the result will say so.</p>
+      <div id="scanStatus" class="upload-status" hidden></div>
+      <div id="scanResult" class="expense-result" hidden></div>
+    </div>
+
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="profile">Back</button><button class="btn btn-primary" data-goto="step2">Continue</button></div>
+  </div>
+</section>
+
+<!-- ============ STEP 2b ============ -->
+<section id="step2" class="screen pad">
+  <div class="wrap narrow">
+    <span class="step-no">Section 4</span>
     <h2>Profit leak warning signs</h2>
-    <p class="sub">Answer for the client as best you know. "Not sure" counts as a yes — an unknown is itself a warning sign.</p>
+    <p class="sub">Answer for the client as best you know. Unsure is a legitimate answer — where a business cannot answer these questions, that gap is usually the finding.</p>
     <div id="flags" class="flags"></div>
-    <div class="running">Warning-sign points<b class="mono" id="leakRunning">0 / 30</b></div>
-    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step1">Back</button><button class="btn btn-primary" data-goto="step3">Continue</button></div>
+    <div class="running">Warning signs<b class="mono" id="leakRunning">0 of 10 answered</b></div>
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="compete">Back</button><button class="btn btn-primary" data-goto="step3">Continue</button></div>
   </div>
 </section>
 
 <!-- ============ STEP 3 ============ -->
 <section id="step3" class="screen pad">
   <div class="wrap narrow">
-    <span class="step-no">Section 3</span>
+    <span class="step-no">Section 5</span>
     <h2>Monthly marketing investment</h2>
-    <p class="sub">Enter what you can see on the books. Leave anything unknown at zero.</p>
+    <p class="sub">Drag the sliders, or type an exact figure. Tap the <b>i</b> beside any category for examples of what belongs there. Leave anything unknown at zero — or upload the client's expenses and let us do the sorting.</p>
+
+    <div class="upload-card">
+      <div class="upload-head">
+        <h4>Upload marketing expenses</h4>
+        <span class="opt">Optional</span>
+      </div>
+      <p class="sub">A P&amp;L export, ledger, vendor statement, or invoice list. PDF, Excel, CSV, or a photo — up to 15 MB.</p>
+
+      <div class="mode-picker" id="uploadMode" role="radiogroup" aria-label="What to do with the file">
+        <button type="button" class="mode sel" data-mode="ai">
+          <b>AI evaluation</b><span>Sort the line items into categories now and fill in the numbers below</span>
+        </button>
+        <button type="button" class="mode" data-mode="review">
+          <b>Human review</b><span>Save the file for a Smart 1 analyst to go through with you</span>
+        </button>
+      </div>
+
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="expenseFile" accept=".pdf,.xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.webp" hidden>
+        <span class="dz-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </span>
+        <b>Choose a file</b>
+        <span class="dz-note">or drag it here</span>
+      </label>
+
+      <div id="uploadStatus" class="upload-status" hidden></div>
+      <div id="expenseResult" class="expense-result" hidden></div>
+    </div>
+
     <div id="spend" class="spend"></div>
     <div class="running">Total monthly investment<b class="mono" id="spendTotal">$0</b></div>
     <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step2">Back</button><button class="btn btn-primary" data-goto="step4">Continue</button></div>
@@ -149,7 +373,7 @@
 <!-- ============ STEP 4 ============ -->
 <section id="step4" class="screen pad">
   <div class="wrap narrow">
-    <span class="step-no">Section 4</span>
+    <span class="step-no">Section 6</span>
     <h2>Performance indicators</h2>
     <p class="sub">These drive the cost-per-lead, acquisition cost, lifetime value, and ROI calculations.</p>
     <div class="grid-2">
@@ -158,9 +382,82 @@
       <label class="field"><span>Average sale value</span><div class="prefix"><i>$</i><input id="avgSale" type="number" min="0" step="10" placeholder="500"></div></label>
       <label class="field"><span>Purchases per customer per year</span><input id="purchasesPerYear" type="number" min="0" step="0.5" placeholder="2"></label>
       <label class="field"><span>Average customer relationship (years)</span><input id="customerYears" type="number" min="0" step="0.5" placeholder="4"></label>
-      <label class="field"><span>Lead improvement to model</span><div class="suffix"><input id="liftPct" type="number" min="0" max="200" step="5" value="15"><i>%</i></div></label>
     </div>
-    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step3">Back</button><button class="btn btn-primary" id="toGate">Calculate results</button></div>
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step3">Back</button><button class="btn btn-primary" data-goto="market">Continue</button></div>
+  </div>
+</section>
+
+<!-- ============ MARKET (Section 6) ============ -->
+<section id="market" class="screen pad">
+  <div class="wrap narrow">
+    <span class="step-no">Section 7</span>
+    <h2>Target market and context</h2>
+    <p class="sub">Who the client is trying to reach, and anything happening in the business that affects the numbers.</p>
+
+    <div class="qcard">
+      <h4>Who they sell to</h4>
+      <div class="grid-2">
+        <label class="field"><span>Primarily</span>
+          <select id="audienceType">
+            <option value="">Select one</option>
+            <option>Consumers (B2C)</option>
+            <option>Businesses (B2B)</option>
+            <option>Both</option>
+          </select>
+        </label>
+        <label class="field"><span>Service area radius</span>
+          <select id="serviceRadius">
+            <option value="">Select one</option>
+            <option>Single neighborhood or town</option>
+            <option>Up to 25 miles</option>
+            <option>25–50 miles</option>
+            <option>Statewide or regional</option>
+            <option>National</option>
+          </select>
+        </label>
+      </div>
+      <p class="sub mt16 mb12">Primary age range of their customers. Select all that apply.</p>
+      <div class="chips" id="ageRanges"></div>
+      <div class="grid-2 mt16">
+        <label class="field"><span>Household income of target customer</span>
+          <select id="incomeBand">
+            <option value="">Select one</option>
+            <option>Under $50k</option>
+            <option>$50k–$100k</option>
+            <option>$100k–$200k</option>
+            <option>Over $200k</option>
+            <option>Mixed / not targeted</option>
+          </select>
+        </label>
+        <label class="field"><span>Gender skew, if any</span>
+          <select id="genderSkew">
+            <option value="">Select one</option>
+            <option>No meaningful skew</option>
+            <option>Mostly women</option>
+            <option>Mostly men</option>
+          </select>
+        </label>
+      </div>
+      <div class="qrow">
+        <p>Are they primarily selling to <b>homeowners</b>?</p>
+        <div class="toggle tri" data-q="homeownersOnly">
+          <button type="button" data-v="yes">Yes</button><button type="button" data-v="no">No</button><button type="button" data-v="unsure">Not sure</button>
+        </div>
+      </div>
+      <label class="field mt16"><span>Anything else about who they are trying to reach</span>
+        <input id="audienceNotes" type="text" placeholder="Homeowners with houses 20+ years old, new movers, contractors…">
+      </label>
+    </div>
+
+    <div class="qcard">
+      <h4>Business context</h4>
+      <p class="sub mb12">Anything that would change how these numbers should be read — leadership changes, a new location, a price change, losing a big account, a rebrand, staffing.</p>
+      <label class="field"><span>Other helpful information</span>
+        <textarea id="contextNotes" rows="5" placeholder="New owner took over in March. Lost their largest commercial account in Q1. Opened a second location in May…"></textarea>
+      </label>
+    </div>
+
+    <div class="nav-btns"><button class="btn btn-ghost dark" data-goto="step4">Back</button><button class="btn btn-primary" id="toGate">Calculate results</button></div>
   </div>
 </section>
 
@@ -225,6 +522,24 @@
       <!-- Metrics -->
       <div class="metrics" id="metrics"></div>
 
+      <!-- Industry spending -->
+      <div class="panel" id="industryPanel"></div>
+
+      <!-- Industry benchmarks and facts -->
+      <div class="panel" id="factsPanel"></div>
+
+      <!-- Audience size -->
+      <div class="panel" id="audiencePanel"></div>
+
+      <!-- Website conversion -->
+      <div class="panel" id="websitePanel"></div>
+
+      <!-- Competition -->
+      <div class="panel" id="competitionPanel"></div>
+
+      <!-- Vendor consolidation -->
+      <div class="panel" id="consolidationPanel"></div>
+
       <!-- Opportunity -->
       <div class="panel opp" id="oppPanel"></div>
 
@@ -235,9 +550,24 @@
           <span class="badge-ai" id="aiBadge">Generating…</span>
         </div>
         <div id="aiBody" class="ai-body">
-          <div class="skel"></div><div class="skel"></div><div class="skel short"></div>
+          <div class="thinking" id="thinking">
+            <svg class="spinner" viewBox="0 0 56 56" width="56" height="56" role="img" aria-label="Preparing findings">
+              <circle class="sp-track" cx="28" cy="28" r="22" fill="none" stroke-width="4"/>
+              <circle class="sp-arc" cx="28" cy="28" r="22" fill="none" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+            <div class="thinking-text">
+              <b id="thinkStep">Reading the numbers</b>
+              <span id="thinkNote">Working through the audit before writing anything.</span>
+            </div>
+          </div>
         </div>
       </div>
+
+      <!-- Marketing profile recap -->
+      <div class="panel" id="profilePanel"></div>
+
+      <!-- Target market -->
+      <div class="panel" id="marketPanel"></div>
 
       <!-- Warning signs recap -->
       <div class="panel">
@@ -247,13 +577,12 @@
 
       <div class="cta-band">
         <span class="eyebrow light">No obligation</span>
-        <h3>Complimentary Marketing Efficiency Audit™</h3>
-        <p>Advertising spend analysis · conversion review · website evaluation · marketing technology review · competitive insights · recommendations report · 30–45 minute Zoom review.</p>
+        <h3>Have questions about these results?</h3>
+        <p>A 15–30 minute review with us can help explain what the numbers mean for this business and where the opportunities are. Advertising spend analysis · conversion review · website evaluation · marketing technology review · competitive insights · recommendations report.</p>
         <div class="cta-actions">
-          <a class="btn btn-gold" href="mailto:info@smart1marketing.com?subject=Marketing%20Efficiency%20Audit%20request">Schedule the review</a>
+          <a class="btn btn-gold" id="bookBtn" href="#" target="_blank" rel="noopener">Schedule a review</a>
           <a class="btn btn-ghost" id="dlBtn2" href="#" aria-disabled="true">Download the PDF report</a>
         </div>
-        <p class="micro light">Helping businesses improve marketing efficiency and profitability for more than 16 years.</p>
       </div>
 
       <div class="nav-btns print-hide">

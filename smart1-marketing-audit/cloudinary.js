@@ -32,22 +32,27 @@ function sign(params) {
 }
 
 /**
- * @param {Buffer} buffer  the PDF
+ * Upload any file as a `raw` Cloudinary resource.
+ *
+ * @param {Buffer} buffer   file contents
  * @param {string} filename e.g. marketing-efficiency-audit-acme-ab12.pdf
+ * @param {object} [opts]   { folder, contentType }
  * @returns {Promise<{url:string, publicId:string, bytes:number}>}
  */
-async function uploadPdf(buffer, filename) {
+async function uploadFile(buffer, filename, opts = {}) {
   if (!isConfigured()) throw new Error('Cloudinary is not configured');
 
-  const publicId = filename.replace(/\.pdf$/i, '');
+  const folder = opts.folder || FOLDER;
+  const contentType = opts.contentType || 'application/octet-stream';
+  const publicId = filename.replace(/\.[a-z0-9]+$/i, '');
   const timestamp = Math.floor(Date.now() / 1000);
-  const signed = { folder: FOLDER, public_id: publicId, timestamp };
+  const signed = { folder, public_id: publicId, timestamp };
 
   const form = new FormData();
-  form.append('file', new Blob([buffer], { type: 'application/pdf' }), filename);
+  form.append('file', new Blob([buffer], { type: contentType }), filename);
   form.append('api_key', KEY);
   form.append('timestamp', String(timestamp));
-  form.append('folder', FOLDER);
+  form.append('folder', folder);
   form.append('public_id', publicId);
   form.append('signature', sign(signed));
 
@@ -70,4 +75,12 @@ async function uploadPdf(buffer, filename) {
   }
 }
 
-module.exports = { uploadPdf, isConfigured, FOLDER, _sign: sign };
+/** Audit reports. Kept as a named helper so call sites read clearly. */
+const uploadPdf = (buffer, filename) =>
+  uploadFile(buffer, filename, { contentType: 'application/pdf' });
+
+/** Client-supplied expense documents, kept in their own folder. */
+const uploadExpenseDoc = (buffer, filename, contentType) =>
+  uploadFile(buffer, filename, { folder: `${FOLDER}/expense-uploads`, contentType });
+
+module.exports = { uploadFile, uploadPdf, uploadExpenseDoc, isConfigured, FOLDER, _sign: sign };

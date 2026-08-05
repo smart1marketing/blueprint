@@ -12,7 +12,10 @@ Results are gated behind a name, firm, email, and phone capture, so the tool dou
 | `pdf.js` | Branded PDF report generator (PDFKit — no headless browser, runs on Render's small instances) |
 | `cloudinary.js` | Signed Cloudinary upload for generated reports (no SDK, no dependencies) |
 | `ghl.js` | GoHighLevel client: contact upsert, PDF attach to custom field, summary note |
-| `public/index.html` | Landing-page frame (nav, hero, footer) plus the five-step questionnaire and report |
+| `expenses.js` | Expense file text extraction (PDF, Excel, CSV, image) and AI category breakdown |
+| `website.js` | Website conversion scan: signal detection plus AI commentary, with SSRF protection |
+| `audience.js` | Directional reachable-audience estimate from service-area population |
+| `public/index.html` | Landing-page frame (nav, hero, footer) plus the six-section questionnaire and report |
 | `public/app.js` | Benchmark data, scoring model, all calculations, rendering |
 | `public/styles.css` | Smart 1 design system matched to the partner landing page, plus a print stylesheet |
 | `public/img/` | Smart 1 logo (nav and footer versions) |
@@ -23,6 +26,58 @@ Results are gated behind a name, firm, email, and phone capture, so the tool dou
 | `setup-github.sh` | One-command first push to a new GitHub repo |
 
 The API key lives only on the server. The browser never sees it.
+
+## The questionnaire
+
+Seven sections, roughly ten minutes:
+
+1. **Client snapshot** — industry, revenue, locations, vendor count, website URL, ZIP code, primary market, service-area population, and the partner's name and firm.
+2. **How they buy marketing** — whether digital and traditional spend each clear $2,500 a month, lead services, agency vs. in house (and whether in-house staff get training), traditional channels, digital vendors, in-house marketing headcount and payroll, live events, who owns the website and ad accounts, lead response time, CRM tracking, seasonality, and month-to-month consistency.
+3. **Competition and website** — whether the client knows their competitors, up to five named competitors with websites, stated differentiation, who they're losing work to, and a live scan of the client's own site.
+4. **Profit leak warning signs** — the ten questions from the Client Profit Leak Assessment™, each answered Yes / No / Unsure. Point values are never shown to the partner; an "unsure" carries the same weight as a "yes", because an unknown is itself a warning sign, and the report distinguishes the two.
+5. **Monthly investment** — seventeen spend categories as sliders, each with a category-appropriate ceiling and an info circle explaining what belongs there, plus the optional expense-document upload.
+6. **Performance indicators** — leads, customers, average sale, purchase frequency, relationship length. The report models two growth scenarios automatically, +15% and +25% lead volume, rather than asking the partner to pick one.
+7. **Target market and context** — B2C or B2B, service radius, age ranges, household income, gender skew, homeowner focus, and free text for leadership changes, lost accounts, or new locations.
+
+Only Section 4 affects the numeric score. Everything else feeds the written findings, the report sections, and the questions the partner brings to the client meeting.
+
+## Scanning the client's website
+
+Section 3 fetches the client's home page and detects conversion and measurement signals directly from the served HTML: forms, click-to-call links, mailto links, booking and scheduling tools, chat widgets, call-to-action language, review mentions, and tracking tags (GA4, GTM, Google Ads conversion, Meta pixel, LinkedIn, Microsoft UET, TikTok, Hotjar/Clarity, call tracking). It also checks HTTPS, mobile viewport, meta description, H1, and schema markup. The model then comments on what it found, ranked by revenue impact.
+
+Two limits are stated in the output rather than hidden: the scan reads only the **initial HTML response**, so a site that renders in the browser will under-report and the result says so; and it never claims to assess design, speed, or copy, because it hasn't seen the rendered page.
+
+**Safety.** Submitted URLs are resolved and checked before fetching. Private ranges, loopback, and link-local addresses are refused, which blocks the standard SSRF path to cloud metadata endpoints. Set `ALLOW_LOCAL_FETCH=1` only for local development.
+
+## Estimating audience size
+
+When the partner supplies a service-area population in Section 1, the audit filters it by the target-market answers and shows the arithmetic line by line:
+
+```
+Service-area population                             850,000
+Adults aged 35–44, 45–54, 55–64 (38% of population) 323,000
+Household income $100k–$200k (26% of households)     83,980
+Homeowners only (65% ownership rate)                 54,587
+Estimated reachable consumers                        54,587
+Working range: 38,211 – 70,963
+```
+
+This is deliberately transparent arithmetic, not a data product. It uses approximate national US shares for age, income, household size, homeownership, and business density, and reports a ±30% band. Every figure carries the caveat that it is directional and should be confirmed against census or ad-platform reach data. `audience.js` holds the share tables if you want to substitute local figures.
+
+For B2B clients it estimates establishments instead, at roughly 25 per 1,000 residents. Without a population figure, the report says what it could not assess rather than guessing.
+
+## Uploading marketing expenses
+
+Section 4 accepts a P&L export, ledger, vendor statement, or invoice list — PDF, XLSX, XLS, CSV, TXT, or a photo, up to 15 MB. The partner picks one of two modes:
+
+- **AI evaluation** — the server extracts the text (PDFKit's parser for PDFs, SheetJS for spreadsheets, the model's vision for images), asks the model to sort line items into the ten spend categories, and writes the resulting monthly figures straight into the form fields. The partner reviews and corrects before continuing; the audit always uses what is in the fields, not what was read.
+- **Human review** — the file is stored and flagged for a Smart 1 analyst, with no automated interpretation.
+
+Either way the file goes to Cloudinary under `smart1-audits/expense-uploads/`, so there is always a copy to go back to.
+
+Two behaviors worth knowing. **Anything the model cannot place with confidence goes to "Other"** rather than being guessed into a named category — a large Other is expected and correct, and unrecognized category labels are folded in too rather than trusted. And **annual or quarterly documents are divided down to a monthly average**, with the conversion stated in the results panel so the partner can check it. Each line carries a high/medium/low confidence badge and the source line items it came from.
+
+If the file has no readable text — a scan saved as a PDF, say — the partner is told to re-upload it as an image, which routes it through vision instead.
 
 ## Scoring model
 
@@ -41,7 +96,7 @@ The raw warning-sign tiers from the Client Profit Leak Assessment™ (0–5 Heal
 
 **Formulas** — CPL = spend ÷ leads · CAC = spend ÷ new customers · Close rate = customers ÷ leads × 100 · CLV = average sale × purchases per year × customer years · ROI = ((revenue − cost) ÷ cost) × 100 · Growth opportunity = leads × lift % × close rate × average sale × 12.
 
-**Benchmarks** — 20 industries with budget-as-%-of-revenue ranges and, where published, cost-per-lead ranges. Edit `INDUSTRIES` at the top of `public/app.js` to adjust.
+**Benchmarks** — 20 industries, each with three or four industry facts shown in a dedicated benchmarks section, a budget-as-%-of-revenue range, a cost-per-lead range where one is published, a typical digital/traditional channel split, and a one-line note on what drives spend in that industry. The report shows the industry midpoint converted to dollars at the client's own revenue, so the gap reads as "$7,179 per month below the midpoint" rather than a percentage. Edit `INDUSTRIES` at the top of `public/app.js` to adjust.
 
 ## Run it locally
 
@@ -81,9 +136,11 @@ git push -u origin main
   - `OPENAI_MODEL` — `gpt-4o-mini` (default) or `gpt-4o` for longer, sharper findings
   - `LEAD_WEBHOOK_URL` — optional; every captured lead is POSTed here as JSON
   - `EMBED_ALLOWED_ORIGINS` — optional; space-separated domains allowed to iframe the audit
+  - `ALLOW_LOCAL_FETCH` — development only; set to `1` to let the website scanner reach private addresses
   - `GHL_WEBHOOK_URL` — Smart 1 Suite inbound webhook (see below)
   - `GHL_API_KEY` / `GHL_LOCATION_ID` — GHL API v2 contact upsert and PDF attach
   - `GHL_PDF_FIELD_ID` — file custom field on Contact that receives the PDF
+  - `BOOKING_URL` — where the "Schedule a review" button goes; defaults to the Smart 1 contact page
   - `PUBLIC_BASE_URL` — your real domain, used to build PDF links
   - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` — PDF storage (recommended)
   - `PDF_DIR` — local fallback storage; point at a mounted disk for durable links
@@ -137,9 +194,10 @@ When the visitor unlocks their results, the browser posts the full audit to `/ap
 What's in it:
 
 1. **Page 1** — client snapshot, partner attribution line, Marketing Efficiency Score™ gauge, and both benchmark bars.
-2. **Page 2** — the six calculated metrics, the growth-opportunity figure, and the written findings.
-3. **Page 3** — where money may be leaking, questions to ask the client, recommended next steps, and the partner talking point.
-4. **Page 4** — every warning sign with its flagged status, and the audit call-to-action with Smart 1 contact details.
+2. **Page 2** — the six calculated metrics, the growth-opportunity figure, and what the industry typically spends including the channel-mix bar.
+3. **Page 3 onward** — industry benchmarks and facts, the audience estimate with its arithmetic, the website conversion review, competitive position, how the client buys marketing, target market and business context, the written findings, the vendor-consolidation case, where money may be leaking, questions to ask, next steps, warning-sign detail, and the call-to-action.
+
+Reports run four to seven pages depending on how much the partner supplied. Sections with no data are omitted rather than printed empty.
 
 Rendering is vector PDFKit rather than a headless browser, so it runs in well under 100 MB of memory and adds roughly 200 ms per report. No Chromium, no Puppeteer buildpack.
 
@@ -264,11 +322,16 @@ Each submission POSTs this JSON to `LEAD_WEBHOOK_URL`:
 
 ## Cost
 
-At `gpt-4o-mini`, each completed audit is roughly 2,000 input and 900 output tokens — well under a cent per audit. PDF generation is free; each report is about 45 KB, stored on Cloudinary or disk. Rate limiting is set to 15 analyses per IP per hour in `server.js`.
+At `gpt-4o-mini`, each completed audit is roughly 2,600 input and 900 output tokens, and an expense-document evaluation adds roughly 6,000 input and 800 output tokens — well under a cent per audit. PDF generation is free; each report is about 45 KB, stored on Cloudinary or disk. Rate limiting is set to 15 analyses per IP per hour in `server.js`.
 
 ## Customizing
 
-- **Contact CTA** — the mailto link near the bottom of `index.html`; swap it for your scheduling link.
+- **The "Schedule a review" button** — set `BOOKING_URL` in Render rather than editing code. It drives both the on-screen button and the clickable button in the PDF. The wording lives in the `.cta-band` block of `index.html` and section 9 of `pdf.js`.
 - **Tone and structure of the findings** — `SYSTEM_PROMPT` in `server.js`.
-- **Questions and weights** — `FLAGS` in `public/app.js`; keep the total at 30 or adjust the 45-point divisor in `calculate()`.
+- **Questions and weights** — `FLAGS` in `public/app.js`. Weights are internal only and never displayed; keep the total at 30 or adjust the 45-point divisor in `calculate()`.
+- **Spend categories, slider ceilings, and the info-circle text** — `SPEND_ITEMS` at the top of `public/app.js`. If you change a category name, change the matching entry in `SPEND_CATEGORIES` in `expenses.js` too, or the AI expense reader will drop that category into Other.
+- **Growth scenarios** — the `LIFTS` array in `calculate()`, currently `[15, 25]`.
+- **Traditional media and age-range options** — `TRADITIONAL_MEDIA` and `AGE_RANGES` in `public/app.js`.
+- **Expense categorization rules** — the `SYSTEM` prompt in `expenses.js`. The "unknown goes to Other" rule lives there and in `normalize()`.
+- **The thinking spinner's stages** — `THINK_STEPS` in `public/app.js`. It holds for a minimum of 2.4 seconds so it never flashes.
 - **Partner attribution** — read a `?partner=firm-name` query parameter in `app.js` and include it in the `/api/lead` payload to track which firm sent each audit.

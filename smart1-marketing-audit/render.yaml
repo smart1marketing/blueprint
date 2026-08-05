@@ -41,6 +41,8 @@ services:
         sync: false          # optional alternative to GHL_PDF_FIELD_ID
       - key: LEAD_WEBHOOK_URL
         sync: false          # optional: Zapier / Make
+      - key: BOOKING_URL
+        sync: false          # scheduling link behind the "Schedule a review" button
       # --- Misc ---
       - key: PUBLIC_BASE_URL
         sync: false          # e.g. https://audit.smart1marketing.com

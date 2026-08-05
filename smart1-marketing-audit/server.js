@@ -17,12 +17,24 @@ const crypto = require('crypto');
 const { buildAuditPdf } = require('./pdf');
 const cloudinary = require('./cloudinary');
 const ghl = require('./ghl');
+const multer = require('multer');
+const { analyzeExpenses, isAccepted, ACCEPTED } = require('./expenses');
+const { analyzeWebsite } = require('./website');
+const { estimateAudience } = require('./audience');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const LEAD_WEBHOOK_URL = process.env.LEAD_WEBHOOK_URL;
+/* Where the "Schedule a review" button sends people. Set BOOKING_URL in Render
+   to your scheduling link; the fallback is the Smart 1 contact page. */
+const BOOKING_URL = process.env.BOOKING_URL || 'https://smart1marketing.com/contact';
 
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
@@ -65,7 +77,18 @@ Rules:
 - Frame everything as "may", "appears", "suggests" — this is a directional assessment, not an audit opinion.
 - Estimated dollar impacts must be arithmetically traceable to the supplied inputs. Show the math in one short clause.
 - No emojis. No exclamation points. No "unlock", "supercharge", "game-changer", "in today's landscape".
-- The recommended next step is always a complimentary Marketing Efficiency Audit™ with Smart 1 Marketing — stated calmly, once.
+- Recommended next steps must be specific actions the client can take with their own marketing. Do not include "schedule a review", "book a consultation", or any sales step — the report carries its own call to action at the end, and repeating it inside the findings reads as a pitch.
+- Use the buying model, seasonality, consistency, lead-service purchasing, training, vendor list, and business context where they change the reading of the numbers. Inconsistent monthly spend, purchased leads, untrained in-house staff, and a long unnamed vendor list are each worth a finding when present.
+- Where business context is supplied (leadership change, lost account, new location), say plainly how it should change the interpretation rather than ignoring it.
+- Compare the client's spend to the industry midpoint at their revenue, in dollars, at least once.
+- Two growth scenarios are supplied (+15% and +25% lead volume). Reference both when they are calculable, so the client sees a realistic near-term figure and a stretch figure.
+- Where a warning sign was answered "unsure", treat the uncertainty itself as the finding. Do not describe it as a yes or a no.
+- If the target market is provided, note at least one implication for channel choice or targeting. If it is not provided, say what you cannot assess without it.
+- Where multiple digital vendors are in use, explain why a single consolidated view of spend, leads, and closed sales would change what the client can optimize. Be concrete about what breaks without it: duplicate billing for the same customer, last-click credit misallocating budget, overlapping audiences, and no accountable owner of cost per acquired customer.
+- Treat in-house marketing payroll as part of the true cost of acquisition. If headcount cost is supplied, state the fully loaded monthly figure at least once.
+- Asset ownership, lead response time, and CRM tracking each deserve a finding when the answer is a risk: a vendor owning the domain or ad accounts, a response time of a day or more, or no tracking from lead to sale.
+- Where the audience estimate exists, use it for scale, never as precision. Say "roughly" and never quote it to more than two significant figures.
+- Never state a competitor's spend, traffic, or performance. You have no data on them. You may only suggest what the partner should look into.
 
 Return ONLY valid JSON matching this shape:
 {
@@ -88,8 +111,18 @@ function buildUserPrompt(p = {}) {
   const s = p.snapshot || {};
   const m = p.metrics || {};
   const b = p.benchmark || {};
-  const flagsYes = (p.flags || []).filter((f) => f.answer === true).map((f) => `- ${f.label} (${f.points} pts)`);
-  const flagsNo = (p.flags || []).filter((f) => f.answer === false).map((f) => `- ${f.label}`);
+  const pr = p.profile || {};
+  const mk = p.market || {};
+  const cp = p.competition || {};
+  const wb = p.website || null;
+  const aud = estimateAudience({
+    population: s.areaPopulation,
+    audienceType: mk.audienceType, ageRanges: mk.ageRanges,
+    incomeBand: mk.incomeBand, genderSkew: mk.genderSkew, homeownersOnly: mk.homeownersOnly,
+  });
+  const flagsYes = (p.flags || []).filter((f) => f.response === 'yes').map((f) => `- ${f.label}`);
+  const flagsUnsure = (p.flags || []).filter((f) => f.response === 'unsure').map((f) => `- ${f.label}`);
+  const flagsNo = (p.flags || []).filter((f) => f.response === 'no').map((f) => `- ${f.label}`);
   const spendLines = Object.entries(p.spend || {})
     .filter(([, v]) => Number(v) > 0)
     .map(([k, v]) => `- ${k}: ${money(Number(v))}/mo`);
@@ -99,6 +132,9 @@ Business: ${s.clientName || 'Not provided'}
 Industry: ${s.industry || 'Not provided'}
 Annual revenue: ${money(s.annualRevenue)}
 Locations: ${s.locations || 'Not provided'}
+ZIP code: ${s.zipCode || 'not provided'}
+Primary market: ${s.cityMarket || 'not provided'}
+Website: ${s.website || 'not provided'}
 Marketing vendors in use: ${s.vendors || 'Not provided'}
 
 MONTHLY MARKETING INVESTMENT (total ${money(m.spend)})
@@ -115,17 +151,74 @@ Customer lifetime value: ${money(m.clv)}
 Estimated monthly revenue from marketing: ${money(m.revenue)}
 Marketing ROI: ${m.roi != null ? Math.round(m.roi) + '%' : 'not calculable'}
 Marketing spend as % of revenue: ${m.spendPct != null ? m.spendPct.toFixed(1) + '%' : 'not calculable'}
-Growth opportunity at +${m.liftPct ?? 0}% leads: ${money(m.opportunityAnnual)} additional annual revenue
+Growth scenarios (same close rate, no change to average sale):
+${(m.scenarios || []).map((x) => `- at +${x.liftPct}% lead volume: ${money(x.annual)} additional annual revenue (${money(x.monthly)}/month, about ${x.addCustomers.toFixed(1)} more customers a month)`).join('\n') || '- not calculable'}
 
 INDUSTRY BENCHMARKS (${s.industry || 'general'})
 Typical marketing budget: ${b.budgetLo ?? '?'}%–${b.budgetHi ?? '?'}% of revenue → client is at ${m.spendPct != null ? m.spendPct.toFixed(1) + '%' : 'unknown'} (${b.spendVerdict || 'unknown'})
 Typical cost per lead: ${b.cplLo != null ? money(b.cplLo) + '–' + money(b.cplHi) : 'no published range'} → client is at ${money(m.cpl)} (${b.cplVerdict || 'unknown'})
 
-PROFIT LEAK WARNING SIGNS — ${p.leakPoints || 0} of 30 points, tier: ${p.leakTier || 'unknown'}
-Present:
-${flagsYes.length ? flagsYes.join('\n') : '- None flagged'}
-Not present:
-${flagsNo.length ? flagsNo.join('\n') : '- None'}
+HOW THEY BUY MARKETING
+Digital spend over $2,500/mo: ${pr.digitalOver2500 || 'not answered'}
+Traditional spend over $2,500/mo: ${pr.traditionalOver2500 || 'not answered'}
+Buys lead services: ${pr.buysLeadServices || 'not answered'}
+Buying model: ${pr.buyingModel || 'not answered'}
+Trains in-house marketing staff: ${pr.providesTraining || 'not applicable'}
+Traditional media bought: ${(pr.traditionalMedia || []).join(', ') || 'none reported'}${pr.traditionalOther ? `, ${pr.traditionalOther}` : ''}
+Digital vendors named: ${pr.digitalVendors || 'none named'}
+Seasonal pushes: ${pr.seasonalMarketing || 'not answered'}${pr.seasonDetail ? ` — ${pr.seasonDetail}` : ''}
+Monthly consistency: ${pr.monthlyConsistency || 'not answered'}
+Expense document supplied: ${p.expenses ? `${p.expenses.filename} (${p.expenses.mode === 'ai' ? 'read automatically' : 'saved for analyst review'})${p.expenses.period ? `, covering ${p.expenses.period}` : ''}` : 'none'}
+
+IN-HOUSE TEAM, EVENTS, AND OPERATIONS
+Marketing employees: ${pr.marketingHeadcount || 'not provided'} at ${pr.marketingPayroll ? money(pr.marketingPayroll) + '/month in wages and benefits' : 'cost not provided'}
+Live events: ${pr.liveEvents || 'not answered'}${pr.eventsDetail ? ` — ${pr.eventsDetail}` : ''}${pr.eventsCost ? `, about ${money(pr.eventsCost)} a year` : ''}
+Who owns the website, domain, and ad accounts: ${pr.assetOwnership || 'not answered'}
+Lead response time: ${pr.leadResponseTime || 'not answered'}
+Tracks leads to closed sale: ${pr.crmTracking || 'not answered'}
+
+COMPETITION
+Knows who their competitors are: ${cp.knowsCompetitors || 'not answered'}
+Named competitors: ${(cp.competitors || []).map((c) => `${c.name || 'unnamed'}${c.website ? ` (${c.website})` : ''}`).join('; ') || 'none named'}
+Stated differentiation: ${cp.differentiation || 'none stated'}
+Losing work to: ${cp.losingTo || 'not stated'}
+
+WEBSITE SCAN
+${wb ? `${wb.finalUrl} — ${wb.conversionPoints} conversion point(s): ${wb.counts.forms} form(s), ${wb.counts.telLinks} click-to-call link(s)
+Tracking detected: ${(wb.trackers || []).join(', ') || 'none'}
+Not found: ${(wb.missing || []).join('; ') || 'nothing'}
+${wb.analysis?.summary ? `Reviewer summary: ${wb.analysis.summary}` : ''}` : (s.website ? `${s.website} was supplied but not scanned.` : 'No website supplied.')}
+
+ESTIMATED REACHABLE AUDIENCE
+${aud ? `Service area${s.cityMarket ? ` (${s.cityMarket})` : ''} population ${aud.population.toLocaleString('en-US')}
+Estimated reachable primary audience: ${aud.primary.toLocaleString('en-US')} (working range ${aud.low.toLocaleString('en-US')}–${aud.high.toLocaleString('en-US')})
+This is a directional estimate from national averages, not local census data. Treat it as an order of magnitude.` : 'Not estimated — service-area population was not supplied.'}
+
+TARGET MARKET
+Sells to: ${mk.audienceType || 'not provided'}
+Service area: ${mk.serviceRadius || 'not provided'}
+Primary age ranges: ${(mk.ageRanges || []).join(', ') || 'not provided'}
+Household income: ${mk.incomeBand || 'not provided'}
+Gender skew: ${mk.genderSkew || 'not provided'}
+Audience notes: ${mk.audienceNotes || 'none'}
+
+BUSINESS CONTEXT FROM THE PARTNER
+${mk.contextNotes || 'None supplied.'}
+
+INDUSTRY CONTEXT
+Known patterns in this industry:
+${(b.industryFacts || []).map((f) => `- ${f}`).join('\n') || '- none supplied'}
+Typical channel mix for ${s.industry || 'this industry'}: ${b.mixDigital ?? '?'}% digital / ${b.mixTraditional ?? '?'}% traditional
+Industry midpoint budget: ${b.budgetMid != null ? b.budgetMid.toFixed(1) + '% of revenue' : 'unknown'}${s.annualRevenue && b.budgetMid ? ` — about ${money((s.annualRevenue * b.budgetMid) / 100 / 12)}/month at this revenue` : ''}
+Industry note: ${b.industryNote || 'none'}
+
+PROFIT LEAK WARNING SIGNS — tier: ${p.leakTier || 'unknown'}
+Present (answered yes):
+${flagsYes.join('\n') || '- None'}
+Unknown (answered unsure — the client could not say):
+${flagsUnsure.join('\n') || '- None'}
+Not present (answered no):
+${flagsNo.join('\n') || '- None'}
 
 MARKETING EFFICIENCY SCORE™: ${p.score ?? '?'}/100 (${p.scoreTier || ''})
 
@@ -163,9 +256,11 @@ function fallbackAnalysis(p = {}) {
       severity: m.roi < 100 ? 'high' : 'low',
     });
   }
+  const flagged = (p.flags || []).filter((f) => f.answer).length;
+  const unsure = (p.flags || []).filter((f) => f.response === 'unsure').length;
   findings.push({
     title: 'Measurement gaps',
-    detail: `${p.leakPoints || 0} of 30 possible warning-sign points were flagged, placing this business in the "${p.leakTier}" tier. Measurement gaps make it difficult to know which spend is producing customers.`,
+    detail: `${flagged} of ${(p.flags || []).length || 10} warning signs are present${unsure ? `, ${unsure} of them because the answer is not known` : ''}, placing this business in the "${p.leakTier}" tier. Gaps like these make it difficult to know which spend is producing customers.`,
     severity: (p.leakPoints || 0) > 12 ? 'high' : 'medium',
   });
 
@@ -188,7 +283,7 @@ function fallbackAnalysis(p = {}) {
     nextSteps: [
       'Confirm lead and conversion tracking is in place before changing any budget.',
       'Consolidate reporting into a single monthly view of spend, leads, and customers.',
-      'Schedule a complimentary Marketing Efficiency Audit™ with Smart 1 Marketing.',
+      'Establish a cost per acquired customer for each channel before shifting any budget.',
     ],
     partnerTalkingPoint: `Your marketing line is ${money((m.spend || 0) * 12)} a year — let's find out what it's producing.`,
     _fallback: true,
@@ -198,6 +293,10 @@ function fallbackAnalysis(p = {}) {
 /* ---------------------------------------------------------------
    Routes
 ---------------------------------------------------------------- */
+app.get('/api/config', (req, res) => {
+  res.json({ bookingUrl: BOOKING_URL });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
@@ -365,7 +464,17 @@ sweepPdfs();
 app.post('/api/report', async (req, res) => {
   const payload = req.body || {};
   try {
-    const buf = await buildAuditPdf(payload);
+    if (!payload.audience && payload.snapshot?.areaPopulation) {
+      payload.audience = estimateAudience({
+        population: payload.snapshot.areaPopulation,
+        audienceType: payload.market?.audienceType,
+        ageRanges: payload.market?.ageRanges,
+        incomeBand: payload.market?.incomeBand,
+        genderSkew: payload.market?.genderSkew,
+        homeownersOnly: payload.market?.homeownersOnly,
+      });
+    }
+    const buf = await buildAuditPdf({ ...payload, bookingUrl: BOOKING_URL });
     const id = crypto.randomBytes(12).toString('hex');
     const name = `marketing-efficiency-audit-${slug(payload.snapshot?.clientName, 'client')}-${id}.pdf`;
 
@@ -395,6 +504,96 @@ app.post('/api/report', async (req, res) => {
     console.error('pdf build failed:', err);
     res.status(500).json({ error: 'Report could not be generated.' });
   }
+});
+
+/* ---------------------------------------------------------------
+   Website conversion scan
+---------------------------------------------------------------- */
+app.post('/api/website', async (req, res) => {
+  const { url, context } = req.body || {};
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'No website address supplied.' });
+  if (rateLimited(req.ip, 25)) {
+    return res.status(429).json({ error: 'Too many scans from this connection. Try again in an hour.' });
+  }
+  try {
+    const result = await analyzeWebsite({
+      url, context: context || {}, apiKey: OPENAI_API_KEY, model: OPENAI_MODEL,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('website scan failed:', err.message);
+    res.status(400).json({ error: err.message || 'That website could not be scanned.' });
+  }
+});
+
+/* ---------------------------------------------------------------
+   Marketing expense upload: store on Cloudinary, optionally AI-categorize
+---------------------------------------------------------------- */
+app.post('/api/expenses', upload.single('file'), async (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No file was received.' });
+  if (!isAccepted(file.originalname)) {
+    return res.status(400).json({ error: `Unsupported file type. Accepted: ${ACCEPTED.join(', ')}.` });
+  }
+  if (rateLimited(req.ip, 20)) {
+    return res.status(429).json({ error: 'Too many uploads from this connection. Try again in an hour.' });
+  }
+
+  let context = {};
+  try { context = JSON.parse(req.body.context || '{}'); } catch { /* ignore */ }
+  const wantsAi = String(req.body.mode || 'review') === 'ai';
+
+  const result = { ok: true, filename: file.originalname, bytes: file.size, storage: null, url: null, analysis: null };
+
+  // Always keep a copy so a human can review it later
+  if (cloudinary.isConfigured()) {
+    try {
+      const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-');
+      const up = await cloudinary.uploadExpenseDoc(
+        file.buffer,
+        `expenses-${crypto.randomBytes(6).toString('hex')}-${safe}`,
+        file.mimetype || 'application/octet-stream'
+      );
+      result.url = up.url;
+      result.storage = 'cloudinary';
+    } catch (err) {
+      console.error('expense upload to cloudinary failed:', err.message);
+    }
+  }
+  if (!result.url) {
+    try {
+      const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '-');
+      const name = `expenses-${crypto.randomBytes(6).toString('hex')}-${safe}`;
+      fs.writeFileSync(path.join(PDF_DIR, name), file.buffer);
+      result.url = `${baseUrl(req)}/audit/${name}`;
+      result.storage = 'local';
+    } catch (err) {
+      console.error('expense local write failed:', err.message);
+    }
+  }
+
+  if (wantsAi) {
+    if (!OPENAI_API_KEY) {
+      result.analysisError = 'AI evaluation is not available right now. The file was saved for manual review.';
+    } else {
+      try {
+        result.analysis = await analyzeExpenses({
+          buffer: file.buffer,
+          filename: file.originalname,
+          context,
+          apiKey: OPENAI_API_KEY,
+          model: OPENAI_MODEL,
+        });
+      } catch (err) {
+        console.error('expense analysis failed:', err.message);
+        result.analysisError = err.message.startsWith('No readable text')
+          ? err.message
+          : 'The file could not be read automatically. It has been saved for manual review.';
+      }
+    }
+  }
+
+  res.json(result);
 });
 
 app.get('/audit/:file', (req, res) => {
