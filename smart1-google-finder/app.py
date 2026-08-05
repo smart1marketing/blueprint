@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 import requests
+from bs4 import BeautifulSoup
 from flask import Flask, redirect, render_template, request, session, url_for, jsonify
 from flask_session import Session
 from cryptography.fernet import Fernet, InvalidToken
@@ -46,6 +47,7 @@ SCOPES = [
     "profile",
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/tagmanager.readonly",
+    "https://www.googleapis.com/auth/tagmanager.edit.containers",
     "https://www.googleapis.com/auth/business.manage",
     "https://www.googleapis.com/auth/webmasters.readonly",
 ]
@@ -110,6 +112,20 @@ def _db():
             ghl_webhook_url TEXT,
             created_at INTEGER NOT NULL,
             FOREIGN KEY(report_id) REFERENCES saved_reports(id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gtm_change_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            google_login TEXT NOT NULL,
+            account_id TEXT NOT NULL,
+            container_id TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            tag_name TEXT NOT NULL,
+            details TEXT NOT NULL,
+            created_at INTEGER NOT NULL
         )
         """
     )
@@ -291,6 +307,7 @@ def fetch_gtm_items(access_token, google_login):
                         "account_name": account_name,
                         "account_id": account_id,
                         "resource_id": public_id or container_id,
+                        "internal_container_id": container_id,
                         "search_extra": f"{domains} {container_name} {public_id}",
                         "google_login": google_login,
                         "open_url": f"https://tagmanager.google.com/#/container/accounts/{account_id}/containers/{container_id}" if account_id and container_id else "",
@@ -434,15 +451,13 @@ def get_index(force=False):
     return items, errors
 
 
-def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown):
+def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown, tone="positive"):
     sessions_p1 = m1.get("sessions", 0)
     sessions_p2 = m2.get("sessions", 0)
     engaged_p1 = m1.get("engagedSessions", 0)
     engaged_p2 = m2.get("engagedSessions", 0)
     conversions_p1 = m1.get("keyEvents", 0)
     conversions_p2 = m2.get("keyEvents", 0)
-    time_p1 = m1.get("userEngagementDuration", 0)
-    time_p2 = m2.get("userEngagementDuration", 0)
 
     if sessions_p2 > 0:
         sess_change = ((sessions_p1 - sessions_p2) / sessions_p2) * 100
@@ -451,44 +466,46 @@ def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown):
         sess_change = 100.0 if sessions_p1 > 0 else 0.0
         verdict = f"Selected period recorded **{sessions_p1:,}** sessions (Baseline prior period recorded {sessions_p2:,} sessions)."
 
-    if sess_change > 5:
-        summary_tone = "Positive Traffic Growth"
-    elif sess_change < -5:
-        summary_tone = "Traffic Decline Warning"
-    else:
-        summary_tone = "Stable Performance"
-
+    summary_tone = "Positive Performance Highlights" if tone == "positive" else "Areas for Optimization & Attention"
     insights = [verdict]
 
-    # Engagement Rate insight
     eng_rate_p1 = (engaged_p1 / sessions_p1 * 100) if sessions_p1 > 0 else 0
     eng_rate_p2 = (engaged_p2 / sessions_p2 * 100) if sessions_p2 > 0 else 0
-    insights.append(
-        f"⚡ **Engagement Rate:** **{eng_rate_p1:.1f}%** ({engaged_p1:,} engaged sessions) vs **{eng_rate_p2:.1f}%** ({engaged_p2:,} engaged sessions) in prior period."
-    )
+
+    if tone == "positive":
+        insights.append(
+            f"⚡ **Engagement Highlights:** Maintained **{eng_rate_p1:.1f}%** engagement rate with **{engaged_p1:,}** engaged user sessions."
+        )
+    else:
+        insights.append(
+            f"⚠️ **Engagement Check:** Engagement rate sits at **{eng_rate_p1:.1f}%** (vs **{eng_rate_p2:.1f}%** in prior period). Focus on high-bounce pages."
+        )
 
     if dimension_breakdown:
         top_gainer = max(dimension_breakdown, key=lambda x: x.get("session_diff", 0), default=None)
         top_loser = min(dimension_breakdown, key=lambda x: x.get("session_diff", 0), default=None)
 
-        if top_gainer and top_gainer.get("session_diff", 0) > 0:
+        if tone == "positive" and top_gainer and top_gainer.get("session_diff", 0) > 0:
             insights.append(
-                f"🚀 **Primary Growth Driver:** `{top_gainer['name']}` added **+{top_gainer['session_diff']:,}** sessions "
+                f"🚀 **Top Growth Driver:** `{top_gainer['name']}` delivered **+{top_gainer['session_diff']:,}** additional sessions "
                 f"({top_gainer['p2_sessions']:,} → {top_gainer['p1_sessions']:,})."
             )
-
-        if top_loser and top_loser.get("session_diff", 0) < 0:
+        elif tone == "troubling" and top_loser and top_loser.get("session_diff", 0) < 0:
             insights.append(
-                f"⚠️ **Largest Traffic Drop:** `{top_loser['name']}` dropped by **{top_loser['session_diff']:,}** sessions "
-                f"({top_loser['p2_sessions']:,} → {top_loser['p1_sessions']:,})."
+                f"📉 **Major Traffic Loss:** `{top_loser['name']}` lost **{top_loser['session_diff']:,}** sessions "
+                f"({top_loser['p2_sessions']:,} → {top_loser['p1_sessions']:,}). Re-evaluate campaign budgeting."
             )
 
     c_rate_p1 = (conversions_p1 / sessions_p1 * 100) if sessions_p1 > 0 else 0
     c_rate_p2 = (conversions_p2 / sessions_p2 * 100) if sessions_p2 > 0 else 0
-    insights.append(
-        f"🎯 **Conversion Rate:** Shifted from **{c_rate_p2:.2f}%** to **{c_rate_p1:.2f}%** "
-        f"({conversions_p1:,} total key events vs {conversions_p2:,} in prior period)."
-    )
+    if tone == "positive":
+        insights.append(
+            f"🎯 **Key Events:** Generated **{conversions_p1:,}** key event conversions (**{c_rate_p1:.2f}%** conversion rate)."
+        )
+    else:
+        insights.append(
+            f"🎯 **Conversion Trend:** Conversion rate is **{c_rate_p1:.2f}%** vs **{c_rate_p2:.2f}%** in prior period ({conversions_p1:,} vs {conversions_p2:,} key events)."
+        )
 
     return {
         "status": summary_tone,
@@ -623,7 +640,7 @@ def api_search():
     seen = set()
 
     for item in indexed:
-        if platform == "analytics" and item["platform"] != "Google Analytics":
+        if platform == "analytics" and item["platform"] not in ["Google Analytics", "Google Tag Manager"]:
             continue
         if platform == "gtm" and item["platform"] != "Google Tag Manager":
             continue
@@ -644,6 +661,277 @@ def api_search():
 
     results.sort(key=lambda x: (x.get("name", "").lower(), x.get("google_login", "")))
     return jsonify({"results": results[:200], "errors": errors})
+
+
+@app.route("/api/gtm/inspect", methods=["POST"])
+def api_gtm_inspect():
+    data = request.json or {}
+    account_id = data.get("account_id", "").strip()
+    container_id = data.get("container_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+
+    if not account_id or not container_id or not google_login:
+        return jsonify({"error": "Missing GTM Account ID, Container ID, or Login Email."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(account["refresh_token"])
+        ws_url = f"https://tagmanager.googleapis.com/tagmanager/v2/accounts/{account_id}/containers/{container_id}/workspaces"
+        workspaces = google_get(access_token, ws_url).get("workspace", [])
+        if not workspaces:
+            return jsonify({"error": "No active workspaces found in container."}), 404
+            
+        ws_path = workspaces[0]["path"]
+
+        tags = google_get(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/tags").get("tag", [])
+        triggers = google_get(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/triggers").get("trigger", [])
+        variables = google_get(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/variables").get("variable", [])
+
+        tag_list = [{"name": t.get("name"), "type": t.get("type"), "paused": t.get("paused", False)} for t in tags]
+        trigger_list = [{"name": tr.get("name"), "type": tr.get("type")} for tr in triggers]
+        var_list = [{"name": v.get("name"), "type": v.get("type")} for v in variables]
+
+        return jsonify({
+            "account_id": account_id,
+            "container_id": container_id,
+            "tags": tag_list,
+            "triggers": trigger_list,
+            "variables": var_list
+        })
+    except Exception as exc:
+        logger.warning("Failed GTM workspace inspection: %s", exc)
+        return jsonify({"error": f"GTM Inspection failed: {exc}"}), 500
+
+
+@app.route("/api/gtm/generate-events", methods=["POST"])
+def gtm_generate_events():
+    data = request.json or {}
+    url = data.get("url", "").strip()
+
+    if not url:
+        return jsonify({"error": "URL is required"}), 400
+
+    if not url.startswith("http://") and not url.startswith("https://"):
+        url = "https://" + url
+
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        suggested_events = []
+
+        for idx, form in enumerate(soup.find_all("form")):
+            form_id = form.get("id") or form.get("name") or f"form_{idx+1}"
+            suggested_events.append({
+                "event_name": "generate_lead",
+                "tag_name": f"GA4 Event - Form Submit ({form_id})",
+                "trigger_type": "FORM_SUBMISSION",
+                "selector": f"form#{form_id}" if form.get("id") else "form",
+                "description": f"Fires when the lead submission form ({form_id}) is completed."
+            })
+
+        for link in soup.find_all("a", href=True):
+            href = link["href"].strip()
+            text = link.text.strip()[:30] or "Link"
+            if href.startswith("tel:"):
+                suggested_events.append({
+                    "event_name": "click_to_call",
+                    "tag_name": f"GA4 Event - Call ({text})",
+                    "trigger_type": "LINK_CLICK",
+                    "selector": f'a[href^="tel:"]',
+                    "description": f"Fires when a user clicks the phone number link: {href}"
+                })
+            elif href.startswith("mailto:"):
+                suggested_events.append({
+                    "event_name": "click_to_email",
+                    "tag_name": f"GA4 Event - Email ({text})",
+                    "trigger_type": "LINK_CLICK",
+                    "selector": f'a[href^="mailto:"]',
+                    "description": f"Fires when a user clicks the email link: {href}"
+                })
+
+        return jsonify({"url": url, "suggested_events": suggested_events[:10]})
+    except Exception as exc:
+        logger.warning("Failed scraping site for GTM events: %s", exc)
+        return jsonify({"error": f"Failed to analyze web page: {exc}"}), 500
+
+
+@app.route("/api/gtm/deploy-event", methods=["POST"])
+def gtm_deploy_event():
+    data = request.json or {}
+    account_id = data.get("account_id", "").strip()
+    container_id = data.get("container_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+    event_payload = data.get("event", {})
+
+    if not account_id or not container_id or not google_login or not event_payload:
+        return jsonify({"error": "Missing GTM credentials or Event payload."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(account["refresh_token"])
+        ws_url = f"https://tagmanager.googleapis.com/tagmanager/v2/accounts/{account_id}/containers/{container_id}/workspaces"
+        workspaces = google_get(access_token, ws_url).get("workspace", [])
+        if not workspaces:
+            return jsonify({"error": "No active workspaces found in container."}), 404
+        ws_path = workspaces[0]["path"]
+
+        trigger_body = {
+            "name": f"Trigger - {event_payload.get('tag_name')}",
+            "type": "linkClick" if event_payload.get("trigger_type") == "LINK_CLICK" else "formSubmission"
+        }
+        created_trigger = google_post(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/triggers", trigger_body)
+
+        tag_body = {
+            "name": event_payload.get("tag_name"),
+            "type": "gaawe",
+            "firingTriggerId": [created_trigger["triggerId"]],
+            "parameter": [
+                {"type": "TEMPLATE", "key": "eventName", "value": event_payload.get("event_name")}
+            ]
+        }
+        created_tag = google_post(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/tags", tag_body)
+
+        now = int(time.time())
+        with _db() as conn:
+            conn.execute(
+                """
+                INSERT INTO gtm_change_logs (google_login, account_id, container_id, action_type, tag_name, details, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    google_login,
+                    account_id,
+                    container_id,
+                    "TAG_DEPLOYED",
+                    event_payload.get("tag_name"),
+                    json.dumps({
+                        "event_name": event_payload.get("event_name"),
+                        "trigger_type": event_payload.get("trigger_type"),
+                        "created_tag_id": created_tag.get("tagId"),
+                        "created_trigger_id": created_trigger.get("triggerId")
+                    }),
+                    now
+                )
+            )
+            conn.commit()
+
+        return jsonify({"ok": True, "created_tag_id": created_tag["tagId"], "created_trigger_id": created_trigger["triggerId"]})
+    except Exception as exc:
+        logger.warning("Failed deploying tag to GTM: %s", exc)
+        return jsonify({"error": f"GTM Tag deployment failed: {exc}"}), 500
+
+
+@app.route("/api/gtm/logs/search", methods=["GET"])
+def search_gtm_logs():
+    q = (request.args.get("q") or "").strip().lower()
+    container_id = (request.args.get("container_id") or "").strip()
+
+    with _db() as conn:
+        if container_id and q:
+            rows = conn.execute(
+                """
+                SELECT * FROM gtm_change_logs 
+                WHERE container_id = ? AND (LOWER(tag_name) LIKE ? OR LOWER(google_login) LIKE ? OR LOWER(action_type) LIKE ?)
+                ORDER BY created_at DESC LIMIT 100
+                """,
+                (container_id, f"%{q}%", f"%{q}%", f"%{q}%")
+            ).fetchall()
+        elif container_id:
+            rows = conn.execute(
+                "SELECT * FROM gtm_change_logs WHERE container_id = ? ORDER BY created_at DESC LIMIT 100",
+                (container_id,)
+            ).fetchall()
+        elif q:
+            rows = conn.execute(
+                """
+                SELECT * FROM gtm_change_logs 
+                WHERE LOWER(tag_name) LIKE ? OR LOWER(google_login) LIKE ? OR LOWER(container_id) LIKE ? OR LOWER(action_type) LIKE ?
+                ORDER BY created_at DESC LIMIT 100
+                """,
+                (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%")
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM gtm_change_logs ORDER BY created_at DESC LIMIT 100").fetchall()
+
+    logs = []
+    for row in rows:
+        d = dict(row)
+        try:
+            d["details"] = json.loads(d["details"])
+        except Exception:
+            pass
+        logs.append(d)
+
+    return jsonify({"logs": logs})
+
+
+@app.route("/api/ga4/ask", methods=["POST"])
+def api_ga4_ask():
+    data = request.json or {}
+    property_id = data.get("property_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+    question = data.get("question", "").strip().lower()
+
+    if not property_id or not google_login or not question:
+        return jsonify({"error": "Missing Property ID, Login Email, or Question."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(account["refresh_token"])
+        
+        if "device" in question or "mobile" in question or "desktop" in question:
+            dimension = "deviceCategory"
+        elif "landing" in question or "page" in question or "url" in question:
+            dimension = "pagePath"
+        elif "city" in question or "location" in question or "geo" in question:
+            dimension = "city"
+        elif "country" in question:
+            dimension = "country"
+        else:
+            dimension = "sessionSourceMedium"
+
+        req_body = {
+            "dateRanges": [{"startDate": "30daysAgo", "endDate": "yesterday"}],
+            "dimensions": [{"name": dimension}],
+            "metrics": [
+                {"name": "sessions"},
+                {"name": "activeUsers"},
+                {"name": "keyEvents"}
+            ],
+            "limit": 10
+        }
+
+        url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+        report = google_post(access_token, url, req_body)
+
+        rows = report.get("rows", [])
+        if not rows:
+            return jsonify({"answer": "No traffic records were found for that query in the last 30 days."})
+
+        results = []
+        for r in rows:
+            dim_val = r["dimensionValues"][0]["value"]
+            sess = int(r["metricValues"][0]["value"])
+            users = int(r["metricValues"][1]["value"])
+            convs = int(r["metricValues"][2]["value"])
+            results.append(f"• **{dim_val}**: {sess:,} sessions ({users:,} users, {convs:,} key events)")
+
+        answer_text = f"**Query Results (Last 30 Days by {dimension}):**\n" + "\n".join(results)
+        return jsonify({"answer": answer_text})
+    except Exception as exc:
+        logger.warning("Ask Analytics failed: %s", exc)
+        return jsonify({"error": f"Failed to execute question lookup: {exc}"}), 500
 
 
 @app.route("/api/ga4/channels", methods=["POST"])
@@ -685,6 +973,8 @@ def api_ga4_compare():
     scope_type = data.get("scope_type", "site")
     page_path = data.get("page_path", "").strip()
     source_medium = data.get("source_medium", "").strip()
+    tone = data.get("tone", "positive")
+    limit = int(data.get("limit", 15))
 
     p1_start_str = data.get("p1_start")
     p1_end_str = data.get("p1_end")
@@ -763,7 +1053,6 @@ def api_ga4_compare():
     elif len(expressions) > 1:
         dimension_filter = {"andGroup": {"expressions": expressions}}
 
-    # Query GA4 Data API including engagedSessions, userEngagementDuration, and eventCount
     def query_ga4_range(start, end):
         req_body = {
             "dateRanges": [{"startDate": start, "endDate": end}],
@@ -776,7 +1065,7 @@ def api_ga4_compare():
                 {"name": "eventCount"},
                 {"name": "keyEvents"}
             ],
-            "limit": 100
+            "limit": limit
         }
         if dimension_filter:
             req_body["dimensionFilter"] = dimension_filter
@@ -858,14 +1147,11 @@ def api_ga4_compare():
     breakdown_list = []
     for k, v in breakdown_map.items():
         v["session_diff"] = v["p1_sessions"] - v["p2_sessions"]
-        
-        # Calculate Avg Engagement Time per session
         v["p1_avg_time_str"] = f"{int(v['p1_time'] / v['p1_sessions'])}s" if v["p1_sessions"] > 0 else "0s"
         v["p2_avg_time_str"] = f"{int(v['p2_time'] / v['p2_sessions'])}s" if v["p2_sessions"] > 0 else "0s"
-        
         breakdown_list.append(v)
 
-    ai_result = generate_ga4_ai_analysis(p1_label, p2_label, m1, m2, breakdown_list)
+    ai_result = generate_ga4_ai_analysis(p1_label, p2_label, m1, m2, breakdown_list, tone=tone)
 
     return jsonify({
         "property_id": property_id,
@@ -873,7 +1159,7 @@ def api_ga4_compare():
         "p2_label": p2_label,
         "metrics_p1": m1,
         "metrics_p2": m2,
-        "breakdown": sorted(breakdown_list, key=lambda x: abs(x["session_diff"]), reverse=True)[:15],
+        "breakdown": sorted(breakdown_list, key=lambda x: abs(x["session_diff"]), reverse=True)[:limit],
         "ai_analysis": ai_result
     })
 
