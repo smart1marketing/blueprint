@@ -6,6 +6,7 @@
   <title>Smart 1 Google Account Command Center</title>
   <link rel="stylesheet" href="/static/style.css">
   <style>
+    html { scroll-behavior: smooth; }
     .nav-anchor-bar {
       display: flex;
       gap: 8px;
@@ -54,6 +55,7 @@
         <a href="#gtm-generator">⚡ GTM Event Generator</a>
         <a href="#ask-analytics">💬 Ask GA4</a>
         <a href="#ai-comparator">📊 AI Comparator</a>
+        <a href="#gsc-manager">🔍 Search Console Admin</a>
         <a href="/reports" target="_blank">📁 Historical Reports (New Page) ↗</a>
         <a href="/gtm-logs" target="_blank">📜 GTM Audit Logs (New Page) ↗</a>
         <a href="#manual-gmb">📍 GMB Checker</a>
@@ -112,6 +114,38 @@
           <button id="gtm-gen-btn" class="btn">Analyze Page Elements</button>
         </div>
         <div id="gtm-gen-results" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- SEARCH CONSOLE SITE ADDITION & SITEMAP SUBMISSION -->
+      <div id="gsc-manager" class="manual-lookup-card" style="margin-top:20px;">
+        <h3>➕ Add Site Property & Submit Sitemap to Search Console</h3>
+        <p>Register a new site domain to any connected Google Account and submit its XML sitemap for instant indexing:</p>
+        
+        <div class="comp-grid">
+          <div>
+            <label>Target Google Account:</label>
+            <select id="gsc-manage-account">
+              <option value="">Select Connected Login...</option>
+              {% for email in accounts %}
+                <option value="{{ email }}">{{ email }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label>Site URL / Domain Property:</label>
+            <input id="gsc-manage-site" placeholder="e.g. https://buckeyelakewinery.com/ or sc-domain:example.com">
+          </div>
+          <div>
+            <label>XML Sitemap URL (Optional):</label>
+            <input id="gsc-manage-sitemap" placeholder="e.g. https://buckeyelakewinery.com/sitemap.xml">
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:14px;">
+          <button id="btn-add-gsc-site" class="btn" style="background:#1a2e58!important;">Add Property to Search Console</button>
+          <button id="btn-submit-gsc-sitemap" class="btn" style="background:#137333!important;">Submit Sitemap Only</button>
+        </div>
+        <div id="gsc-manage-results" style="margin-top:12px;"></div>
       </div>
 
       <!-- GA4 NATURAL LANGUAGE "ASK ANALYTICS" WIDGET -->
