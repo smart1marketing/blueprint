@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Saved Historical Reports - Command Center</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <div class="topline">
+        <div>
+          <h1>📁 Saved Historical Reports</h1>
+          <p>Search and review all saved performance analyses and scheduled alert subscriptions.</p>
+        </div>
+        <div class="auth">
+          <a class="btn" href="/" style="background:#1a2e58!important;">← Back to Main Dashboard</a>
+        </div>
+      </div>
+
+      <div class="saved-reports-section" style="margin-top: 20px; padding: 20px; background: #f8fafc; border: 1px solid #dfe6f0; border-radius: 12px;">
+        <div style="display:flex; gap:10px;">
+          <input id="search-saved-q" placeholder="Search saved reports by customer name, title, or property ID..." style="flex:1; padding:10px 12px; border:1px solid #ccd6e5; border-radius:8px; font-size:14px;">
+          <button id="btn-search-saved" class="btn" style="padding:10px 18px; font-size:14px;">Search Reports</button>
+        </div>
+        <div id="saved-reports-list" style="margin-top:16px;"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    async function fetchSavedReports(query='') {
+      const listEl = document.getElementById('saved-reports-list');
+      listEl.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Loading historical reports...</span>';
+
+      const resp = await fetch(`/api/reports/search?q=${encodeURIComponent(query)}`);
+      const data = await resp.json();
+      
+      if (!data.reports || !data.reports.length) {
+        listEl.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; font-size:13px; color:#69758a;">No historical reports found matching your query.</div>';
+        return;
+      }
+
+      listEl.innerHTML = data.reports.map(r => `
+        <div style="padding:12px 14px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:10px; font-size:13px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong style="font-size:15px; color:#1a2e58;">${r.customer_name}</strong>
+            <span style="color:#8a95a7; font-size:12px;">Saved on ${new Date(r.created_at * 1000).toLocaleDateString()}</span>
+          </div>
+          <div style="margin-top:4px; color:#58677e;">
+            <b>Summary Title:</b> ${r.summary_title} | <b>Property ID:</b> <code>${r.property_id}</code> | <b>Google Login:</b> ${r.google_login}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('btn-search-saved').addEventListener('click', () => {
+      fetchSavedReports(document.getElementById('search-saved-q').value);
+    });
+
+    // Auto-fetch on page load
+    fetchSavedReports();
+  </script>
+</body>
+</html>
