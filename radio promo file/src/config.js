@@ -10,13 +10,20 @@ const bool = (key, fallback = false) => {
 export const config = {
   port: Number(env('PORT', '3000')),
   publicUrl: env('PUBLIC_URL', '').replace(/\/$/, ''),
+  // e.g. https://smart1marketing.com — permits that site to iframe the studio.
+  embedOrigin: env('EMBED_ORIGIN', '').replace(/\/$/, ''),
 
   auth: {
     // Shared password for the Smart 1 team. Reviewers never need it — their
     // link carries a per-project token instead.
     password: env('STUDIO_PASSWORD'),
     secret: env('SESSION_SECRET', 'change-me-in-production'),
-    sessionDays: Number(env('SESSION_DAYS', '14'))
+    sessionDays: Number(env('SESSION_DAYS', '14')),
+    // Set to 'None' when the studio is embedded in an iframe on another
+    // domain — a Lax cookie is not sent in a cross-site frame, so sign-in
+    // would silently fail. 'None' also forces Secure, so HTTPS is required.
+    sameSite: ['lax', 'none', 'strict'].includes(env('COOKIE_SAMESITE', 'Lax').toLowerCase())
+      ? env('COOKIE_SAMESITE', 'Lax') : 'Lax'
   },
 
   openai: {

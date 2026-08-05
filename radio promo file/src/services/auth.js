@@ -39,16 +39,18 @@ function readCookie(req, name) {
 export function issueSession(res, who) {
   const exp = Date.now() + config.auth.sessionDays * 86400000;
   const token = pack({ who, exp });
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const sameSite = config.auth.sameSite;
+  // SameSite=None is meaningless without Secure, and browsers drop it.
+  const secure = (sameSite.toLowerCase() === 'none' || process.env.NODE_ENV === 'production') ? '; Secure' : '';
   res.setHeader(
     'Set-Cookie',
-    `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${config.auth.sessionDays * 86400}${secure}`
+    `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=${sameSite}; Path=/; Max-Age=${config.auth.sessionDays * 86400}${secure}`
   );
   return { who, expiresAt: new Date(exp).toISOString() };
 }
 
 export function clearSession(res) {
-  res.setHeader('Set-Cookie', `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
+  res.setHeader('Set-Cookie', `${COOKIE}=; HttpOnly; SameSite=${config.auth.sameSite}; Path=/; Max-Age=0`);
 }
 
 export const currentSession = (req) => unpack(readCookie(req, COOKIE));

@@ -1,10 +1,11 @@
 /* Animated SVG loaders. One shows any time we're waiting on the AI, so the
    wait always looks like something happening in a studio. */
 
-const S = '#ff6b1a';
-const V = '#7be0c9';
-const D = '#2b3547';
-const T = '#9aa4b4';
+const S = '#29abe2';   /* primary accent */
+const V = '#1cd3a2';   /* success */
+const D = '#cbd5e0';   /* hairline */
+const T = '#5f6f85';   /* structure */
+const BG = '#f7f9fc';  /* card fill */
 
 const tower = () => `
 <svg viewBox="0 0 120 120" role="img" aria-label="Broadcasting">
@@ -28,12 +29,12 @@ const tower = () => `
 const vinyl = () => `
 <svg viewBox="0 0 120 120" role="img" aria-label="Cueing the record">
   <g>
-    <circle cx="56" cy="62" r="38" fill="#10161f" stroke="${D}" stroke-width="2"/>
+    <circle cx="56" cy="62" r="38" fill="${BG}" stroke="${D}" stroke-width="2"/>
     <g stroke="${D}" fill="none" stroke-width="1">
       <circle cx="56" cy="62" r="30"/><circle cx="56" cy="62" r="24"/><circle cx="56" cy="62" r="18"/>
     </g>
     <circle cx="56" cy="62" r="10" fill="${S}"/>
-    <circle cx="56" cy="62" r="2.5" fill="#0c1017"/>
+    <circle cx="56" cy="62" r="2.5" fill="#fff"/>
     <path d="M56 24a38 38 0 0 1 33 19" stroke="${V}" stroke-width="2.5" fill="none" stroke-linecap="round"/>
     <animateTransform attributeName="transform" type="rotate" from="0 56 62" to="360 56 62" dur="2.4s" repeatCount="indefinite"/>
   </g>
@@ -47,7 +48,7 @@ const vinyl = () => `
 
 const vu = () => `
 <svg viewBox="0 0 120 120" role="img" aria-label="Checking levels">
-  <rect x="10" y="26" width="100" height="68" rx="8" fill="#10161f" stroke="${D}" stroke-width="2"/>
+  <rect x="10" y="26" width="100" height="68" rx="8" fill="${BG}" stroke="${D}" stroke-width="2"/>
   <path d="M22 78 A40 40 0 0 1 98 78" fill="none" stroke="${D}" stroke-width="2"/>
   <path d="M74 48 A40 40 0 0 1 98 78" fill="none" stroke="${S}" stroke-width="3"/>
   ${[0, 1, 2, 3, 4, 5, 6].map((i) => {
@@ -65,11 +66,11 @@ const vu = () => `
 
 const reels = () => `
 <svg viewBox="0 0 120 120" role="img" aria-label="Rolling tape">
-  <rect x="8" y="24" width="104" height="72" rx="8" fill="#10161f" stroke="${D}" stroke-width="2"/>
+  <rect x="8" y="24" width="104" height="72" rx="8" fill="${BG}" stroke="${D}" stroke-width="2"/>
   <path d="M36 58 C 48 74, 72 74, 84 58" stroke="${T}" stroke-width="2.5" fill="none"/>
   ${[[36, 58], [84, 58]].map(([cx, cy], i) => `
   <g>
-    <circle cx="${cx}" cy="${cy}" r="19" fill="#0c1017" stroke="${i ? V : S}" stroke-width="2.5"/>
+    <circle cx="${cx}" cy="${cy}" r="19" fill="#fff" stroke="${i ? V : S}" stroke-width="2.5"/>
     <circle cx="${cx}" cy="${cy}" r="5" fill="${i ? V : S}"/>
     ${[0, 120, 240].map((r) => `<line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - 16}" stroke="${D}" stroke-width="3" transform="rotate(${r} ${cx} ${cy})"/>`).join('')}
     <animateTransform attributeName="transform" type="rotate" from="0 ${cx} ${cy}" to="${i ? 360 : -360} ${cx} ${cy}" dur="${i ? 2.2 : 1.7}s" repeatCount="indefinite"/>
@@ -81,7 +82,7 @@ const reels = () => `
 
 const waveform = () => `
 <svg viewBox="0 0 120 120" role="img" aria-label="Rendering audio">
-  <rect x="6" y="30" width="108" height="60" rx="8" fill="#10161f" stroke="${D}" stroke-width="2"/>
+  <rect x="6" y="30" width="108" height="60" rx="8" fill="${BG}" stroke="${D}" stroke-width="2"/>
   ${Array.from({ length: 13 }, (_, i) => {
     const x = 16 + i * 7.5;
     const dur = (1 + (i % 5) * 0.18).toFixed(2);
@@ -100,9 +101,9 @@ const mic = () => `
     <animate attributeName="opacity" values="0.6;0" dur="2.2s" begin="${i * 1.1}s" repeatCount="indefinite"/>
   </circle>`).join('')}
   <rect x="48" y="22" width="24" height="42" rx="12" fill="${S}"/>
-  <rect x="53" y="28" width="14" height="3" rx="1.5" fill="#0c1017" opacity="0.5"/>
-  <rect x="53" y="36" width="14" height="3" rx="1.5" fill="#0c1017" opacity="0.5"/>
-  <rect x="53" y="44" width="14" height="3" rx="1.5" fill="#0c1017" opacity="0.5"/>
+  <rect x="53" y="28" width="14" height="3" rx="1.5" fill="#fff" opacity="0.5"/>
+  <rect x="53" y="36" width="14" height="3" rx="1.5" fill="#fff" opacity="0.5"/>
+  <rect x="53" y="44" width="14" height="3" rx="1.5" fill="#fff" opacity="0.5"/>
   <path d="M38 56a22 22 0 0 0 44 0" fill="none" stroke="${T}" stroke-width="3" stroke-linecap="round"/>
   <line x1="60" y1="78" x2="60" y2="92" stroke="${T}" stroke-width="3"/>
   <rect x="42" y="92" width="36" height="5" rx="2.5" fill="${D}"/>

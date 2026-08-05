@@ -14,6 +14,15 @@ const publicDir = path.join(__dirname, '..', 'public');
 app.use(cors({ origin: true, credentials: true }));
 // Headroom for base64 logo and music-bed uploads.
 app.use(express.json({ limit: '30mb' }));
+// Allow the studio to be framed by the marketing site when EMBED_ORIGIN is set.
+// Left unset, the default deny keeps it from being framed by anyone.
+app.use((req, res, next) => {
+  const origin = config.embedOrigin;
+  res.setHeader('Content-Security-Policy',
+    origin ? `frame-ancestors 'self' ${origin}` : "frame-ancestors 'self'");
+  next();
+});
+
 app.use(express.static(publicDir, { extensions: ['html'] }));
 
 app.use('/api', api);
