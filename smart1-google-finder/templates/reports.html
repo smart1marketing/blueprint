@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Saved Historical Reports - Command Center</title>
+  <title>GTM Audit Logs - Command Center</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -11,8 +11,8 @@
     <section class="card">
       <div class="topline">
         <div>
-          <h1>📁 Saved Historical Reports</h1>
-          <p>Search and review all saved performance analyses and scheduled alert subscriptions.</p>
+          <h1>📜 GTM Change & Deployment Audit Logs</h1>
+          <p>Full date-stamped audit history of all tags, triggers, and deployments executed through the platform.</p>
         </div>
         <div class="auth">
           <a class="btn" href="/" style="background:#1a2e58!important;">← Back to Main Dashboard</a>
@@ -21,45 +21,57 @@
 
       <div class="saved-reports-section" style="margin-top: 20px; padding: 20px; background: #f8fafc; border: 1px solid #dfe6f0; border-radius: 12px;">
         <div style="display:flex; gap:10px;">
-          <input id="search-saved-q" placeholder="Search saved reports by customer name, title, or property ID..." style="flex:1; padding:10px 12px; border:1px solid #ccd6e5; border-radius:8px; font-size:14px;">
-          <button id="btn-search-saved" class="btn" style="padding:10px 18px; font-size:14px;">Search Reports</button>
+          <input id="search-gtm-logs-q" placeholder="Search logs by tag name, container ID, email, or action type..." style="flex:1; padding:10px 12px; border:1px solid #ccd6e5; border-radius:8px; font-size:14px;">
+          <button id="btn-search-gtm-logs" class="btn" style="padding:10px 18px; font-size:14px; background:#24519c!important;">Search Audit Logs</button>
         </div>
-        <div id="saved-reports-list" style="margin-top:16px;"></div>
+        <div id="gtm-logs-list" style="margin-top:16px;"></div>
       </div>
     </section>
   </main>
 
   <script>
-    async function fetchSavedReports(query='') {
-      const listEl = document.getElementById('saved-reports-list');
-      listEl.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Loading historical reports...</span>';
+    function esc(v='') {
+      return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    }
 
-      const resp = await fetch(`/api/reports/search?q=${encodeURIComponent(query)}`);
+    async function fetchGtmLogs(query='') {
+      const listEl = document.getElementById('gtm-logs-list');
+      listEl.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Loading audit logs...</span>';
+
+      const resp = await fetch(`/api/gtm/logs/search?q=${encodeURIComponent(query)}`);
       const data = await resp.json();
       
-      if (!data.reports || !data.reports.length) {
-        listEl.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; font-size:13px; color:#69758a;">No historical reports found matching your query.</div>';
+      if (!data.logs || !data.logs.length) {
+        listEl.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; font-size:13px; color:#69758a;">No recorded GTM change logs found.</div>';
         return;
       }
 
-      listEl.innerHTML = data.reports.map(r => `
-        <div style="padding:12px 14px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:10px; font-size:13px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong style="font-size:15px; color:#1a2e58;">${r.customer_name}</strong>
-            <span style="color:#8a95a7; font-size:12px;">Saved on ${new Date(r.created_at * 1000).toLocaleDateString()}</span>
+      listEl.innerHTML = data.logs.map(log => {
+        const dateStr = new Date(log.created_at * 1000).toLocaleString();
+        return `
+          <div style="padding:12px 14px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:10px; font-size:13px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <span style="background:#eaf2ff; color:#24519c; font-weight:bold; padding:3px 8px; border-radius:4px; font-size:12px;">${esc(log.action_type)}</span>
+                <strong style="margin-left:8px; color:#1a2e58; font-size:14px;">${esc(log.tag_name)}</strong>
+              </div>
+              <span style="color:#8a95a7; font-size:12px;">${esc(dateStr)}</span>
+            </div>
+            <div style="margin-top:6px; color:#58677e;">
+              <b>Container ID:</b> <code>${esc(log.container_id)}</code> | 
+              <b>Account ID:</b> <code>${esc(log.account_id)}</code> | 
+              <b>Executed By:</b> ${esc(log.google_login)}
+            </div>
           </div>
-          <div style="margin-top:4px; color:#58677e;">
-            <b>Summary Title:</b> ${r.summary_title} | <b>Property ID:</b> <code>${r.property_id}</code> | <b>Google Login:</b> ${r.google_login}
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
-    document.getElementById('btn-search-saved').addEventListener('click', () => {
-      fetchSavedReports(document.getElementById('search-saved-q').value);
+    document.getElementById('btn-search-gtm-logs').addEventListener('click', () => {
+      fetchGtmLogs(document.getElementById('search-gtm-logs-q').value);
     });
 
-    fetchSavedReports();
+    fetchGtmLogs();
   </script>
 </body>
 </html>
