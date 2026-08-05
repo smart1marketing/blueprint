@@ -16,6 +16,67 @@
 .hp-field{position:absolute!important;left:-9999px!important;top:auto;width:1px;height:1px;overflow:hidden}
 .trade-map{width:100%;max-width:520px;margin:10px auto 4px;display:block}
 .view-only .card,.view-only .privacy-note,.view-only .hero{display:none!important}
+/* ===== Audit-style report ===== */
+.rpt{--rl:#e6edf3;--gold:#f0b429;max-width:850px;margin:0 auto;color:#25364b}
+.rpt-band{background:var(--navy);color:#fff;border-radius:14px 14px 0 0;padding:26px 30px 22px;border-bottom:4px solid var(--green)}
+.rpt-logo{display:flex;align-items:center;gap:6px;font-weight:800;letter-spacing:.02em;font-size:1.1rem;color:#fff}
+.rpt-logo .b{color:#4db3e6}
+.rpt-band h2{color:#fff;margin:14px 0 3px;font-size:1.7rem;letter-spacing:-.01em;border:0;padding:0}
+.rpt-band .sub{color:#9fb6cf;font-size:.8rem;font-weight:600}
+.rpt-body{border:1px solid var(--rl);border-top:0;border-radius:0 0 14px 14px;padding:22px 30px 30px;background:#fff}
+.rpt-h{font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6b7a8d;border-bottom:1px solid var(--rl);padding-bottom:8px;margin:28px 0 15px}
+.rpt-lead{font-size:.95rem;line-height:1.6;margin:0}
+.rpt-grid{display:grid;gap:14px}.rpt-3{grid-template-columns:repeat(3,1fr)}
+.rpt-tile{border:1px solid var(--rl);border-radius:12px;padding:16px 18px;background:#fff}
+.rpt-tile .lbl{font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#8595a7}
+.rpt-tile .val{font-size:1.5rem;font-weight:800;color:var(--navy);margin-top:6px;line-height:1.1}
+.rpt-tile .note{font-size:.64rem;color:#8595a7;margin-top:6px}
+.rpt-badge{display:inline-block;background:var(--navy);color:#fff;font-weight:800;font-size:.8rem;padding:8px 15px;border-radius:999px;margin-bottom:10px}
+.gbb{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.gbb .p{border:1px solid var(--rl);border-radius:12px;padding:20px 16px 18px;text-align:center;position:relative;background:#fff}
+.gbb .p.rec{border:2px solid var(--blue);background:#f2fbff;box-shadow:0 0 0 3px rgba(0,158,210,.08)}
+.gbb .tier{font-size:.62rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8595a7}
+.gbb .price{font-size:1.5rem;font-weight:800;color:var(--navy);margin:6px 0 2px}
+.gbb .per{font-size:.62rem;color:#8595a7}
+.gbb .name{font-size:.82rem;font-weight:700;margin-top:8px;color:var(--ink)}
+.gbb .blurb{font-size:.66rem;color:#68798c;margin-top:8px;line-height:1.45}
+.gbb .rec-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--blue);color:#fff;font-size:.54rem;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.rpt-note{font-size:.72rem;color:#68798c;line-height:1.5;margin:8px 0}
+.rpt-disc{background:#f4f9fb;border-left:4px solid var(--blue);border-radius:0 8px 8px 0;padding:12px 15px;font-size:.76rem;color:#3a4b5e;line-height:1.55;margin-top:14px}
+.rpt-cmp{width:100%;border-collapse:collapse;font-size:.8rem;min-width:0}
+.rpt-cmp th,.rpt-cmp td{border:1px solid var(--rl);padding:10px 12px;text-align:left;vertical-align:top}
+.rpt-cmp th{background:var(--navy);color:#fff;font-size:.66rem;letter-spacing:.03em;text-transform:uppercase}
+.rpt-cmp td:first-child{font-weight:700;color:var(--navy);width:30%}
+.rpt-cmp .good{color:#1a7f4b;font-weight:700}
+.rpt-cta{background:linear-gradient(135deg,var(--navy),#12324f);color:#fff;border-radius:14px;padding:26px 28px;text-align:center;margin-top:26px}
+.rpt-cta h3{color:#fff;font-size:1.25rem;margin:0 0 8px;border:0;padding:0}
+.rpt-cta p{color:#c9d6e5;font-size:.86rem;margin:0 auto 16px;max-width:52ch;line-height:1.55}
+.rpt-cta a.btn-consult{display:inline-block;background:var(--green);color:#062315;font-weight:800;text-decoration:none;padding:13px 24px;border-radius:999px;font-size:.9rem}
+.rpt-foot{font-size:.66rem;color:#8595a7;border-top:1px solid var(--rl);margin-top:22px;padding-top:14px;line-height:1.5}
+@media(max-width:720px){.rpt-3,.gbb{grid-template-columns:1fr}}
+/* ===== print / page-break control ===== */
+@media print{
+  @page{margin:14mm 12mm}
+  body{background:#fff}
+  .rpt{max-width:none}
+  .rpt-band{border-radius:0}
+  .rpt-body{border:0;padding:0}
+  .rpt-h,h1,h2,h3{break-after:avoid;page-break-after:avoid}
+  .rpt-h,.rpt-tile,.gbb .p,.rpt-cta,.rpt-disc,.trade-map,.badge-card,.month-focus{break-inside:avoid;page-break-inside:avoid}
+  tr,td,th{break-inside:avoid;page-break-inside:avoid}
+  .toolbar{display:none!important}
+  .pg-break{break-before:page;page-break-before:always}
+  .chan-card{break-inside:avoid;page-break-inside:avoid}
+}
+/* ===== graphical media channels ===== */
+.chan-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.chan-card{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--rl);border-left:4px solid var(--green);border-radius:12px;padding:13px 14px}
+.chan-ic{flex:0 0 auto;width:38px;height:38px;border-radius:9px;background:rgba(45,187,114,.12);display:flex;align-items:center;justify-content:center}
+.chan-ic svg{width:20px;height:20px;stroke:var(--navy);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chan-tx{min-width:0}
+.chan-tx .n{font-weight:800;color:var(--navy);font-size:.9rem;line-height:1.2}
+.chan-tx .d{color:#5a6b7d;font-size:.72rem;margin-top:2px;line-height:1.35}
+@media(max-width:720px){.chan-grid{grid-template-columns:1fr}}
   </style>
   <script>
     // Server-injected config (packages come from a single source of truth in app.py).
@@ -338,19 +399,79 @@ function buildTradeMap(geo){
     <g><circle cx="${cx}" cy="${cy}" r="11" fill="#0a2240"/><circle cx="${cx}" cy="${cy}" r="4.5" fill="#fff"/></g>
   </svg>`;
 }
-function renderReport(r,restaurant){const m=r.market_profile;const geo=[...r.geofence_locations].sort((a,b)=>a.priority-b.priority);const results=document.getElementById('results');const range=(a,b)=>`${fmt(a)}–${fmt(b)}`;document.title=`${restaurant} Marketing Proposal`;const recName=(r.recommended_package.package_name||'').toLowerCase();const recPrice=r.recommended_package.monthly_investment||'';results.innerHTML=`
-<div class="report-head"><div><div class="eyebrow">SMART 1 RESTAURANT REPORT</div><h2>${esc(restaurant)}</h2><p>${esc(r.market_summary)}</p></div><div class="toolbar"><button onclick="window.print()">Print / Save PDF</button><button class="secondary" onclick="copyReport()">Copy Summary</button></div></div>
-<div class="badge-card"><span class="market-badge">${esc(r.market_type)}</span><p>${esc(r.market_type_description)}</p></div>
-<div class="stat-cards"><div class="stat"><strong>${range(m.estimated_population_low,m.estimated_population_high)}</strong><span>estimated population</span></div><div class="stat"><strong>${range(m.estimated_households_low,m.estimated_households_high)}</strong><span>estimated households</span></div><div class="stat"><strong>${range(m.estimated_frequent_diner_households_low,m.estimated_frequent_diner_households_high)}</strong><span>likely frequent-diner households</span></div></div>
-<div class="section"><h3>Your Market Opportunity</h3><p>${esc(r.market_opportunity)}</p></div>
-<div class="section"><h3>Illustrative Trade-Area View</h3><p class="field-help">A schematic of your center point and priority targets — illustrative only, not geographically to scale. Final polygons are built and verified in the ad platform before launch.</p>${buildTradeMap(geo)}<div class="chip-list" style="justify-content:center"><span class="chip-tag">P1 — Priority 1</span><span class="chip-tag">P2 — Priority 2</span><span class="chip-tag">P3 — Priority 3</span></div></div>
-<div class="section"><h3>Our Packages</h3><div class="pkg-grid">${PACKAGES.map(p=>{const rec=p.name.toLowerCase()===recName||p.price===recPrice;return `<div class="pkg${rec?' recommended':''}">${rec?'<span class="pkg-badge">RECOMMENDED</span>':''}<span class="pkg-price">${esc(p.price)}</span><span class="pkg-name">${esc(p.name)}</span><span class="pkg-blurb">${esc(p.blurb)}</span></div>`}).join('')}</div><p><strong>${esc(r.recommended_package.monthly_investment)} ${esc(r.recommended_package.package_name)}</strong> — ${esc(r.recommended_package.description)}</p><p class="field-help">Budget paces with your calendar: the full package at peak, roughly 60% in shoulder months, and 35% in your slowest months. See the month-by-month plan below.</p></div>
-<div class="section"><h3>Recommended Media Channels</h3><div class="chip-list">${r.media_channels.map(x=>`<span class="chip-tag">${esc(x)}</span>`).join('')}</div></div>
-<div class="section"><h3>Streaming Audio — Commute &amp; Pre-Meal Daypart</h3><div class="tip-box">${esc(r.streaming_audio_note)}</div></div>
-<div class="section"><h3>Recommended Demand Triggers for Your Market</h3><div class="chip-list">${r.demand_triggers.map(x=>`<span class="chip-tag">${esc(x)}</span>`).join('')}</div></div>
-<div class="section"><h3>Month-by-Month Campaign Plan</h3><div class="table-wrap"><table class="narrow"><thead><tr><th>Month</th><th>Focus &amp; Triggers</th><th>Budget Pacing</th></tr></thead><tbody>${r.monthly_plan.map(x=>`<tr><td><strong>${esc(x.month)}</strong></td><td><div class="month-focus"><strong>${esc(x.focus)}</strong><p>${esc(x.message)}</p><div class="chip-list">${(x.triggers||[]).map(t=>`<span class="chip-tag">${esc(t)}</span>`).join('')}</div></div></td><td><strong>${esc(x.pacing)}</strong></td></tr>`).join('')}</tbody></table></div></div>
-<div class="section"><h3>Recommended Geofence Locations</h3><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Location</th><th>Category</th><th>District / Market</th><th>Method</th><th>Radius</th><th>Reason</th><th>Message</th><th>Confidence</th></tr></thead><tbody>${geo.map(x=>`<tr><td><span class="pill priority-${x.priority}">P${x.priority}</span></td><td><strong>${esc(x.name)}</strong><br>${esc(x.city_state)}${x.address?`<br>${esc(x.address)}`:''}</td><td>${esc(x.category)}</td><td>${esc(x.district_or_market)}</td><td>${esc(x.recommended_method.replaceAll('_',' '))}</td><td>${esc(x.recommended_radius_miles)} mi</td><td>${esc(x.audience_reason)}</td><td>${esc(x.best_message)}</td><td>${esc(x.confidence)}</td></tr>`).join('')}</tbody></table></div></div>
-<p class="disclaimer">${esc(r.disclaimer)}</p>`;
+function s1money(s){var d=String(s||'').replace(/[^\d]/g,'');return d?parseInt(d,10):null;}
+function s1usd(n){return n==null?'—':'$'+new Intl.NumberFormat('en-US').format(n);}
+var CHAN_ICONS={
+  display:['Reach diners across websites & apps in your trade area','<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>'],
+  video:['Non-skippable pre-roll on connected TV & streaming','<svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>'],
+  audio:['Ads during commute & pre-meal listening','<svg viewBox="0 0 24 24"><path d="M3 14v-2a9 9 0 0 1 18 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg>'],
+  social:['Feed & story placements to nearby diners','<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg>'],
+  search:['Capture "restaurants near me" intent','<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>'],
+  geofence:['Target competitors, events & high-traffic venues','<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'],
+  email:['Reach past & prospective guests in the inbox','<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>'],
+  native:['Blend into content diners already trust','<svg viewBox="0 0 24 24"><path d="M4 5h16M4 10h10M4 15h16M4 19h10"/></svg>'],
+  retarget:['Re-engage people who already showed interest or visited','<svg viewBox="0 0 24 24"><path d="M20 8a8 8 0 1 0 .5 5"/><path d="M20 4v4h-4"/></svg>'],
+  audience:['Reach in-market diners built from real foot-traffic data','<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M15 11a3 3 0 1 0-2-5.2"/><path d="M4 20c0-3 2.5-5 5-5s5 2 5 5"/><path d="M15 15c2.2.2 4 2 4 5"/></svg>'],
+  default:['Reach the right diners at the right moment','<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>']
+};
+function channelMeta(name){
+  var s=String(name||'').toLowerCase();
+  if(/retarget|look-?back|lookback|re-?market/.test(s))return CHAN_ICONS.retarget;
+  if(/audience data|in-?market|foot-?traffic|behavior/.test(s))return CHAN_ICONS.audience;
+  if(/video|ott|ctv|connected tv|pre-?roll|youtube/.test(s))return CHAN_ICONS.video;
+  if(/audio|podcast|spotify|pandora|radio|stream/.test(s))return CHAN_ICONS.audio;
+  if(/social|facebook|instagram|tiktok|meta|snap/.test(s))return CHAN_ICONS.social;
+  if(/search|sem|ppc|google ads|keyword/.test(s))return CHAN_ICONS.search;
+  if(/geofenc|geo-?target|venue|addressable/.test(s))return CHAN_ICONS.geofence;
+  if(/email|inbox|newsletter/.test(s))return CHAN_ICONS.email;
+  if(/native|content|sponsored/.test(s))return CHAN_ICONS.native;
+  if(/display|banner|programmatic|website|web|app/.test(s))return CHAN_ICONS.display;
+  return CHAN_ICONS.default;
+}
+function buildChannels(list){
+  return '<div class="chan-grid">'+(list||[]).map(function(x){
+    var meta=channelMeta(x);
+    return '<div class="chan-card"><div class="chan-ic">'+meta[1]+'</div><div class="chan-tx"><div class="n">'+esc(x)+'</div><div class="d">'+meta[0]+'</div></div></div>';
+  }).join('')+'</div>';
+}
+function buildGBB(r){
+  var recName=(r.recommended_package.package_name||'').toLowerCase();
+  var recPrice=r.recommended_package.monthly_investment||'';
+  var idx=PACKAGES.findIndex(function(p){return p.name.toLowerCase()===recName||p.price===recPrice;});
+  if(idx<0)idx=1;
+  var start=Math.max(0,Math.min(idx-1,PACKAGES.length-3));
+  var trio=PACKAGES.slice(start,start+3);
+  var labels=['Good','Better','Best'];
+  return trio.map(function(p,i){
+    var rec=(p.name.toLowerCase()===recName||p.price===recPrice);
+    var mo=s1money(p.price);
+    return '<div class="p'+(rec?' rec':'')+'">'+(rec?'<span class="rec-badge">RECOMMENDED FOR YOUR MARKET</span>':'')+
+      '<div class="tier">'+labels[i]+'</div><div class="price">'+esc(String(p.price).split('/')[0])+'</div>'+
+      '<div class="per">per month · '+s1usd(mo?mo*12:null)+'/yr</div><div class="name">'+esc(p.name)+
+      '</div><div class="blurb">'+esc(p.blurb||'')+'</div></div>';
+  }).join('');
+}
+function renderReport(r,restaurant){const m=r.market_profile;const geo=[...r.geofence_locations].sort((a,b)=>a.priority-b.priority);const results=document.getElementById('results');const range=(a,b)=>`${fmt(a)}–${fmt(b)}`;document.title=`${restaurant} — Smart 1 Restaurant Market Report`;results.innerHTML=`
+<div class="toolbar" style="justify-content:flex-end;margin-bottom:14px"><button onclick="window.print()">Print / Save PDF</button><button class="secondary" onclick="copyReport()">Copy Summary</button></div>
+<div class="rpt">
+  <div class="rpt-band"><div class="rpt-logo">SMART <span class="b">1</span> MARKETING</div><h2>${esc(restaurant)}</h2><div class="sub">Restaurant Demand &amp; Geofencing Report${r.market_type?` · ${esc(r.market_type)}`:''}</div></div>
+  <div class="rpt-body">
+  <p class="rpt-lead">${esc(r.market_summary)}</p>
+  <div class="rpt-h">Your Market Snapshot</div>
+<div class="rpt-grid rpt-3"><div class="rpt-tile"><div class="lbl">Estimated Population</div><div class="val">${range(m.estimated_population_low,m.estimated_population_high)}</div><div class="note">in your trade area</div></div><div class="rpt-tile"><div class="lbl">Estimated Households</div><div class="val">${range(m.estimated_households_low,m.estimated_households_high)}</div><div class="note">total households</div></div><div class="rpt-tile"><div class="lbl">Likely Frequent Diners</div><div class="val">${range(m.estimated_frequent_diner_households_low,m.estimated_frequent_diner_households_high)}</div><div class="note">households, market-calibrated</div></div></div>
+<div class="rpt-h">Your Market Opportunity</div><span class="rpt-badge">${esc(r.market_type)}</span><p class="rpt-lead">${esc(r.market_type_description)}</p><p class="rpt-lead" style="margin-top:8px">${esc(r.market_opportunity)}</p>
+<div class="rpt-h">Suggested Investment — Good / Better / Best</div><p class="rpt-note">Sized to a market of roughly ${range(m.estimated_population_low,m.estimated_population_high)} people and ${range(m.estimated_households_low,m.estimated_households_high)} households — the highlighted tier is our recommendation for a market this size.</p><div class="gbb">${buildGBB(r)}</div><div class="rpt-disc"><strong>These are suggested budgets, not a quote.</strong> The tiers above are starting points based on estimated market size. In a short consult we'll cater a budget and plan that fits your restaurant's goals, seasonality, and cash flow.</div>
+<div class="rpt-h">How This Compares to Traditional Advertising</div><p class="rpt-lead">The same dollars work harder when they only reach people who are near you and likely to dine — and only fire when demand is live.</p><div class="table-wrap"><table class="rpt-cmp narrow"><thead><tr><th></th><th>Traditional (radio, print, billboard, direct mail)</th><th>Smart 1 trigger-driven plan</th></tr></thead><tbody><tr><td>Who you pay to reach</td><td>Broad — much of the audience is outside your trade area or won't dine out</td><td class="good">Likely diners in your trade area &amp; at your top geofences</td></tr><tr><td>When it runs</td><td>Fixed flights whether demand is there or not</td><td class="good">Paced to dayparts, weather &amp; events — spend when demand is live</td></tr><tr><td>Measurement</td><td>Hard to tie to visits or orders</td><td class="good">Trackable impressions, visits &amp; lookback attribution</td></tr><tr><td>Wasted spend</td><td>High — you pay for impressions you can't use</td><td class="good">Low — concentrated on your best audiences and moments</td></tr></tbody></table></div><div class="rpt-disc">Illustrative comparison of how targeted, trigger-driven media typically uses budget versus broad traditional buys — directional, not a guarantee of specific results.</div><p class="rpt-note">Budget paces with your calendar: the full tier at peak, roughly 60% in shoulder months, and 35% in your slowest months (see the month-by-month plan below).</p>
+<div class="rpt-h">Recommended Media Channels</div>${buildChannels(r.media_channels)}
+<div class="rpt-h">Streaming Audio — Commute &amp; Pre-Meal Daypart</div><div class="rpt-disc" style="border-left-color:var(--green)">${esc(r.streaming_audio_note)}</div>
+<div class="rpt-h">Demand Triggers for Your Market</div><div>${r.demand_triggers.map(x=>`<span class="chip-tag">${esc(x)}</span>`).join('')}</div>
+<div class="rpt-h pg-break">Month-by-Month Campaign Plan</div><div class="table-wrap"><table class="narrow"><thead><tr><th>Month</th><th>Focus &amp; Triggers</th><th>Budget Pacing</th></tr></thead><tbody>${r.monthly_plan.map(x=>`<tr><td><strong>${esc(x.month)}</strong></td><td><div class="month-focus"><strong>${esc(x.focus)}</strong><p>${esc(x.message)}</p><div>${(x.triggers||[]).map(t=>`<span class="chip-tag">${esc(t)}</span>`).join('')}</div></div></td><td><strong>${esc(x.pacing)}</strong></td></tr>`).join('')}</tbody></table></div>
+<div class="rpt-h pg-break">Sample Geofence Locations to Target</div><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Location</th><th>Category</th><th>District / Market</th><th>Method</th><th>Radius</th><th>Reason</th><th>Message</th><th>Confidence</th></tr></thead><tbody>${geo.map(x=>`<tr><td><span class="pill priority-${x.priority}">P${x.priority}</span></td><td><strong>${esc(x.name)}</strong><br>${esc(x.city_state)}${x.address?`<br>${esc(x.address)}`:''}</td><td>${esc(x.category)}</td><td>${esc(x.district_or_market)}</td><td>${esc(x.recommended_method.replaceAll('_',' '))}</td><td>${esc(x.recommended_radius_miles)} mi</td><td>${esc(x.audience_reason)}</td><td>${esc(x.best_message)}</td><td>${esc(x.confidence)}</td></tr>`).join('')}</tbody></table></div>
+<div class="rpt-h">Illustrative Trade-Area View</div><p class="rpt-note">A schematic of your center point and priority targets — illustrative only, not geographically to scale. Final polygons are built and verified in the ad platform before launch.</p>${buildTradeMap(geo)}<div class="rpt-note" style="text-align:center">P1 — Priority 1 &nbsp;·&nbsp; P2 — Priority 2 &nbsp;·&nbsp; P3 — Priority 3</div>
+<div class="rpt-cta"><h3>Let's tailor this to your restaurant</h3><p>These numbers are a directional starting point. Book a short F&amp;B marketing consult and we'll build a budget and trigger plan that fits your goals and market.</p><a class="btn-consult" href="https://smart1marketing.com/fandbmarketingconsult" target="_blank" rel="noopener">Book your free F&amp;B marketing consult →</a></div>
+  <p class="rpt-foot">${esc(r.disclaimer)} Population, household, dine-out, and location figures are AI planning estimates for the market, not exact counts. Smart 1 Marketing · smart1marketing.com</p>
+  </div>
+</div>`;
 window.__reportText=`${restaurant}\n\n${r.market_summary}\n\nMarket: ${r.market_type}\nLikely frequent-diner households: ${range(m.estimated_frequent_diner_households_low,m.estimated_frequent_diner_households_high)}\nRecommended package: ${r.recommended_package.monthly_investment} ${r.recommended_package.package_name}\n\nTop geofences:\n${geo.slice(0,12).map((x,i)=>`${i+1}. ${x.name} — ${x.city_state} — ${x.category}`).join('\n')}\n\n${r.disclaimer}`;document.getElementById('loading').classList.add('hidden');results.classList.remove('hidden');track('s1_report_viewed');window.scrollTo({top:0,behavior:'smooth'})}
 async function copyReport(){await navigator.clipboard.writeText(window.__reportText||'');alert('Report summary copied.')}window.copyReport=copyReport;
 
