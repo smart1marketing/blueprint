@@ -1,1119 +1,315 @@
-# Smart 1 Seasonal Tourism Marketing Planner
-
-## Planner purpose
-
-The planner creates a suggested seasonal advertising strategy based on:
-
-* Business ZIP code
-* Business category
-* Specific activity or service
-* Average transaction or booking value
-* Estimated customer travel distance
-* Local climate
-* Tourism characteristics
-* Industry-standard gross profit margin
-* Estimated seasonality
-* Most valuable dayparts
-* Holiday travel opportunities
-
-The planner recommends a **Good, Better, and Best** media plan using Smart 1 Marketing products.
-
-The program focuses on reaching tourists:
-
-1. Before they arrive
-2. While they are visiting and ready to make a purchase
-
----
-
-# Slide 1: Business Location
-
-## Heading
-
-**Where is your business located?**
-
-## Fields
-
-### Business ZIP code
-
-Text field:
-
-`Enter ZIP code`
-
-### Customer travel distance
-
-Radio buttons:
-
-* Up to 5 miles
-* Up to 10 miles
-* Up to 20 miles
-* Up to 30 miles
-* Up to 50 miles
-* Regional destination
-* Let Smart 1 estimate
-
-## Planner logic
-
-The planner uses the ZIP code to identify:
-
-* City
-* County
-* State
-* Climate zone
-* Nearby tourism districts
-* Drive-market potential
-* Nearby lodging concentrations
-* Airports
-* Beaches
-* Lakes
-* parks
-* resort areas
-* entertainment districts
-* highways and visitor corridors
-
-The ZIP code should determine the plan rather than requiring the user to choose from a fixed list of tourism markets.
-
----
-
-# Slide 2: Business Category
-
-## Heading
-
-**What type of business are you promoting?**
-
-Use large selectable cards or radio buttons.
-
-### Food and beverage
-
-* Restaurant
-* Bar or brewery
-* Breakfast or brunch
-* Coffee shop
-* Ice cream or dessert
-* Fine dining
-* Quick-service restaurant
-* Dinner show
-* Food tour
-
-### Attractions and entertainment
-
-* Family attraction
-* Theme park
-* Museum
-* Aquarium
-* Live entertainment
-* Dinner theater
-* Escape room
-* Miniature golf
-* Mountain coaster
-* Water park
-* Indoor attraction
-
-### Outdoor recreation
-
-* Boat rental
-* Fishing charter
-* Dolphin or wildlife tour
-* Jet ski rental
-* Kayak rental
-* Surfing lesson
-* Guided hiking tour
-* Zip line
-* Ski resort
-* Snowmobile rental
-* Golf course
-* Bicycle or scooter rental
-
-### Lodging and hospitality
-
-* Hotel
-* Resort
-* Vacation rental
-* Cabin rental
-* Campground
-* RV resort
-* Bed-and-breakfast
-* Property management company
-
-### Retail
-
-* Souvenir store
-* Beachwear store
-* Outdoor equipment store
-* Art gallery
-* Jewelry store
-* Specialty food retailer
-* Shopping center
-* Local craft store
-
-### Visitor services
-
-* Shuttle service
-* Rental car company
-* Golf cart rental
-* Parking service
-* Airport transportation
-* Tour operator
-* Wedding service
-* Photographer
-
-### Professional and emergency services
-
-* Vacation-home real estate
-* Personal injury law
-* Urgent care
-* Emergency dental
-* Towing
-* Automotive repair
-* Marine repair
-* Insurance
-* Wedding venue
-* Event planning
-
-### Other
-
-Radio button:
-
-* Other seasonal or tourism-related business
-
-Text field:
-
-`Describe your business`
-
----
-
-# Slide 3: Primary Product or Activity
-
-## Heading
-
-**What do you most want tourists to purchase?**
-
-Text field:
-
-`Example: Sunset cruise, family dinner, cabin reservation, attraction tickets, emergency dental visit`
-
-## Purchase type
-
-Radio buttons:
-
-* Individual purchase
-* Family or group purchase
-* Reservation
-* Ticket package
-* Rental
-* Overnight booking
-* Service appointment
-* Qualified lead
-* Professional consultation
-
-## Planner logic
-
-The planner uses the selected purchase type to determine the appropriate value calculation.
-
-Examples:
-
-* Restaurant: average party check
-* Attraction: average family ticket order
-* Hotel: average reservation value
-* Charter: average full booking
-* Retail: average transaction
-* Attorney: estimated signed-client value
-* Real estate: estimated commission value
-
----
-
-# Slide 4: Average Customer Value
-
-## Heading
-
-**What is the average value of one customer or booking?**
-
-Currency field:
-
-`$ Average transaction or booking value`
-
-Examples shown below the field:
-
-* Restaurant: average party check
-* Attraction: average family purchase
-* Hotel: average total stay
-* Tour: average reservation
-* Retail: average transaction
-* Professional service: average completed-client value
-
-## Value range fallback
-
-When the user does not know the exact amount, provide radio buttons:
-
-* Under $50
-* $50–$99
-* $100–$249
-* $250–$499
-* $500–$999
-* $1,000–$2,499
-* $2,500–$9,999
-* $10,000 or more
-
-## Gross profit margin
-
-Do not ask the user to enter gross margin.
-
-The planner should apply an assumed industry gross profit margin based on the selected category.
-
-Examples of planning assumptions:
-
-| Business category          | Assumed gross profit margin |
-| -------------------------- | --------------------------: |
-| Restaurant or bar          |                     60%–70% |
-| Retail                     |                     40%–55% |
-| Attraction                 |                     60%–75% |
-| Tour or charter            |                     45%–65% |
-| Rental activity            |                     50%–70% |
-| Hotel or lodging           |                     55%–70% |
-| Vacation rental management |                     30%–50% |
-| Professional service       |                     60%–85% |
-| Real estate                |                     70%–90% |
-| Emergency service          |                     50%–70% |
-
-The report should clearly label these as industry planning assumptions.
-
----
-
-# Slide 5: Business Objective
-
-## Heading
-
-**What is your primary goal?**
-
-Radio buttons:
-
-* Increase reservations
-* Sell more tickets
-* Increase foot traffic
-* Increase same-day purchases
-* Reach tourists before arrival
-* Reach visitors already nearby
-* Promote slower days or times
-* Increase calls or inquiries
-* Generate qualified leads
-* Build overall destination awareness
-
-## Secondary goal
-
-Optional checkboxes:
-
-* Improve weekday demand
-* Increase morning traffic
-* Increase afternoon traffic
-* Increase evening traffic
-* Promote weather-dependent offers
-* Promote indoor alternatives
-* Reach hotel and resort guests
-* Reach competitor visitors
-
----
-
-# Slide 6: Customer Planning Window
-
-## Heading
-
-**When do customers usually make their decision?**
-
-Radio buttons:
-
-* The same day
-* One to three days before
-* Four to seven days before
-* One to four weeks before
-* One to three months before
-* More than three months before
-* Let Smart 1 estimate
-
-## Planner logic
-
-The selection determines how much of the media plan is allocated to:
-
-### Pre-arrival marketing
-
-Travel planning, destination awareness, and advance reservations.
-
-### In-market marketing
-
-Immediate decisions, nearby offers, directions, calls, and same-day booking.
-
----
-
-# Slide 7: Seasonality Estimate
-
-## Heading
-
-**We estimated your tourism seasons.**
-
-The planner should automatically estimate the seasons based on:
-
-* ZIP code
-* Climate
-* Business category
-* Local tourism pattern
-* School travel periods
-* Typical destination behavior
-* The selected activity
-
-Display the estimated months.
-
-## Example output
-
-### Primary season
-
-`June through August`
-
-### Shoulder season
-
-`March through May and September through October`
-
-### Slow season
-
-`November through February`
-
-## User response
-
-Radio buttons:
-
-* This looks accurate
-* Mostly accurate
-* Adjust the seasons
-
-When “Adjust the seasons” is selected, allow the user to select months for:
-
-* Primary season
-* Shoulder season
-* Slow season
-
-Do not ask the user to build the seasonality calendar from scratch unless they choose to adjust it.
-
----
-
-# Slide 8: Most Profitable Dayparts
-
-## Heading
-
-**We estimated your strongest advertising times.**
-
-The planner should automatically recommend dayparts based on the business category.
-
-## Examples
-
-### Restaurant
-
-* Breakfast
-* Lunch
-* Happy hour
-* Dinner
-* Late night
-
-### Attraction
-
-* Morning planning period
-* Midday
-* Early evening
-* Weekend mornings
-
-### Lodging
-
-* Evening research
-* Weekend planning
-* Lunch-hour research
-* Sunday travel planning
-
-### Outdoor activity
-
-* Early morning
-* Evening planning period
-* Weekend mornings
-* One to three days before favorable weather
-
-## User response
-
-Radio buttons:
-
-* Use the recommended times
-* Advertise throughout the day
-* Let me adjust the times
-
-Optional checkboxes when adjusting:
-
-* Early morning
-* Morning
-* Midday
-* Afternoon
-* Evening
-* Late night
-
----
-
-# Slide 9: Holiday Opportunities
-
-## Heading
-
-**We identified your strongest holiday opportunities.**
-
-The planner should automatically select relevant holidays and travel periods based on the ZIP code, climate, and business activity.
-
-Possible opportunities include:
-
-* New Year travel
-* Presidents Day weekend
-* Spring break
-* Easter travel
-* Memorial Day weekend
-* Independence Day
-* Labor Day weekend
-* Fall break
-* Halloween travel
-* Thanksgiving
-* Christmas travel
-* Winter school break
-* Valentine’s Day
-* Mother’s Day
-* Father’s Day
-
-## User response
-
-Radio buttons:
-
-* Include recommended holiday periods
-* Do not prioritize holidays
-* Let me choose
-
-When “Let me choose” is selected, show holiday checkboxes.
-
-The planner should not include local festivals, concerts, conventions, or special events.
-
----
-
-# Slide 10: Weather-Smart Advertising
-
-## Heading
-
-**Use the weather to avoid wasting advertising dollars.**
-
-The planner should recommend weather-based delivery adjustments using the business ZIP code, local climate, and selected activity.
-
-## Weather strategy options
-
-Radio buttons:
-
-* Use Smart 1’s recommended weather settings
-* Keep advertising consistent in all weather
-* Let me choose weather settings
-
-## Recommended weather logic
-
-Weather should normally be used to **slow down or reduce delivery**, rather than completely stop the campaign.
-
-### Outdoor businesses
-
-Reduce advertising when:
-
-* Heavy rain is forecast
-* Winds exceed activity-safe levels
-* Temperatures are outside the activity’s practical range
-* Severe storms are expected
-* Snow or ice affects travel
-* Poor marine conditions are forecast
-
-Increase normal delivery when:
-
-* Temperatures are favorable
-* Weekend weather improves
-* Rain clears
-* Boating or beach conditions improve
-* Snow conditions support winter activities
-
-### Indoor attractions
-
-Reduce general destination advertising during unusually low visitor-demand weather.
-
-Maintain or moderately increase in-market delivery during:
-
-* Rain
-* Excessive heat
-* Cold weather
-* Poor outdoor conditions
-
-Suggested messaging:
-
-* Rainy-day activity
-* Stay cool indoors
-* Family fun away from the weather
-* Open today
-* Reserve your indoor experience
-
-### Restaurants and bars
-
-Reduce delivery during periods when tourism traffic is expected to be lower.
-
-Prioritize delivery around:
-
-* Meal decision windows
-* Rain that keeps visitors near lodging districts
-* Warm patio weather
-* Cold-weather dining opportunities
-* High visitor travel weekends
-
-### Lodging businesses
-
-Reduce short-term media when severe weather is likely to suppress travel.
-
-Maintain future-booking media when the weather only affects the current week.
-
-### Weather pacing options
-
-Checkboxes:
-
-* Reduce delivery by 25% during unfavorable conditions
-* Reduce delivery by 50% during unfavorable conditions
-* Maintain only essential in-market advertising
-* Shift budget into the next favorable period
-* Increase delivery when favorable weather returns
-
-Recommended default:
-
-> Reduce delivery by 40% during unfavorable conditions and move the saved budget into the next high-opportunity period.
-
----
-
-# Slide 11: Recommended Audience Strategy
-
-## Heading
-
-**Who should Smart 1 reach?**
-
-The planner recommends audiences based on the ZIP code and business activity.
-
-## Before-arrival audiences
-
-Checkboxes shown as recommendations:
-
-* Travelers researching the destination
-* People shopping for lodging
-* Family vacation planners
-* Couples planning getaways
-* Road-trip travelers
-* Outdoor recreation enthusiasts
-* Beach travelers
-* Boaters
-* Golf travelers
-* Ski travelers
-* Wedding travelers
-* Likely visitors from feeder markets
-
-## In-market audiences
-
-* Hotel and resort guests
-* Vacation rental guests
-* Campground and RV resort visitors
-* Beach visitors
-* Park visitors
-* Attraction visitors
-* Airport arrivals
-* Cruise passengers
-* Competitor visitors
-* Shopping district visitors
-* Visitors traveling on nearby highways
-
-## User response
-
-Radio buttons:
-
-* Use all recommended audiences
-* Focus primarily on pre-arrival visitors
-* Focus primarily on visitors already nearby
-* Let me choose audiences
-
----
-
-# Slide 12: Smart 1 Product Plan
-
-## Heading
-
-**Your recommended Smart 1 media products**
-
-Do not include paid search or paid social in the automatic plan.
-
-## Core advertising products
-
-### Programmatic display
-
-Use for:
-
-* Travel-intent audiences
-* Interest and behavioral targeting
-* Feeder-market targeting
-* Weather-adjusted delivery
-* Mobile and desktop awareness
-* Retargeting website visitors
-
-### Location targeting and geofencing
-
-Use for:
-
-* Hotels
-* Resorts
-* Vacation rentals
-* Campgrounds
-* Airports
-* Beaches
-* Parks
-* Attractions
-* Marinas
-* Competitors
-* Shopping areas
-* Highway travel locations
-
-### Location look-back
-
-Use to identify and reach people who recently visited relevant tourism locations during the current travel period.
-
-### Mobile display
-
-Use for:
-
-* Same-day decisions
-* Nearby offers
-* Directions
-* Calls
-* Reservations
-* Ticket purchases
-
-### Mobile and online video
-
-Use to show the customer experience and generate interest.
-
-Recommended for:
-
-* Attractions
-* Lodging
-* Tours
-* Recreation
-* Restaurants
-* Entertainment
-
-### Connected TV
-
-Use for pre-arrival destination awareness in relevant feeder markets.
-
-Recommended for businesses with:
-
-* Higher average transaction values
-* Longer booking windows
-* Strong visual experiences
-* Regional destination appeal
-
-### Streaming radio
-
-Use for:
-
-* Road-trip travelers
-* Destination planners
-* Visitors approaching the market
-* Families and outdoor audiences
-
-### Podcast advertising
-
-Use when the selected audience aligns with:
-
-* Travel
-* Outdoor recreation
-* Parenting
-* Food and dining
-* Sports
-* Boating
-* Fishing
-* Golf
-* Lifestyle interests
-
-### Digital Out-of-Home
-
-Use where inventory is available near:
-
-* Airports
-* Hotels
-* Gas stations
-* Restaurants
-* Entertainment districts
-* Shopping districts
-* Highway corridors
-* Visitor centers
-
-### Smart 1 Snap
-
-Optional for businesses that can use:
-
-* QR codes
-* Visitor offers
-* Contests
-* In-store promotions
-* Text opt-ins
-* Loyalty enrollment
-
----
-
-# Slide 13: Smart 1 Suite
-
-## Heading
-
-**Keep your visitor communications in one place**
-
-Smart 1 Suite should be included for:
-
-### Review management
-
-* Monitor reviews
-* Request new reviews
-* Respond to customer feedback
-* Improve destination search credibility
-
-### Social media planner
-
-* Plan seasonal posts
-* Schedule content
-* Coordinate promotional messages
-* Maintain consistent activity throughout the season
-
-### Consolidated messaging dashboard
-
-* View customer messages in one location
-* Respond to inquiries
-* Manage communication from multiple sources
-* Reduce missed visitor questions
-
-## Additional options
-
-Display this note:
-
-> Smart 1 Suite includes additional marketing automation, lead follow-up, scheduling, and customer communication options. These can be added after a Smart 1 review if they support your business goals.
-
-Do not automatically include the additional Suite features in the plan.
-
----
-
-# Slide 14: Good, Better, Best Plan Selection
-
-## Heading
-
-**Choose your recommended investment level**
-
-Display three selectable cards with radio buttons.
-
----
-
-## Good
-
-### Capture visitors already looking for something to do
-
-Recommended for:
-
-* Small businesses
-* Short buying windows
-* Lower average ticket values
-* Businesses testing seasonal advertising
-
-Typical products:
-
-* Programmatic display
-* Mobile display
-* Local geofencing
-* Retargeting
-* Weather-based pacing
-* Smart 1 Suite core tools
-* Monthly reporting
-
-Suggested monthly range:
-
-**$2,500–$5,000**
-
----
-
-## Better
-
-### Reach tourists before arrival and while they are nearby
-
-Recommended for:
-
-* Attractions
-* Restaurants
-* Tour operators
-* Lodging businesses
-* Recreation companies
-* Established seasonal businesses
-
-Typical products:
-
-* Everything in Good
-* Travel-intent audiences
-* Multiple lodging and visitor geofences
-* Mobile video
-* Streaming radio
-* Location look-back
-* Expanded weather pacing
-* Multiple creative messages
-* Smart 1 Suite core tools
-
-Suggested monthly range:
-
-**$5,000–$12,500**
-
----
-
-## Best
-
-### Build destination awareness and own the seasonal opportunity
-
-Recommended for:
-
-* Resorts
-* Major attractions
-* Hospitality groups
-* High-value tours
-* Regional destination businesses
-* Higher-ticket services
-
-Typical products:
-
-* Everything in Better
-* Connected TV
-* Online video
-* Podcast targeting
-* Digital Out-of-Home
-* Multiple feeder markets
-* Advanced location strategies
-* Expanded creative
-* Frequent optimization
-* Smart 1 Suite core tools
-
-Suggested monthly range:
-
-**$12,500–$30,000+**
-
----
-
-# Slide 15: Budget and ROI Calculation
-
-## Heading
-
-**Your estimated seasonal return**
-
-The planner calculates the suggested budget using:
-
-* Average booking or transaction value
-* Industry-assumed gross margin
-* Business category
-* Buying window
-* Destination competition
-* Local tourism opportunity
-* Season length
-* Selected media plan
-
-## Target acquisition cost
-
-The planner should estimate an allowable acquisition cost using the customer value and assumed gross margin.
-
-### Suggested planning ranges
-
-| Business type        |            Estimated target acquisition cost |
-| -------------------- | -------------------------------------------: |
-| Restaurant or bar    |               10%–20% of average party check |
-| Retail               |               10%–20% of average transaction |
-| Attraction           |                   15%–25% of family purchase |
-| Tour or activity     |                     15%–30% of booking value |
-| Lodging              |                 10%–25% of reservation value |
-| Professional service |           Based on lead value and close rate |
-| Real estate          | Based on estimated commission and close rate |
-
-## Projected customer calculation
-
-**Estimated customers or bookings = Media budget ÷ estimated acquisition cost**
-
-## Projected revenue
-
-**Estimated revenue = Estimated customers or bookings × average transaction value**
-
-## Revenue return
-
-**Estimated revenue return = Estimated revenue ÷ media budget**
-
-Display:
-
-* Suggested monthly budget
-* Estimated customer acquisition cost
-* Estimated bookings or transactions
-* Estimated monthly revenue
-* Estimated revenue-to-ad-spend ratio
-* Break-even customer count
-
-Do not calculate or ask for maximum monthly booking capacity.
-
----
-
-# Slide 16: Seasonal Budget Distribution
-
-## Heading
-
-**Spend more when tourism demand is stronger**
-
-The planner automatically distributes the selected monthly or seasonal budget.
-
-## Suggested allocation
-
-### Primary season
-
-* 55%–65% of seasonal investment
-* Highest audience reach
-* Full channel mix
-* Strongest in-market coverage
-
-### Shoulder season
-
-* 25%–35% of seasonal investment
-* Focus on efficient visitor opportunities
-* Greater use of weather triggers
-* Promote lower-demand weekdays and dayparts
-
-### Slow season
-
-* 5%–15% of seasonal investment
-* Maintain limited awareness
-* Focus on favorable-weather periods
-* Reduce waste
-* Preserve budget for stronger demand periods
-
-## Weather savings
-
-Any budget saved when delivery is reduced should be reassigned to:
-
-* The next favorable-weather period
-* The next holiday travel window
-* A stronger daypart
-* The primary season
-* The shoulder season when travel conditions improve
-
----
-
-# Slide 17: Recommended Marketing Plan
-
-## Heading
-
-**Your Smart 1 Seasonal Tourism Plan**
-
-The completed report should show:
-
-### Business overview
-
-* Business category
-* ZIP code
-* Destination type
-* Primary activity
-* Average transaction
-* Assumed industry margin
-
-### Seasonal overview
-
-* Primary season
-* Shoulder season
-* Slow season
-* Most profitable dayparts
-* Recommended holiday periods
-* Weather pacing rules
-
-### Audience plan
-
-* Before-arrival audiences
-* In-market audiences
-* Feeder markets
-* Hotels and lodging areas
-* Visitor destinations
-* Competitor locations
-* Travel corridors
-
-### Product plan
-
-* Programmatic display
-* Location targeting
-* Location look-back
-* Mobile display
-* Online and mobile video
-* Connected TV when appropriate
-* Streaming radio
-* Podcasts when appropriate
-* Digital Out-of-Home when available
-* Smart 1 Snap when appropriate
-* Smart 1 Suite core tools
-
-### Investment plan
-
-* Good
-* Better
-* Best
-* Monthly recommendation
-* Seasonal recommendation
-* Estimated acquisition cost
-* Estimated customers
-* Estimated revenue
-* Estimated return
-
----
-
-# Slide 18: Customization and Contact
-
-## Heading
-
-**Would you like Smart 1 to customize your plan?**
-
-Radio buttons:
-
-* Use this suggested plan
-* Request a custom plan
-* Speak with a Smart 1 strategist
-* Send me the report first
-
-## Contact fields
-
-* Name
-* Business name
-* Email
-* Phone
-* Preferred contact method
-
-Radio buttons:
-
-* Email
-* Phone
-* Text
-
----
-
-# Final Planner Disclaimer
-
-> **Suggested Planning Disclaimer:** This report is a suggested marketing plan based on the business information provided, available market data, industry gross-margin assumptions, modeled audience estimates, local climate information, and AI-assisted planning. Seasonality, dayparts, holiday opportunities, audience size, media costs, customer acquisition, revenue, and return-on-investment figures are estimates and are not guarantees of performance. Actual results may vary based on competition, weather, visitor demand, pricing, creative, website performance, tracking, market conditions, and other factors. Media inventory, pricing, targeting, and final campaign recommendations must be confirmed before activation. To customize the geographic coverage, products, timing, messaging, or budget, contact Smart 1 Marketing.
-
-## Short display version
-
-> This is a suggested marketing plan using estimated market conditions and industry assumptions. Results are not guaranteed. Contact Smart 1 Marketing to customize the targeting, media products, timing, or budget.
-
-# Excluded from the automatic plan
-
-The planner should not automatically include:
-
-* Paid search
-* Paid social
-* Smart 1 Sites
-* Full Smart 1 Suite automation
-* Special events
-* Local festivals
-* Blackout dates
-* Sellout predictions
-* Capacity estimates
-* Capacity-based campaign triggers
-* Post-trip advertising
-
-Additional marketing products and Smart 1 Suite capabilities may be recommended following a strategy review.
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Smart 1 Google Account Command Center</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    html { scroll-behavior: smooth; }
+    .nav-anchor-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: #f0f4f9;
+      border: 1px solid #d8e0eb;
+      border-radius: 12px;
+    }
+    .nav-anchor-bar a {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1a2e58;
+      background: #fff;
+      padding: 6px 12px;
+      border: 1px solid #ccd6e5;
+      border-radius: 999px;
+      text-decoration: none;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .nav-anchor-bar a:hover {
+      background: #1a2e58;
+      color: #fff!important;
+      border-color: #1a2e58;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <div class="topline">
+        <div>
+          <h1>Smart 1 Google Account Command Center</h1>
+          <p>Search all connected Analytics, Tag Manager, Search Console, & Business Profiles instantly.</p>
+        </div>
+        <div class="auth">
+          <a class="btn" href="/login">+ Add Google Account</a>
+          {% if accounts %}<a href="/logout">Disconnect all</a>{% endif %}
+        </div>
+      </div>
+
+      <!-- QUICK-JUMP ANCHOR NAVIGATION BUTTONS -->
+      <nav class="nav-anchor-bar">
+        <a href="#primary-search">🔍 Quick Search</a>
+        <a href="#gtm-generator">⚡ GTM Event Generator</a>
+        <a href="#ask-analytics">💬 Ask GA4</a>
+        <a href="#ai-comparator">📊 AI Comparator</a>
+        <a href="#saved-reports">📁 Saved Reports</a>
+        <a href="#audit-logs">📜 Audit Logs</a>
+        <a href="#manual-gmb">📍 GMB Checker</a>
+        <a href="#connected-accounts">👥 Accounts</a>
+      </nav>
+
+      <!-- PRIMARY SEARCH SECTION -->
+      {% if accounts %}
+      <div id="primary-search" class="primary-search-section" style="margin-top:20px;">
+        <div class="filters">
+          <button class="filter active" data-platform="all">All Platforms</button>
+          <button class="filter" data-platform="analytics">Analytics & GTM</button>
+          <button class="filter" data-platform="gsc">Search Console</button>
+          <button class="filter" data-platform="gmb">Business Profiles</button>
+          <button id="refresh" class="refresh">Refresh Google data</button>
+        </div>
+        <div class="searchbox">
+          <input id="q" autocomplete="off" autofocus placeholder="Type client name, domain, GA4 ID, GTM ID, or email to search all sites...">
+        </div>
+        <div id="status" class="status">Start typing to search all connected accounts.</div>
+        
+        <!-- SEPARATE RESULTS BOXES -->
+        <div id="results-container" class="results-container">
+          <!-- 1. GA4 / GTM Results Box -->
+          <div id="box-analytics" class="result-category-box" style="display:none;">
+            <h3 class="category-header">📊 Google Analytics & Tag Manager</h3>
+            <div id="results-analytics" class="results"></div>
+          </div>
+
+          <!-- 2. Google Business Profile Results Box -->
+          <div id="box-gmb" class="result-category-box" style="display:none;">
+            <h3 class="category-header">📍 Google Business Profiles (GMB)</h3>
+            <div id="results-gmb" class="results"></div>
+          </div>
+
+          <!-- 3. Search Console (Webmaster Tools) Results Box -->
+          <div id="box-gsc" class="result-category-box" style="display:none;">
+            <h3 class="category-header">🔍 Google Search Console (Webmaster Tools)</h3>
+            <div id="results-gsc" class="results"></div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="connect-panel">
+        <strong>Connect your Google accounts</strong>
+        <p>Add adops@smart1marketing.com, smartadops@gmail.com, smart1sites@gmail.com, and gmb@smart1marketing.com to combine records across GA4, GTM, Search Console, and GMB.</p>
+        <a class="btn connect" href="/login">Connect Google Account</a>
+      </div>
+      {% endif %}
+
+      <hr style="margin: 28px 0 20px; border: 0; border-top: 1px solid #e1e7ef;">
+
+      <!-- AI GTM EVENT GENERATOR WIDGET -->
+      <div id="gtm-generator" class="manual-lookup-card">
+        <h3>⚡ AI Site Analysis & GTM Event Auto-Generator</h3>
+        <p>Type a website or landing page URL to analyze elements and generate GTM tracking events:</p>
+        <div class="manual-input-group">
+          <input id="gtm-gen-url" autocomplete="off" placeholder="e.g. https://buckeyelakewinery.com/contact">
+          <button id="gtm-gen-btn" class="btn">Analyze Page Elements</button>
+        </div>
+        <div id="gtm-gen-results" style="margin-top:12px;"></div>
+      </div>
+
+      <!-- GA4 NATURAL LANGUAGE "ASK ANALYTICS" WIDGET -->
+      <div id="ask-analytics" class="manual-lookup-card" style="margin-top:20px;">
+        <h3>💬 Ask Analytics a Question Directly</h3>
+        <p>Type any plain-English question to pull immediate metric breakdowns from GA4:</p>
+        <div class="manual-input-group">
+          <input id="ask-q" autocomplete="off" placeholder="e.g. What were top device categories last month? or Top landing pages?">
+          <button id="ask-btn" class="btn">Ask GA4 Data</button>
+        </div>
+        <div id="ask-results" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- GA4 AI COMPARISON ENGINE WIDGET -->
+      <div id="ai-comparator" class="ai-comparator-card" style="margin-top:20px;">
+        <h3>GA4 AI Performance Comparator</h3>
+        <p>Compare date periods for any connected GA4 property and get instant automated AI insights.</p>
+        
+        <div class="comp-grid">
+          <div>
+            <label>GA4 Property ID & Account:</label>
+            <input id="comp-property-id" placeholder="e.g. 312345678">
+          </div>
+          <div>
+            <label>Google Login Email:</label>
+            <input id="comp-login" placeholder="e.g. adops@smart1marketing.com">
+          </div>
+          <div>
+            <label>Preset Date Range:</label>
+            <select id="comp-date-preset">
+              <option value="last_month" selected>Last Month</option>
+              <option value="mtd">This Month to Date</option>
+              <option value="last_week">Last Week</option>
+              <option value="last_quarter">Last Quarter</option>
+              <option value="ytd">This Year to Date</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+          </div>
+          <div>
+            <label>Compare Against:</label>
+            <select id="comp-period-type">
+              <option value="previous_period">Previous Period (MoM/WoW)</option>
+              <option value="previous_year">Previous Year (YoY)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="comp-grid-secondary">
+          <div>
+            <label>Analysis Scope:</label>
+            <select id="comp-scope-type">
+              <option value="site">Entire Site</option>
+              <option value="top_10">Top 10 Pages</option>
+              <option value="top_25">Top 25 Pages</option>
+              <option value="top_50">Top 50 Pages</option>
+              <option value="page">Search Specific Page Path</option>
+            </select>
+          </div>
+
+          <div id="page-path-wrapper" style="display:none;">
+            <label>Page Path Search Filter:</label>
+            <input id="comp-page-path" placeholder="/contact-us, /blog/, or regex">
+          </div>
+
+          <div>
+            <label>Source / Medium Channel:</label>
+            <select id="comp-source-medium">
+              <option value="">All Sources / Mediums (No Filter)</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Report Sentiment Mode:</label>
+            <select id="comp-tone">
+              <option value="positive" selected>🟢 Positive / Client Wins Mode</option>
+              <option value="troubling">🔴 Constructive / Optimization Needed</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="custom-date-wrapper" style="margin-top:10px;">
+          <label>Selected Period (P1):</label>
+          <div style="display:flex; gap:6px;">
+            <input type="date" id="p1-start">
+            <input type="date" id="p1-end">
+          </div>
+        </div>
+
+        <button id="run-ga4-comp" class="btn" style="margin-top:14px;">Run GA4 Comparison & AI Analysis</button>
+        <div id="ai-comp-results"></div>
+      </div>
+
+      <!-- SAVED REPORTS HISTORY PANEL -->
+      <div id="saved-reports" class="saved-reports-section" style="margin-top: 20px; padding: 16px; background: #f8fafc; border: 1px solid #dfe6f0; border-radius: 12px;">
+        <h3 style="margin:0 0 6px; font-size:16px; color:#1a2e58;">Saved Historical Reports</h3>
+        <div style="display:flex; gap:10px;">
+          <input id="search-saved-q" placeholder="Search saved reports by customer name, title, or property ID..." style="flex:1; padding:8px 10px; border:1px solid #ccd6e5; border-radius:6px; font-size:13px;">
+          <button id="btn-search-saved" class="btn" style="padding:8px 14px; font-size:13px;">Search History</button>
+        </div>
+        <div id="saved-reports-list" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- GTM AUDIT LOG SEARCH PANEL -->
+      <div id="audit-logs" class="saved-reports-section" style="margin-top: 20px; padding: 16px; background: #f8fafc; border: 1px solid #dfe6f0; border-radius: 12px;">
+        <h3 style="margin:0 0 6px; font-size:16px; color:#1a2e58;">📜 GTM Change & Deployment Audit Logs</h3>
+        <p style="font-size:12px; color:#69758a; margin:0 0 10px;">Search date-stamped logs of all tags and triggers created or modified through this portal:</p>
+        <div style="display:flex; gap:10px;">
+          <input id="search-gtm-logs-q" placeholder="Search logs by tag name, container ID, email, or action type..." style="flex:1; padding:8px 10px; border:1px solid #ccd6e5; border-radius:6px; font-size:13px;">
+          <button id="btn-search-gtm-logs" class="btn" style="padding:8px 14px; font-size:13px; background:#24519c!important;">Search Logs</button>
+        </div>
+        <div id="gtm-logs-list" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- MANUAL GMB CHECKER -->
+      <div id="manual-gmb" class="manual-lookup-card" style="margin-top:20px;">
+        <h3>Manual GMB & Claim Checker</h3>
+        <p>Type a business name, city, or website domain to generate quick audit and claim links:</p>
+        <div class="manual-input-group">
+          <input id="manual-q" autocomplete="off" placeholder="e.g., Buckeye Lake Winery or buckeyelakewinery.com">
+          <button id="manual-btn" class="btn">Generate Links</button>
+        </div>
+        <div id="manual-results"></div>
+      </div>
+
+      <!-- CONNECTED ACCOUNTS FOOTER BAR -->
+      <div id="connected-accounts" class="accounts" style="margin-top:28px;">
+        <div class="accounts-title">Connected Google Accounts</div>
+        {% if accounts %}
+          {% for email in accounts %}
+          <div class="account-chip" data-email="{{ email }}">
+            <span class="check">✓</span>
+            <span>{{ email }}</span>
+            <button class="disconnect" data-email="{{ email }}" title="Disconnect">×</button>
+          </div>
+          {% endfor %}
+        {% else %}
+          <span class="muted">No Google accounts connected yet.</span>
+        {% endif %}
+      </div>
+    </section>
+  </main>
+
+  <!-- GTM CONTAINER INSPECTOR MODAL -->
+  <div id="gtm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:999;">
+    <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:650px; max-height:85vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; color:#1a2e58;">🏷️ GTM Container Live Inspector</h3>
+        <button id="gtm-modal-close" style="border:0; background:none; font-size:20px; cursor:pointer;">×</button>
+      </div>
+      <div id="gtm-modal-body" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
+  <!-- SAVE REPORT MODAL -->
+  <div id="save-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:999;">
+    <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:480px;">
+      <h3 style="margin-top:0; color:#1a2e58;">Save Report & Schedule Alerts</h3>
+      
+      <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">Customer Name:</label>
+      <input id="modal-cust-name" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+
+      <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">Summary Title:</label>
+      <input id="modal-sum-title" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+
+      <hr style="margin:16px 0; border:0; border-top:1px solid #eee;">
+
+      <label style="font-size:12px; font-weight:700; display:block;">Enable Automated Alerts?</label>
+      <select id="modal-enable-alerts" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+        <option value="no">No Alerts Needed</option>
+        <option value="yes">Yes, Send Periodic Updates</option>
+      </select>
+
+      <div id="alert-options-box" style="display:none; margin-top:10px;">
+        <label style="font-size:12px; font-weight:700; display:block;">Notification Email Address:</label>
+        <input id="modal-alert-email" type="email" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+
+        <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">Update Frequency:</label>
+        <select id="modal-alert-freq" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+          <option value="daily">Daily</option>
+          <option value="weekly" selected>Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+
+        <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">GoHighLevel Webhook URL:</label>
+        <input id="modal-ghl-url" placeholder="https://services.leadconnectorhq.com/hooks/..." style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+      </div>
+
+      <div style="margin-top:18px; display:flex; justify-content:flex-end; gap:8px;">
+        <button id="modal-cancel" style="padding:8px 14px; background:#edf1f6; border:0; border-radius:6px; cursor:pointer;">Cancel</button>
+        <button id="modal-confirm-save" class="btn">Save Report</button>
+      </div>
+    </div>
+  </div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
