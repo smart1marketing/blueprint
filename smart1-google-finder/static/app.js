@@ -17,6 +17,7 @@ function getBadgeClass(platformName) {
 }
 
 function renderCard(x) {
+  const domainGuess = x.search_extra || x.name || '';
   return `
     <article class="result">
       <div class="badge ${getBadgeClass(x.platform)}">${esc(x.platform)}</div>
@@ -28,7 +29,7 @@ function renderCard(x) {
       </div>
       <div style="display:flex; flex-direction:column; gap:6px;">
         ${x.open_url ? `<a class="open" target="_blank" rel="noopener" href="${esc(x.open_url)}">Open</a>` : ''}
-        ${x.platform === 'Google Analytics' ? `<button class="btn btn-analyze-ga4" data-id="${esc(x.resource_id)}" data-login="${esc(x.google_login)}" style="font-size:12px; padding:6px 10px; background:#1a2e58!important;">Analyze GA4 Traffic</button>` : ''}
+        ${x.platform === 'Google Analytics' ? `<button class="btn btn-auto-all" data-id="${esc(x.resource_id)}" data-login="${esc(x.google_login)}" data-name="${esc(x.name)}" data-extra="${esc(x.search_extra)}" style="font-size:12px; padding:6px 10px; background:#1a2e58!important;">⚡ Auto-Populate All Tools</button>` : ''}
         ${x.platform === 'Google Tag Manager' ? `<button class="btn btn-inspect-gtm" data-account="${esc(x.account_id)}" data-container="${esc(x.internal_container_id || x.resource_id)}" data-login="${esc(x.google_login)}" style="font-size:12px; padding:6px 10px; background:#24519c!important;">Inspect GTM Tags</button>` : ''}
       </div>
     </article>
@@ -77,12 +78,19 @@ function draw(items) {
     boxGsc.style.display = 'none';
   }
 
-  document.querySelectorAll('.btn-analyze-ga4').forEach(btn => {
+  // Universal Auto-Populate Button Listener
+  document.querySelectorAll('.btn-auto-all').forEach(btn => {
     btn.addEventListener('click', () => {
-      populateGa4Comparator(btn.dataset.id, btn.dataset.login);
+      autoPopulateAll(
+        btn.dataset.id, 
+        btn.dataset.login, 
+        btn.dataset.name, 
+        btn.dataset.extra
+      );
     });
   });
 
+  // GTM Inspection Button Listener
   document.querySelectorAll('.btn-inspect-gtm').forEach(btn => {
     btn.addEventListener('click', async () => {
       const account_id = btn.dataset.account;
@@ -128,6 +136,59 @@ function draw(items) {
       `;
     });
   });
+}
+
+// Master Universal Auto-Populate Function
+async function autoPopulateAll(propertyId, loginEmail, propertyName='', extraData='') {
+  // 1. Populate GA4 AI Performance Comparator
+  document.getElementById('comp-property-id').value = propertyId;
+  document.getElementById('comp-login').value = loginEmail;
+  document.getElementById('comp-date-preset').value = 'last_month';
+  applyPresetDates('last_month');
+
+  // 2. Populate GTM Auto-Event Generator URL
+  const gtmUrlInput = document.getElementById('gtm-gen-url');
+  if (gtmUrlInput) {
+    let cleanUrl = propertyName;
+    if (cleanUrl.includes('http') || cleanUrl.includes('.com') || cleanUrl.includes('.org') || cleanUrl.includes('.net')) {
+      gtmUrlInput.value = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;
+    } else if (extraData.includes('http') || extraData.includes('.com')) {
+      gtmUrlInput.value = extraData.startsWith('http') ? extraData : `https://${extraData}`;
+    }
+  }
+
+  // 3. Populate Manual GMB Audit Field
+  const manualGmbInput = document.getElementById('manual-q');
+  if (manualGmbInput) {
+    manualGmbInput.value = propertyName;
+  }
+
+  // 4. Smooth Scroll to AI Comparator Widget
+  const compCard = document.querySelector('.ai-comparator-card');
+  if (compCard) {
+    compCard.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // 5. Auto-Load Source/Medium Channels
+  const sourceSelect = document.getElementById('comp-source-medium');
+  sourceSelect.innerHTML = '<option value="">Loading available channels...</option>';
+
+  try {
+    const resp = await fetch('/api/ga4/channels', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ property_id: propertyId, google_login: loginEmail })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.channels && data.channels.length) {
+      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>' +
+        data.channels.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    } else {
+      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
+    }
+  } catch (err) {
+    sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
+  }
 }
 
 document.getElementById('gtm-modal-close').addEventListener('click', () => {
@@ -336,38 +397,6 @@ if (presetSelect) {
     applyPresetDates(e.target.value);
   });
   applyPresetDates('last_month');
-}
-
-async function populateGa4Comparator(propertyId, loginEmail) {
-  document.getElementById('comp-property-id').value = propertyId;
-  document.getElementById('comp-login').value = loginEmail;
-  document.getElementById('comp-date-preset').value = 'last_month';
-  applyPresetDates('last_month');
-
-  const compCard = document.querySelector('.ai-comparator-card');
-  if (compCard) {
-    compCard.scrollIntoView({ behavior: 'smooth' });
-  }
-
-  const sourceSelect = document.getElementById('comp-source-medium');
-  sourceSelect.innerHTML = '<option value="">Loading available channels...</option>';
-
-  try {
-    const resp = await fetch('/api/ga4/channels', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ property_id: propertyId, google_login: loginEmail })
-    });
-    const data = await resp.json();
-    if (resp.ok && data.channels && data.channels.length) {
-      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>' +
-        data.channels.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-    } else {
-      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
-    }
-  } catch (err) {
-    sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
-  }
 }
 
 async function search() {
