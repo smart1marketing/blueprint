@@ -3,13 +3,14 @@ import os
 import secrets
 import sqlite3
 import time
+import re
 import logging
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 import requests
 from bs4 import BeautifulSoup
-from flask import Flask, redirect, render_template, request, session, url_for, jsonify
+from flask import Flask, redirect, render_template, request, session, url_for, jsonify, g
 from flask_session import Session
 from cryptography.fernet import Fernet, InvalidToken
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -55,15 +56,6 @@ SCOPES = [
 CACHE = {}
 
 
-def load_aliases():
-    path = os.path.join(os.path.dirname(__file__), "clients.json")
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
 def _fernet():
     if not TOKEN_ENCRYPTION_KEY:
         raise RuntimeError("TOKEN_ENCRYPTION_KEY is not configured.")
@@ -73,17 +65,33 @@ def _fernet():
         raise RuntimeError("TOKEN_ENCRYPTION_KEY must be a valid Fernet key.") from exc
 
 
-def _db():
-    db_dir = os.path.dirname(TOKEN_DB_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    conn = sqlite3.connect(TOKEN_DB_PATH)
-    conn.row_factory = sqlite3.Row
+def get_db():
+    if "db" not in g:
+        db_dir = os.path.dirname(TOKEN_DB_PATH)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+        g.db = sqlite3.connect(TOKEN_DB_PATH)
+        g.db.row_factory = sqlite3.Row
+        # Enable Write-Ahead Logging for high concurrency
+        g.db.execute("PRAGMA journal_mode=WAL;")
+        init_db(g.db)
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(error):
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
+def init_db(conn):
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS google_accounts (
             email TEXT PRIMARY KEY,
             refresh_token_enc TEXT NOT NULL,
+            status TEXT DEFAULT 'ACTIVE',
             connected_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         )
@@ -130,15 +138,14 @@ def _db():
         """
     )
     conn.commit()
-    return conn
 
 
 def connected_accounts():
     try:
-        with _db() as conn:
-            rows = conn.execute(
-                "SELECT email, refresh_token_enc FROM google_accounts ORDER BY email"
-            ).fetchall()
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT email, refresh_token_enc, status FROM google_accounts ORDER BY email"
+        ).fetchall()
         f = _fernet()
         accounts = []
         for row in rows:
@@ -146,7 +153,7 @@ def connected_accounts():
                 token = f.decrypt(row["refresh_token_enc"].encode("utf-8")).decode("utf-8")
             except InvalidToken:
                 continue
-            accounts.append({"email": row["email"], "refresh_token": token})
+            accounts.append({"email": row["email"], "refresh_token": token, "status": row["status"]})
         return accounts
     except Exception:
         return []
@@ -155,43 +162,66 @@ def connected_accounts():
 def save_account(email, refresh_token):
     now = int(time.time())
     token_enc = _fernet().encrypt(refresh_token.encode("utf-8")).decode("utf-8")
-    with _db() as conn:
-        conn.execute(
-            """
-            INSERT INTO google_accounts (email, refresh_token_enc, connected_at, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(email) DO UPDATE SET
-                refresh_token_enc=excluded.refresh_token_enc,
-                updated_at=excluded.updated_at
-            """,
-            (email.lower(), token_enc, now, now),
-        )
-        conn.commit()
+    conn = get_db()
+    conn.execute(
+        """
+        INSERT INTO google_accounts (email, refresh_token_enc, status, connected_at, updated_at)
+        VALUES (?, ?, 'ACTIVE', ?, ?)
+        ON CONFLICT(email) DO UPDATE SET
+            refresh_token_enc=excluded.refresh_token_enc,
+            status='ACTIVE',
+            updated_at=excluded.updated_at
+        """,
+        (email.lower(), token_enc, now, now),
+    )
+    conn.commit()
+
+
+def mark_account_reauth(email):
+    conn = get_db()
+    conn.execute("UPDATE google_accounts SET status='REAUTH_REQUIRED' WHERE email=?", (email.lower(),))
+    conn.commit()
 
 
 def delete_account(email):
-    with _db() as conn:
-        conn.execute("DELETE FROM google_accounts WHERE email = ?", (email.lower(),))
-        conn.commit()
+    conn = get_db()
+    conn.execute("DELETE FROM google_accounts WHERE email = ?", (email.lower(),))
+    conn.commit()
 
 
 def is_allowed(email):
     return not ALLOWED_EMAILS or email.lower() in ALLOWED_EMAILS
 
 
-def refresh_access_token(refresh_token):
-    r = requests.post(
-        "https://oauth2.googleapis.com/token",
-        data={
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
-        timeout=10,
-    )
-    r.raise_for_status()
-    return r.json()["access_token"]
+def refresh_access_token(email, refresh_token):
+    try:
+        r = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        return r.json()["access_token"]
+    except requests.exceptions.HTTPError as exc:
+        if exc.response.status_code in (400, 401):
+            mark_account_reauth(email)
+            raise RuntimeError(f"Authentication token for {email} was revoked or expired. Re-login required.") from exc
+        raise
+
+
+def sanitize_regex(pattern):
+    if not pattern:
+        return ""
+    try:
+        re.compile(pattern)
+        return pattern
+    except re.error:
+        return re.escape(pattern)
 
 
 def google_get(access_token, url, params=None):
@@ -199,7 +229,7 @@ def google_get(access_token, url, params=None):
         url,
         headers={"Authorization": f"Bearer {access_token}"},
         params=params or {},
-        timeout=10,
+        timeout=12,
     )
     r.raise_for_status()
     return r.json()
@@ -424,18 +454,6 @@ def fetch_gsc_items(access_token, google_login):
     return items
 
 
-def client_alias_tokens(query):
-    aliases = load_aliases()
-    q = query.lower().strip()
-    tokens = {q}
-    for canonical, data in aliases.items():
-        vals = [canonical] + data.get("aliases", [])
-        lowered = [str(v).lower() for v in vals]
-        if any(q in v or v in q for v in lowered):
-            tokens.update(lowered)
-    return tokens
-
-
 def get_account_index(account, force=False):
     email = account["email"].lower()
     cached = CACHE.get(email, {"expires": 0, "items": []})
@@ -443,7 +461,7 @@ def get_account_index(account, force=False):
     if not force and cached["expires"] > now:
         return cached["items"]
 
-    access_token = refresh_access_token(account["refresh_token"])
+    access_token = refresh_access_token(email, account["refresh_token"])
     items = (
         fetch_ga_items(access_token, email)
         + fetch_gtm_items(access_token, email)
@@ -465,7 +483,7 @@ def get_index(force=False):
     return items, errors
 
 
-def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown, tone="positive"):
+def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown, tone="positive", preset="executive"):
     sessions_p1 = m1.get("sessions", 0)
     sessions_p2 = m2.get("sessions", 0)
     engaged_p1 = m1.get("engagedSessions", 0)
@@ -480,7 +498,8 @@ def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown, tone
         sess_change = 100.0 if sessions_p1 > 0 else 0.0
         verdict = f"Selected period recorded **{sessions_p1:,}** sessions (Baseline prior period recorded {sessions_p2:,} sessions)."
 
-    summary_tone = "Positive Performance Highlights" if tone == "positive" else "Areas for Optimization & Attention"
+    prefix = "📊 Executive Brief" if preset == "executive" else ("🛒 E-Commerce Audit" if preset == "ecommerce" else "📍 Local Presence Review")
+    summary_tone = f"{prefix}: {('Positive Highlights' if tone == 'positive' else 'Optimization Areas')}"
     insights = [verdict]
 
     eng_rate_p1 = (engaged_p1 / sessions_p1 * 100) if sessions_p1 > 0 else 0
@@ -530,10 +549,7 @@ def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown, tone
 
 @app.route("/")
 def index():
-    return render_template(
-        "index.html",
-        accounts=[a.get("email", "") for a in connected_accounts()],
-    )
+    return render_template("index.html", accounts=connected_accounts())
 
 
 @app.route("/reports")
@@ -658,7 +674,6 @@ def api_search():
     if not q:
         return jsonify({"results": [], "errors": []})
 
-    tokens = client_alias_tokens(q)
     indexed, errors = get_index()
     results = []
     seen = set()
@@ -677,7 +692,7 @@ def api_search():
             item.get("name", ""), item.get("account_name", ""), item.get("account_id", ""),
             item.get("resource_id", ""), item.get("search_extra", ""), item.get("google_login", "")
         ]).lower()
-        if any(t and t in haystack for t in tokens):
+        if q.lower() in haystack:
             key = (item.get("platform"), item.get("account_id"), item.get("resource_id"), item.get("google_login"))
             if key not in seen:
                 seen.add(key)
@@ -702,7 +717,7 @@ def api_gtm_inspect():
         return jsonify({"error": f"Account {google_login} is not connected."}), 404
 
     try:
-        access_token = refresh_access_token(account["refresh_token"])
+        access_token = refresh_access_token(google_login, account["refresh_token"])
         ws_url = f"https://tagmanager.googleapis.com/tagmanager/v2/accounts/{account_id}/containers/{container_id}/workspaces"
         workspaces = google_get(access_token, ws_url).get("workspace", [])
         if not workspaces:
@@ -800,7 +815,7 @@ def gtm_deploy_event():
         return jsonify({"error": f"Account {google_login} is not connected."}), 404
 
     try:
-        access_token = refresh_access_token(account["refresh_token"])
+        access_token = refresh_access_token(google_login, account["refresh_token"])
         ws_url = f"https://tagmanager.googleapis.com/tagmanager/v2/accounts/{account_id}/containers/{container_id}/workspaces"
         workspaces = google_get(access_token, ws_url).get("workspace", [])
         if not workspaces:
@@ -824,28 +839,28 @@ def gtm_deploy_event():
         created_tag = google_post(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/tags", tag_body)
 
         now = int(time.time())
-        with _db() as conn:
-            conn.execute(
-                """
-                INSERT INTO gtm_change_logs (google_login, account_id, container_id, action_type, tag_name, details, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    google_login,
-                    account_id,
-                    container_id,
-                    "TAG_DEPLOYED",
-                    event_payload.get("tag_name"),
-                    json.dumps({
-                        "event_name": event_payload.get("event_name"),
-                        "trigger_type": event_payload.get("trigger_type"),
-                        "created_tag_id": created_tag.get("tagId"),
-                        "created_trigger_id": created_trigger.get("triggerId")
-                    }),
-                    now
-                )
+        conn = get_db()
+        conn.execute(
+            """
+            INSERT INTO gtm_change_logs (google_login, account_id, container_id, action_type, tag_name, details, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                google_login,
+                account_id,
+                container_id,
+                "TAG_DEPLOYED",
+                event_payload.get("tag_name"),
+                json.dumps({
+                    "event_name": event_payload.get("event_name"),
+                    "trigger_type": event_payload.get("trigger_type"),
+                    "created_tag_id": created_tag.get("tagId"),
+                    "created_trigger_id": created_trigger.get("triggerId")
+                }),
+                now
             )
-            conn.commit()
+        )
+        conn.commit()
 
         return jsonify({"ok": True, "created_tag_id": created_tag["tagId"], "created_trigger_id": created_trigger["triggerId"]})
     except Exception as exc:
@@ -853,197 +868,101 @@ def gtm_deploy_event():
         return jsonify({"error": f"GTM Tag deployment failed: {exc}"}), 500
 
 
-@app.route("/api/gtm/logs/search", methods=["GET"])
-def search_gtm_logs():
-    q = (request.args.get("q") or "").strip().lower()
-    container_id = (request.args.get("container_id") or "").strip()
-
-    with _db() as conn:
-        if container_id and q:
-            rows = conn.execute(
-                """
-                SELECT * FROM gtm_change_logs 
-                WHERE container_id = ? AND (LOWER(tag_name) LIKE ? OR LOWER(google_login) LIKE ? OR LOWER(action_type) LIKE ?)
-                ORDER BY created_at DESC LIMIT 100
-                """,
-                (container_id, f"%{q}%", f"%{q}%", f"%{q}%")
-            ).fetchall()
-        elif container_id:
-            rows = conn.execute(
-                "SELECT * FROM gtm_change_logs WHERE container_id = ? ORDER BY created_at DESC LIMIT 100",
-                (container_id,)
-            ).fetchall()
-        elif q:
-            rows = conn.execute(
-                """
-                SELECT * FROM gtm_change_logs 
-                WHERE LOWER(tag_name) LIKE ? OR LOWER(google_login) LIKE ? OR LOWER(container_id) LIKE ? OR LOWER(action_type) LIKE ?
-                ORDER BY created_at DESC LIMIT 100
-                """,
-                (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%")
-            ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM gtm_change_logs ORDER BY created_at DESC LIMIT 100").fetchall()
-
-    logs = []
-    for row in rows:
-        d = dict(row)
-        try:
-            d["details"] = json.loads(d["details"])
-        except Exception:
-            pass
-        logs.append(d)
-
-    return jsonify({"logs": logs})
-
-
-@app.route("/api/gsc/site/add", methods=["POST"])
-def api_gsc_add_site():
+@app.route("/api/gsc/bulk-add", methods=["POST"])
+def api_gsc_bulk_add():
+    """Bulk adds properties and sitemaps across Search Console accounts."""
     data = request.json or {}
     google_login = data.get("google_login", "").strip().lower()
-    site_url = data.get("site_url", "").strip()
+    entries = data.get("entries", []) # List of { site_url, sitemap_url }
 
-    if not google_login or not site_url:
-        return jsonify({"error": "Google Login email and Site URL are required."}), 400
+    if not google_login or not entries:
+        return jsonify({"error": "Missing login email or domain list."}), 400
 
     account = next((a for a in connected_accounts() if a["email"] == google_login), None)
     if not account:
         return jsonify({"error": f"Account {google_login} is not connected."}), 404
 
+    results = []
     try:
-        access_token = refresh_access_token(account["refresh_token"])
-        
-        if not site_url.startswith("http") and not site_url.startswith("sc-domain:"):
-            site_url = f"https://{site_url.strip('/')}/"
+        access_token = refresh_access_token(google_login, account["refresh_token"])
+        for entry in entries:
+            site_url = entry.get("site_url", "").strip()
+            sitemap_url = entry.get("sitemap_url", "").strip()
+            
+            if not site_url.startswith("http") and not site_url.startswith("sc-domain:"):
+                site_url = f"https://{site_url.strip('/')}/"
 
-        encoded_site = urlencode({'': site_url})[1:]
-        url = f"https://www.googleapis.com/webmasters/v3/sites/{encoded_site}"
-        google_put(access_token, url)
+            encoded_site = urlencode({'': site_url})[1:]
+            url = f"https://www.googleapis.com/webmasters/v3/sites/{encoded_site}"
+            
+            try:
+                google_put(access_token, url)
+                status = "Added Property"
+                
+                if sitemap_url:
+                    encoded_sitemap = urlencode({'': sitemap_url})[1:]
+                    sm_url = f"https://www.googleapis.com/webmasters/v3/sites/{encoded_site}/sitemaps/{encoded_sitemap}"
+                    google_put(access_token, sm_url)
+                    status += " & Submitted Sitemap"
+                results.append({"site_url": site_url, "status": "SUCCESS", "details": status})
+            except Exception as e:
+                results.append({"site_url": site_url, "status": "FAILED", "details": str(e)})
 
-        return jsonify({"ok": True, "message": f"Successfully added {site_url} to Search Console for {google_login}."})
+        return jsonify({"ok": True, "results": results})
     except Exception as exc:
-        logger.warning("Failed to add site to Search Console: %s", exc)
-        return jsonify({"error": f"Failed to add site property: {exc}"}), 500
+        return jsonify({"error": f"Bulk Search Console operation failed: {exc}"}), 500
 
 
-@app.route("/api/gsc/sitemap/submit", methods=["POST"])
-def api_gsc_submit_sitemap():
-    data = request.json or {}
-    google_login = data.get("google_login", "").strip().lower()
-    site_url = data.get("site_url", "").strip()
-    sitemap_url = data.get("sitemap_url", "").strip()
-
-    if not google_login or not site_url or not sitemap_url:
-        return jsonify({"error": "Google Login, GSC Site URL, and Sitemap URL are required."}), 400
-
-    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
-    if not account:
-        return jsonify({"error": f"Account {google_login} is not connected."}), 404
-
-    try:
-        access_token = refresh_access_token(account["refresh_token"])
-        
-        encoded_site = urlencode({'': site_url})[1:]
-        encoded_sitemap = urlencode({'': sitemap_url})[1:]
-        
-        url = f"https://www.googleapis.com/webmasters/v3/sites/{encoded_site}/sitemaps/{encoded_sitemap}"
-        google_put(access_token, url)
-
-        return jsonify({"ok": True, "message": f"Successfully submitted sitemap {sitemap_url} to {site_url}."})
-    except Exception as exc:
-        logger.warning("Failed to submit sitemap to Search Console: %s", exc)
-        return jsonify({"error": f"Failed to submit sitemap: {exc}"}), 500
-
-
-@app.route("/api/ga4/ask", methods=["POST"])
-def api_ga4_ask():
-    data = request.json or {}
-    property_id = data.get("property_id", "").strip()
-    google_login = data.get("google_login", "").strip().lower()
-    question = data.get("question", "").strip().lower()
-
-    if not property_id or not google_login or not question:
-        return jsonify({"error": "Missing Property ID, Login Email, or Question."}), 400
-
-    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
-    if not account:
-        return jsonify({"error": f"Account {google_login} is not connected."}), 404
-
-    try:
-        access_token = refresh_access_token(account["refresh_token"])
-        
-        if "device" in question or "mobile" in question or "desktop" in question:
-            dimension = "deviceCategory"
-        elif "landing" in question or "page" in question or "url" in question:
-            dimension = "pagePath"
-        elif "city" in question or "location" in question or "geo" in question:
-            dimension = "city"
-        elif "country" in question:
-            dimension = "country"
-        else:
-            dimension = "sessionSourceMedium"
-
-        req_body = {
-            "dateRanges": [{"startDate": "30daysAgo", "endDate": "yesterday"}],
-            "dimensions": [{"name": dimension}],
-            "metrics": [
-                {"name": "sessions"},
-                {"name": "activeUsers"},
-                {"name": "keyEvents"}
-            ],
-            "limit": 10
-        }
-
-        url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
-        report = google_post(access_token, url, req_body)
-
-        rows = report.get("rows", [])
-        if not rows:
-            return jsonify({"answer": "No traffic records were found for that query in the last 30 days."})
-
-        results = []
-        for r in rows:
-            dim_val = r["dimensionValues"][0]["value"]
-            sess = int(r["metricValues"][0]["value"])
-            users = int(r["metricValues"][1]["value"])
-            convs = int(r["metricValues"][2]["value"])
-            results.append(f"• **{dim_val}**: {sess:,} sessions ({users:,} users, {convs:,} key events)")
-
-        answer_text = f"**Query Results (Last 30 Days by {dimension}):**\n" + "\n".join(results)
-        return jsonify({"answer": answer_text})
-    except Exception as exc:
-        logger.warning("Ask Analytics failed: %s", exc)
-        return jsonify({"error": f"Failed to execute question lookup: {exc}"}), 500
-
-
-@app.route("/api/ga4/channels", methods=["POST"])
-def api_ga4_channels():
+@app.route("/api/ga4/anomalies", methods=["POST"])
+def api_ga4_anomalies():
+    """Detects unusual traffic drops or spikes (>20% change) for a property."""
     data = request.json or {}
     property_id = data.get("property_id", "").strip()
     google_login = data.get("google_login", "").strip().lower()
 
     if not property_id or not google_login:
-        return jsonify({"channels": []})
+        return jsonify({"error": "Missing Property ID or Login Email."}), 400
 
     account = next((a for a in connected_accounts() if a["email"] == google_login), None)
     if not account:
-        return jsonify({"channels": []})
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
 
     try:
-        access_token = refresh_access_token(account["refresh_token"])
+        access_token = refresh_access_token(google_login, account["refresh_token"])
         url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+        
+        # Recent 7 days vs Prior 7 days
         req_body = {
-            "dateRanges": [{"startDate": "30daysAgo", "endDate": "yesterday"}],
-            "dimensions": [{"name": "sessionSourceMedium"}],
-            "metrics": [{"name": "sessions"}],
-            "limit": 50
+            "dateRanges": [
+                {"startDate": "7daysAgo", "endDate": "yesterday"},
+                {"startDate": "14daysAgo", "endDate": "8daysAgo"}
+            ],
+            "metrics": [{"name": "sessions"}, {"name": "keyEvents"}]
         }
         report = google_post(access_token, url, req_body)
-        channels = [row["dimensionValues"][0]["value"] for row in report.get("rows", [])]
-        return jsonify({"channels": sorted(channels)})
+        rows = report.get("rows", [])
+        
+        if not rows:
+            return jsonify({"anomalies": []})
+
+        recent_sess = int(rows[0]["metricValues"][0]["value"])
+        prior_sess = int(rows[0]["metricValues"][1]["value"]) if len(rows[0]["metricValues"]) > 1 else 0
+
+        anomalies = []
+        if prior_sess > 0:
+            diff_pct = ((recent_sess - prior_sess) / prior_sess) * 100
+            if abs(diff_pct) >= 20.0:
+                flag_type = "SPIKE" if diff_pct > 0 else "DROP"
+                anomalies.append({
+                    "metric": "Sessions",
+                    "type": flag_type,
+                    "change_pct": round(diff_pct, 1),
+                    "message": f"Traffic {flag_type.lower()} of {diff_pct:+.1f}% detected over the last 7 days ({recent_sess:,} vs {prior_sess:,} sessions)."
+                })
+
+        return jsonify({"anomalies": anomalies})
     except Exception as exc:
-        logger.warning("Failed fetching GA4 channels for property %s: %s", property_id, exc)
-        return jsonify({"channels": []})
+        return jsonify({"error": f"Anomaly detection failed: {exc}"}), 500
 
 
 @app.route("/api/ga4/compare", methods=["POST"])
@@ -1053,9 +972,10 @@ def api_ga4_compare():
     google_login = data.get("google_login", "").strip().lower()
     period_type = data.get("period_type", "previous_period")
     scope_type = data.get("scope_type", "site")
-    page_path = data.get("page_path", "").strip()
+    page_path = sanitize_regex(data.get("page_path", "").strip())
     source_medium = data.get("source_medium", "").strip()
     tone = data.get("tone", "positive")
+    preset = data.get("preset", "executive")
     limit = int(data.get("limit", 15))
 
     p1_start_str = data.get("p1_start")
@@ -1069,7 +989,7 @@ def api_ga4_compare():
         return jsonify({"error": f"Account {google_login} is not connected."}), 404
 
     try:
-        access_token = refresh_access_token(account["refresh_token"])
+        access_token = refresh_access_token(google_login, account["refresh_token"])
     except Exception as exc:
         return jsonify({"error": f"Failed to authenticate {google_login}: {exc}"}), 401
 
@@ -1233,7 +1153,7 @@ def api_ga4_compare():
         v["p2_avg_time_str"] = f"{int(v['p2_time'] / v['p2_sessions'])}s" if v["p2_sessions"] > 0 else "0s"
         breakdown_list.append(v)
 
-    ai_result = generate_ga4_ai_analysis(p1_label, p2_label, m1, m2, breakdown_list, tone=tone)
+    ai_result = generate_ga4_ai_analysis(p1_label, p2_label, m1, m2, breakdown_list, tone=tone, preset=preset)
 
     return jsonify({
         "property_id": property_id,
@@ -1259,16 +1179,16 @@ def save_report():
         return jsonify({"error": "Customer name, summary title, and report payload are required."}), 400
 
     now = int(time.time())
-    with _db() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO saved_reports (customer_name, summary_title, property_id, google_login, report_data, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (customer_name, summary_title, property_id, google_login, json.dumps(report_data), now)
-        )
-        report_id = cursor.lastrowid
-        conn.commit()
+    conn = get_db()
+    cursor = conn.execute(
+        """
+        INSERT INTO saved_reports (customer_name, summary_title, property_id, google_login, report_data, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (customer_name, summary_title, property_id, google_login, json.dumps(report_data), now)
+    )
+    report_id = cursor.lastrowid
+    conn.commit()
 
     return jsonify({"ok": True, "report_id": report_id, "message": "Report successfully saved."})
 
@@ -1276,63 +1196,68 @@ def save_report():
 @app.route("/api/reports/search", methods=["GET"])
 def search_reports():
     q = (request.args.get("q") or "").strip().lower()
-    with _db() as conn:
-        if q:
-            rows = conn.execute(
-                """
-                SELECT id, customer_name, summary_title, property_id, google_login, created_at 
-                FROM saved_reports 
-                WHERE LOWER(customer_name) LIKE ? OR LOWER(summary_title) LIKE ? OR LOWER(property_id) LIKE ?
-                ORDER BY created_at DESC
-                """,
-                (f"%{q}%", f"%{q}%", f"%{q}%")
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT id, customer_name, summary_title, property_id, google_login, created_at FROM saved_reports ORDER BY created_at DESC LIMIT 50"
-            ).fetchall()
+    conn = get_db()
+    if q:
+        rows = conn.execute(
+            """
+            SELECT id, customer_name, summary_title, property_id, google_login, created_at 
+            FROM saved_reports 
+            WHERE LOWER(customer_name) LIKE ? OR LOWER(summary_title) LIKE ? OR LOWER(property_id) LIKE ?
+            ORDER BY created_at DESC
+            """,
+            (f"%{q}%", f"%{q}%", f"%{q}%")
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, customer_name, summary_title, property_id, google_login, created_at FROM saved_reports ORDER BY created_at DESC LIMIT 50"
+        ).fetchall()
 
     reports = [dict(row) for row in rows]
     return jsonify({"reports": reports})
 
 
-@app.route("/api/reports/subscribe", methods=["POST"])
-def subscribe_alerts():
-    data = request.json or {}
-    report_id = data.get("report_id")
-    notification_email = data.get("notification_email", "").strip()
-    frequency = data.get("frequency", "weekly").lower()
-    ghl_webhook_url = data.get("ghl_webhook_url", "").strip()
+@app.route("/api/gtm/logs/search", methods=["GET"])
+def search_gtm_logs():
+    q = (request.args.get("q") or "").strip().lower()
+    container_id = (request.args.get("container_id") or "").strip()
 
-    if not report_id or not notification_email:
-        return jsonify({"error": "Report ID and notification email are required."}), 400
-
-    now = int(time.time())
-    with _db() as conn:
-        conn.execute(
+    conn = get_db()
+    if container_id and q:
+        rows = conn.execute(
             """
-            INSERT INTO report_alerts (report_id, notification_email, frequency, ghl_webhook_url, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            SELECT * FROM gtm_change_logs 
+            WHERE container_id = ? AND (LOWER(tag_name) LIKE ? OR LOWER(google_login) LIKE ? OR LOWER(action_type) LIKE ?)
+            ORDER BY created_at DESC LIMIT 100
             """,
-            (report_id, notification_email, frequency, ghl_webhook_url, now)
-        )
-        conn.commit()
+            (container_id, f"%{q}%", f"%{q}%", f"%{q}%")
+        ).fetchall()
+    elif container_id:
+        rows = conn.execute(
+            "SELECT * FROM gtm_change_logs WHERE container_id = ? ORDER BY created_at DESC LIMIT 100",
+            (container_id,)
+        ).fetchall()
+    elif q:
+        rows = conn.execute(
+            """
+            SELECT * FROM gtm_change_logs 
+            WHERE LOWER(tag_name) LIKE ? OR LOWER(google_login) LIKE ? OR LOWER(container_id) LIKE ? OR LOWER(action_type) LIKE ?
+            ORDER BY created_at DESC LIMIT 100
+            """,
+            (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%")
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM gtm_change_logs ORDER BY created_at DESC LIMIT 100").fetchall()
 
-    if ghl_webhook_url:
+    logs = []
+    for row in rows:
+        d = dict(row)
         try:
-            ghl_payload = {
-                "event": "report_alert_subscribed",
-                "report_id": report_id,
-                "email": notification_email,
-                "frequency": frequency,
-                "timestamp": datetime.utcnow().isoformat(),
-                "message": f"New report alert scheduled for {notification_email} ({frequency})."
-            }
-            requests.post(ghl_webhook_url, json=ghl_payload, timeout=5)
-        except Exception as exc:
-            logger.warning("Failed sending GoHighLevel webhook: %s", exc)
+            d["details"] = json.loads(d["details"])
+        except Exception:
+            pass
+        logs.append(d)
 
-    return jsonify({"ok": True, "message": f"Alert subscribed for {notification_email} ({frequency})."})
+    return jsonify({"logs": logs})
 
 
 @app.route("/api/refresh", methods=["POST"])
@@ -1358,48 +1283,6 @@ def health():
         checks["token_encryption_key_configured"],
     ])
     return checks, (200 if checks["ok"] else 500)
-
-
-@app.route("/debug/accounts")
-def debug_accounts():
-    diagnostics = []
-    accounts = connected_accounts()
-    if not accounts:
-        return jsonify({"status": "No connected accounts found in token database."})
-
-    for acc in accounts:
-        email = acc.get("email", "unknown")
-        info = {"email": email, "refresh_token_present": bool(acc.get("refresh_token"))}
-        
-        try:
-            access_token = refresh_access_token(acc["refresh_token"])
-            info["token_refresh_status"] = "SUCCESS"
-        except Exception as exc:
-            info["token_refresh_status"] = f"FAILED: {exc}"
-            diagnostics.append(info)
-            continue
-
-        try:
-            google_get(access_token, "https://analyticsadmin.googleapis.com/v1beta/accountSummaries", params={"pageSize": 1})
-            info["ga4_api_status"] = "SUCCESS"
-        except Exception as exc:
-            info["ga4_api_status"] = f"FAILED: {exc}"
-
-        try:
-            google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts")
-            info["gtm_api_status"] = "SUCCESS"
-        except Exception as exc:
-            info["gtm_api_status"] = f"FAILED: {exc}"
-
-        try:
-            google_get(access_token, "https://www.googleapis.com/webmasters/v3/sites")
-            info["gsc_api_status"] = "SUCCESS"
-        except Exception as exc:
-            info["gsc_api_status"] = f"FAILED: {exc}"
-
-        diagnostics.append(info)
-
-    return jsonify({"connected_account_count": len(accounts), "diagnostics": diagnostics})
 
 
 if __name__ == "__main__":
