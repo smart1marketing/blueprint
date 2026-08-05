@@ -6,7 +6,6 @@
   <title>Smart 1 Google Account Command Center</title>
   <link rel="stylesheet" href="/static/style.css">
   <style>
-    html { scroll-behavior: smooth; }
     .nav-anchor-bar {
       display: flex;
       gap: 8px;
@@ -28,7 +27,7 @@
       text-decoration: none;
       transition: background 0.15s ease, border-color 0.15s ease;
     }
-    .nav-anchor-bar a:hover {
+    .nav-anchor-bar a:hover, .nav-anchor-bar a.active-page {
       background: #1a2e58;
       color: #fff!important;
       border-color: #1a2e58;
@@ -49,14 +48,14 @@
         </div>
       </div>
 
-      <!-- QUICK-JUMP ANCHOR NAVIGATION BUTTONS -->
+      <!-- TOP NAVIGATION BAR WITH LINKS TO SEPARATE PAGES -->
       <nav class="nav-anchor-bar">
-        <a href="#primary-search">🔍 Quick Search</a>
+        <a href="/" class="active-page">🔍 Quick Search</a>
         <a href="#gtm-generator">⚡ GTM Event Generator</a>
         <a href="#ask-analytics">💬 Ask GA4</a>
         <a href="#ai-comparator">📊 AI Comparator</a>
-        <a href="#saved-reports">📁 Saved Reports</a>
-        <a href="#audit-logs">📜 Audit Logs</a>
+        <a href="/reports" target="_blank">📁 Historical Reports (New Page) ↗</a>
+        <a href="/gtm-logs" target="_blank">📜 GTM Audit Logs (New Page) ↗</a>
         <a href="#manual-gmb">📍 GMB Checker</a>
         <a href="#connected-accounts">👥 Accounts</a>
       </nav>
@@ -74,23 +73,20 @@
         <div class="searchbox">
           <input id="q" autocomplete="off" autofocus placeholder="Type client name, domain, GA4 ID, GTM ID, or email to search all sites...">
         </div>
-        <div id="status" class="status">Start typing to search all connected accounts.</div>
+        <div id="status" class="status">Auto-refreshing Google data...</div>
         
         <!-- SEPARATE RESULTS BOXES -->
         <div id="results-container" class="results-container">
-          <!-- 1. GA4 / GTM Results Box -->
           <div id="box-analytics" class="result-category-box" style="display:none;">
             <h3 class="category-header">📊 Google Analytics & Tag Manager</h3>
             <div id="results-analytics" class="results"></div>
           </div>
 
-          <!-- 2. Google Business Profile Results Box -->
           <div id="box-gmb" class="result-category-box" style="display:none;">
             <h3 class="category-header">📍 Google Business Profiles (GMB)</h3>
             <div id="results-gmb" class="results"></div>
           </div>
 
-          <!-- 3. Search Console (Webmaster Tools) Results Box -->
           <div id="box-gsc" class="result-category-box" style="display:none;">
             <h3 class="category-header">🔍 Google Search Console (Webmaster Tools)</h3>
             <div id="results-gsc" class="results"></div>
@@ -208,27 +204,6 @@
         <div id="ai-comp-results"></div>
       </div>
 
-      <!-- SAVED REPORTS HISTORY PANEL -->
-      <div id="saved-reports" class="saved-reports-section" style="margin-top: 20px; padding: 16px; background: #f8fafc; border: 1px solid #dfe6f0; border-radius: 12px;">
-        <h3 style="margin:0 0 6px; font-size:16px; color:#1a2e58;">Saved Historical Reports</h3>
-        <div style="display:flex; gap:10px;">
-          <input id="search-saved-q" placeholder="Search saved reports by customer name, title, or property ID..." style="flex:1; padding:8px 10px; border:1px solid #ccd6e5; border-radius:6px; font-size:13px;">
-          <button id="btn-search-saved" class="btn" style="padding:8px 14px; font-size:13px;">Search History</button>
-        </div>
-        <div id="saved-reports-list" style="margin-top:10px;"></div>
-      </div>
-
-      <!-- GTM AUDIT LOG SEARCH PANEL -->
-      <div id="audit-logs" class="saved-reports-section" style="margin-top: 20px; padding: 16px; background: #f8fafc; border: 1px solid #dfe6f0; border-radius: 12px;">
-        <h3 style="margin:0 0 6px; font-size:16px; color:#1a2e58;">📜 GTM Change & Deployment Audit Logs</h3>
-        <p style="font-size:12px; color:#69758a; margin:0 0 10px;">Search date-stamped logs of all tags and triggers created or modified through this portal:</p>
-        <div style="display:flex; gap:10px;">
-          <input id="search-gtm-logs-q" placeholder="Search logs by tag name, container ID, email, or action type..." style="flex:1; padding:8px 10px; border:1px solid #ccd6e5; border-radius:6px; font-size:13px;">
-          <button id="btn-search-gtm-logs" class="btn" style="padding:8px 14px; font-size:13px; background:#24519c!important;">Search Logs</button>
-        </div>
-        <div id="gtm-logs-list" style="margin-top:10px;"></div>
-      </div>
-
       <!-- MANUAL GMB CHECKER -->
       <div id="manual-gmb" class="manual-lookup-card" style="margin-top:20px;">
         <h3>Manual GMB & Claim Checker</h3>
@@ -240,7 +215,7 @@
         <div id="manual-results"></div>
       </div>
 
-      <!-- CONNECTED ACCOUNTS FOOTER BAR -->
+      <!-- CONNECTED ACCOUNTS FOOTER -->
       <div id="connected-accounts" class="accounts" style="margin-top:28px;">
         <div class="accounts-title">Connected Google Accounts</div>
         {% if accounts %}
