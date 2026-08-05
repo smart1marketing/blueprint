@@ -5,6 +5,25 @@ let timer;
 let currentReportPayload = null;
 let currentGtmContext = { account_id: '', container_id: '', google_login: '' };
 
+window.addEventListener('DOMContentLoaded', async () => {
+  const statusEl = document.getElementById('status');
+  if (statusEl) {
+    statusEl.textContent = 'Auto-refreshing Google accounts in background...';
+  }
+  
+  try {
+    const r = await fetch('/api/refresh', { method: 'POST' });
+    const data = await r.json();
+    if (statusEl) {
+      statusEl.textContent = `Google accounts refreshed (${data.count || 0} assets indexed). Start typing to search...`;
+    }
+  } catch (err) {
+    if (statusEl) {
+      statusEl.textContent = 'Start typing to search all connected accounts.';
+    }
+  }
+});
+
 function esc(v='') {
   return String(v).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 }
@@ -17,7 +36,6 @@ function getBadgeClass(platformName) {
 }
 
 function renderCard(x) {
-  const domainGuess = x.search_extra || x.name || '';
   return `
     <article class="result">
       <div class="badge ${getBadgeClass(x.platform)}">${esc(x.platform)}</div>
@@ -78,7 +96,6 @@ function draw(items) {
     boxGsc.style.display = 'none';
   }
 
-  // Universal Auto-Populate Button Listener
   document.querySelectorAll('.btn-auto-all').forEach(btn => {
     btn.addEventListener('click', () => {
       autoPopulateAll(
@@ -90,7 +107,6 @@ function draw(items) {
     });
   });
 
-  // GTM Inspection Button Listener
   document.querySelectorAll('.btn-inspect-gtm').forEach(btn => {
     btn.addEventListener('click', async () => {
       const account_id = btn.dataset.account;
@@ -138,15 +154,27 @@ function draw(items) {
   });
 }
 
-// Master Universal Auto-Populate Function
 async function autoPopulateAll(propertyId, loginEmail, propertyName='', extraData='') {
-  // 1. Populate GA4 AI Performance Comparator
   document.getElementById('comp-property-id').value = propertyId;
   document.getElementById('comp-login').value = loginEmail;
   document.getElementById('comp-date-preset').value = 'last_month';
   applyPresetDates('last_month');
 
-  // 2. Populate GTM Auto-Event Generator URL
+  const gscAccountSelect = document.getElementById('gsc-manage-account');
+  if (gscAccountSelect) {
+    gscAccountSelect.value = loginEmail;
+  }
+
+  const gscSiteInput = document.getElementById('gsc-manage-site');
+  if (gscSiteInput) {
+    let cleanUrl = propertyName;
+    if (cleanUrl.includes('http') || cleanUrl.includes('.com') || cleanUrl.includes('.org') || cleanUrl.includes('.net')) {
+      gscSiteInput.value = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}/`;
+    } else {
+      gscSiteInput.value = `https://${cleanUrl.toLowerCase().replace(/\s+/g, '')}.com/`;
+    }
+  }
+
   const gtmUrlInput = document.getElementById('gtm-gen-url');
   if (gtmUrlInput) {
     let cleanUrl = propertyName;
@@ -157,19 +185,16 @@ async function autoPopulateAll(propertyId, loginEmail, propertyName='', extraDat
     }
   }
 
-  // 3. Populate Manual GMB Audit Field
   const manualGmbInput = document.getElementById('manual-q');
   if (manualGmbInput) {
     manualGmbInput.value = propertyName;
   }
 
-  // 4. Smooth Scroll to AI Comparator Widget
   const compCard = document.querySelector('.ai-comparator-card');
   if (compCard) {
     compCard.scrollIntoView({ behavior: 'smooth' });
   }
 
-  // 5. Auto-Load Source/Medium Channels
   const sourceSelect = document.getElementById('comp-source-medium');
   sourceSelect.innerHTML = '<option value="">Loading available channels...</option>';
 
@@ -194,6 +219,85 @@ async function autoPopulateAll(propertyId, loginEmail, propertyName='', extraDat
 document.getElementById('gtm-modal-close').addEventListener('click', () => {
   document.getElementById('gtm-modal').style.display = 'none';
 });
+
+// Search Console Add Site & Submit Sitemap Listeners
+const btnAddGscSite = document.getElementById('btn-add-gsc-site');
+const btnSubmitGscSitemap = document.getElementById('btn-submit-gsc-sitemap');
+const gscManageResults = document.getElementById('gsc-manage-results');
+
+if (btnAddGscSite) {
+  btnAddGscSite.addEventListener('click', async () => {
+    const google_login = document.getElementById('gsc-manage-account').value;
+    const site_url = document.getElementById('gsc-manage-site').value.trim();
+    const sitemap_url = document.getElementById('gsc-manage-sitemap').value.trim();
+
+    if (!google_login || !site_url) {
+      gscManageResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please choose an account and enter a Site URL.</span>';
+      return;
+    }
+
+    gscManageResults.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Adding property to Search Console...</span>';
+
+    const addResp = await fetch('/api/gsc/site/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ google_login, site_url })
+    });
+
+    const addData = await addResp.json();
+    if (!addResp.ok) {
+      gscManageResults.innerHTML = `<span style="font-size:13px; color:#c5221f;">Error: ${esc(addData.error)}</span>`;
+      return;
+    }
+
+    let resultHtml = `<div style="color:#137333; font-size:13px; font-weight:bold;">✓ ${esc(addData.message)}</div>`;
+
+    if (sitemap_url) {
+      const smResp = await fetch('/api/gsc/sitemap/submit', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ google_login, site_url, sitemap_url })
+      });
+
+      const smData = await smResp.json();
+      if (smResp.ok) {
+        resultHtml += `<div style="color:#137333; font-size:13px; margin-top:4px;">✓ ${esc(smData.message)}</div>`;
+      } else {
+        resultHtml += `<div style="color:#c5221f; font-size:13px; margin-top:4px;">⚠️ Property added, but sitemap submission failed: ${esc(smData.error)}</div>`;
+      }
+    }
+
+    gscManageResults.innerHTML = resultHtml;
+  });
+}
+
+if (btnSubmitGscSitemap) {
+  btnSubmitGscSitemap.addEventListener('click', async () => {
+    const google_login = document.getElementById('gsc-manage-account').value;
+    const site_url = document.getElementById('gsc-manage-site').value.trim();
+    const sitemap_url = document.getElementById('gsc-manage-sitemap').value.trim();
+
+    if (!google_login || !site_url || !sitemap_url) {
+      gscManageResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please enter account login, property site URL, and sitemap URL.</span>';
+      return;
+    }
+
+    gscManageResults.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Submitting sitemap to Search Console...</span>';
+
+    const smResp = await fetch('/api/gsc/sitemap/submit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ google_login, site_url, sitemap_url })
+    });
+
+    const smData = await smResp.json();
+    if (smResp.ok) {
+      gscManageResults.innerHTML = `<span style="color:#137333; font-size:13px; font-weight:bold;">✓ ${esc(smData.message)}</span>`;
+    } else {
+      gscManageResults.innerHTML = `<span style="color:#c5221f; font-size:13px;">Error: ${esc(smData.error)}</span>`;
+    }
+  });
+}
 
 // AI GTM Event Generator Logic
 const gtmGenBtn = document.getElementById('gtm-gen-btn');
@@ -263,7 +367,6 @@ if (gtmGenBtn && gtmGenUrlInput) {
         if (deployResp.ok) {
           btn.textContent = '✓ Deployed!';
           btn.style.background = '#137333';
-          fetchGtmLogs();
         } else {
           btn.textContent = 'Failed';
           btn.style.background = '#c5221f';
@@ -271,47 +374,6 @@ if (gtmGenBtn && gtmGenUrlInput) {
       });
     });
   });
-}
-
-// Search & Display GTM Change Audit Logs
-async function fetchGtmLogs(query='') {
-  const listEl = document.getElementById('gtm-logs-list');
-  if (!listEl) return;
-
-  const resp = await fetch(`/api/gtm/logs/search?q=${encodeURIComponent(query)}`);
-  const data = await resp.json();
-  
-  if (!data.logs || !data.logs.length) {
-    listEl.innerHTML = '<span style="font-size:12px; color:#69758a;">No recorded GTM change logs found.</span>';
-    return;
-  }
-
-  listEl.innerHTML = data.logs.map(log => {
-    const dateStr = new Date(log.created_at * 1000).toLocaleString();
-    return `
-      <div style="padding:8px 10px; background:#fff; border:1px solid #d8e0eb; border-radius:6px; margin-bottom:6px; font-size:12px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <span style="background:#eaf2ff; color:#24519c; font-weight:bold; padding:2px 6px; border-radius:4px; font-size:11px;">${esc(log.action_type)}</span>
-            <strong style="margin-left:6px; color:#1a2e58;">${esc(log.tag_name)}</strong>
-          </div>
-          <span style="color:#8a95a7; font-size:11px;">${esc(dateStr)}</span>
-        </div>
-        <div style="margin-top:4px; color:#58677e;">
-          <b>Container:</b> <code>${esc(log.container_id)}</code> | 
-          <b>User:</b> ${esc(log.google_login)}
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-const btnSearchGtmLogs = document.getElementById('btn-search-gtm-logs');
-if (btnSearchGtmLogs) {
-  btnSearchGtmLogs.addEventListener('click', () => {
-    fetchGtmLogs(document.getElementById('search-gtm-logs-q').value);
-  });
-  fetchGtmLogs();
 }
 
 // "Ask Analytics" Natural Language Query Handler
@@ -451,7 +513,6 @@ document.querySelectorAll('.disconnect').forEach(btn => btn.addEventListener('cl
   if (r.ok) window.location.reload();
 }));
 
-// GA4 Scope Selection Handler
 const scopeSelect = document.getElementById('comp-scope-type');
 const pageWrapper = document.getElementById('page-path-wrapper');
 
@@ -465,7 +526,6 @@ if (scopeSelect) {
   });
 }
 
-// GA4 Comparison Engine Run Trigger
 const runCompBtn = document.getElementById('run-ga4-comp');
 if (runCompBtn) {
   runCompBtn.addEventListener('click', async () => {
@@ -620,7 +680,6 @@ Key Events: ${m2.keyEvents.toLocaleString()}
   });
 }
 
-// Save Report Modal Controls
 const enableAlertsEl = document.getElementById('modal-enable-alerts');
 if (enableAlertsEl) {
   enableAlertsEl.addEventListener('change', (e) => {
@@ -684,42 +743,9 @@ if (confirmSaveBtn) {
 
     document.getElementById('save-modal').style.display = 'none';
     alert("Report saved successfully!");
-    fetchSavedReports();
   });
 }
 
-// Saved Reports Search
-async function fetchSavedReports(query='') {
-  const listEl = document.getElementById('saved-reports-list');
-  if (!listEl) return;
-
-  const resp = await fetch(`/api/reports/search?q=${encodeURIComponent(query)}`);
-  const data = await resp.json();
-  
-  if (!data.reports || !data.reports.length) {
-    listEl.innerHTML = '<span style="font-size:12px; color:#69758a;">No historical reports found.</span>';
-    return;
-  }
-
-  listEl.innerHTML = data.reports.map(r => `
-    <div style="padding:8px 10px; background:#fff; border:1px solid #d8e0eb; border-radius:6px; margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <strong>${esc(r.customer_name)}</strong> - ${esc(r.summary_title)} 
-        <span style="color:#69758a;">(Property: ${esc(r.property_id)})</span>
-      </div>
-      <span style="color:#8a95a7;">${new Date(r.created_at * 1000).toLocaleDateString()}</span>
-    </div>
-  `).join('');
-}
-
-const btnSearchSaved = document.getElementById('btn-search-saved');
-if (btnSearchSaved) {
-  btnSearchSaved.addEventListener('click', () => {
-    fetchSavedReports(document.getElementById('search-saved-q').value);
-  });
-}
-
-// Manual GMB Checker
 const manualBtn = document.getElementById('manual-btn');
 const manualInput = document.getElementById('manual-q');
 const manualResults = document.getElementById('manual-results');
@@ -747,22 +773,3 @@ if (manualBtn && manualInput) {
     `;
   });
 }
-// Automatically trigger background refresh on page load
-window.addEventListener('DOMContentLoaded', async () => {
-  const statusEl = document.getElementById('status');
-  if (statusEl) {
-    statusEl.textContent = 'Auto-refreshing Google accounts in background...';
-  }
-  
-  try {
-    const r = await fetch('/api/refresh', { method: 'POST' });
-    const data = await r.json();
-    if (statusEl) {
-      statusEl.textContent = `Google accounts refreshed (${data.count || 0} assets indexed). Start typing to search...`;
-    }
-  } catch (err) {
-    if (statusEl) {
-      statusEl.textContent = 'Start typing to search all connected accounts.';
-    }
-  }
-});
