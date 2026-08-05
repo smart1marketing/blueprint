@@ -4,9 +4,24 @@ let platform = 'all';
 let timer;
 let currentReportPayload = null;
 let currentGtmContext = { account_id: '', container_id: '', google_login: '' };
+let chartInstance = null;
 
+// Toast Notification Engine
+function showToast(message, type='success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `<span>${esc(message)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('toast-fade-out');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// Auto-Refresh on Load
 window.addEventListener('DOMContentLoaded', async () => {
-  const statusEl = document.getElementById('status');
   if (statusEl) {
     statusEl.textContent = 'Auto-refreshing Google accounts in background...';
   }
@@ -75,6 +90,12 @@ function draw(items) {
   const gmbItems = items.filter(x => x.platform === 'Google Business Profile');
   const gscItems = items.filter(x => x.platform === 'Search Console');
 
+  // Update Badge Counters
+  document.getElementById('cnt-all').textContent = `(${items.length})`;
+  document.getElementById('cnt-ga').textContent = `(${analyticsItems.length})`;
+  document.getElementById('cnt-gsc').textContent = `(${gscItems.length})`;
+  document.getElementById('cnt-gmb').textContent = `(${gmbItems.length})`;
+
   if (analyticsItems.length && (platform === 'all' || platform === 'analytics')) {
     resAnalytics.innerHTML = analyticsItems.map(renderCard).join('');
     boxAnalytics.style.display = 'block';
@@ -118,7 +139,7 @@ function draw(items) {
       const modal = document.getElementById('gtm-modal');
       const body = document.getElementById('gtm-modal-body');
       modal.style.display = 'flex';
-      body.innerHTML = '<p style="font-size:13px; color:#1a2e58;">Fetching live GTM workspace tags, triggers, and variables...</p>';
+      body.innerHTML = renderSkeletonCard();
 
       const resp = await fetch('/api/gtm/inspect', {
         method: 'POST',
@@ -154,31 +175,26 @@ function draw(items) {
   });
 }
 
+function renderSkeletonCard() {
+  return `
+    <div class="skeleton-card">
+      <div class="skeleton-line" style="width: 40%;"></div>
+      <div class="skeleton-line" style="width: 80%;"></div>
+      <div class="skeleton-line" style="width: 60%;"></div>
+    </div>
+  `;
+}
+
 async function autoPopulateAll(propertyId, loginEmail, propertyName='', extraData='') {
   document.getElementById('comp-property-id').value = propertyId;
   document.getElementById('comp-login').value = loginEmail;
   document.getElementById('comp-date-preset').value = 'last_month';
   applyPresetDates('last_month');
 
-  const gscAccountSelect = document.getElementById('gsc-manage-account');
-  if (gscAccountSelect) {
-    gscAccountSelect.value = loginEmail;
-  }
-
-  const gscSiteInput = document.getElementById('gsc-manage-site');
-  if (gscSiteInput) {
-    let cleanUrl = propertyName;
-    if (cleanUrl.includes('http') || cleanUrl.includes('.com') || cleanUrl.includes('.org') || cleanUrl.includes('.net')) {
-      gscSiteInput.value = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}/`;
-    } else {
-      gscSiteInput.value = `https://${cleanUrl.toLowerCase().replace(/\s+/g, '')}.com/`;
-    }
-  }
-
   const gtmUrlInput = document.getElementById('gtm-gen-url');
   if (gtmUrlInput) {
     let cleanUrl = propertyName;
-    if (cleanUrl.includes('http') || cleanUrl.includes('.com') || cleanUrl.includes('.org') || cleanUrl.includes('.net')) {
+    if (cleanUrl.includes('http') || cleanUrl.includes('.com') || cleanUrl.includes('.org')) {
       gtmUrlInput.value = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;
     } else if (extraData.includes('http') || extraData.includes('.com')) {
       gtmUrlInput.value = extraData.startsWith('http') ? extraData : `https://${extraData}`;
@@ -214,88 +230,79 @@ async function autoPopulateAll(propertyId, loginEmail, propertyName='', extraDat
   } catch (err) {
     sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
   }
+
+  // Check for anomalies automatically
+  checkAnomalies(propertyId, loginEmail);
+  showToast("Auto-populated GA4 Property & Tools!", "success");
+}
+
+async function checkAnomalies(property_id, google_login) {
+  try {
+    const resp = await fetch('/api/ga4/anomalies', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ property_id, google_login })
+    });
+    const data = await resp.json();
+    if (resp.ok && data.anomalies && data.anomalies.length) {
+      data.anomalies.forEach(a => {
+        showToast(`⚠️ Anomaly: ${a.message}`, 'error');
+      });
+    }
+  } catch (e) {}
 }
 
 document.getElementById('gtm-modal-close').addEventListener('click', () => {
   document.getElementById('gtm-modal').style.display = 'none';
 });
 
-// Search Console Add Site & Submit Sitemap Listeners
-const btnAddGscSite = document.getElementById('btn-add-gsc-site');
-const btnSubmitGscSitemap = document.getElementById('btn-submit-gsc-sitemap');
-const gscManageResults = document.getElementById('gsc-manage-results');
+// Bulk Search Console Deployer
+const btnRunGscBulk = document.getElementById('btn-run-gsc-bulk');
+const gscBulkResults = document.getElementById('gsc-bulk-results');
 
-if (btnAddGscSite) {
-  btnAddGscSite.addEventListener('click', async () => {
-    const google_login = document.getElementById('gsc-manage-account').value;
-    const site_url = document.getElementById('gsc-manage-site').value.trim();
-    const sitemap_url = document.getElementById('gsc-manage-sitemap').value.trim();
+if (btnRunGscBulk) {
+  btnRunGscBulk.addEventListener('click', async () => {
+    const google_login = document.getElementById('gsc-bulk-account').value;
+    const rawText = document.getElementById('gsc-bulk-text').value.trim();
 
-    if (!google_login || !site_url) {
-      gscManageResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please choose an account and enter a Site URL.</span>';
+    if (!google_login || !rawText) {
+      showToast("Please choose an account and enter domain lines.", "error");
       return;
     }
 
-    gscManageResults.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Adding property to Search Console...</span>';
+    const lines = rawText.split('\n');
+    const entries = lines.map(l => {
+      const parts = l.split('|');
+      return {
+        site_url: parts[0] ? parts[0].trim() : '',
+        sitemap_url: parts[1] ? parts[1].trim() : ''
+      };
+    }).filter(e => e.site_url);
 
-    const addResp = await fetch('/api/gsc/site/add', {
+    gscBulkResults.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Executing bulk deployment across Search Console...</span>';
+
+    const resp = await fetch('/api/gsc/bulk-add', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ google_login, site_url })
+      body: JSON.stringify({ google_login, entries })
     });
 
-    const addData = await addResp.json();
-    if (!addResp.ok) {
-      gscManageResults.innerHTML = `<span style="font-size:13px; color:#c5221f;">Error: ${esc(addData.error)}</span>`;
+    const data = await resp.json();
+    if (!resp.ok) {
+      gscBulkResults.innerHTML = `<span style="color:#c5221f; font-size:13px;">Error: ${esc(data.error)}</span>`;
       return;
     }
 
-    let resultHtml = `<div style="color:#137333; font-size:13px; font-weight:bold;">✓ ${esc(addData.message)}</div>`;
-
-    if (sitemap_url) {
-      const smResp = await fetch('/api/gsc/sitemap/submit', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ google_login, site_url, sitemap_url })
-      });
-
-      const smData = await smResp.json();
-      if (smResp.ok) {
-        resultHtml += `<div style="color:#137333; font-size:13px; margin-top:4px;">✓ ${esc(smData.message)}</div>`;
-      } else {
-        resultHtml += `<div style="color:#c5221f; font-size:13px; margin-top:4px;">⚠️ Property added, but sitemap submission failed: ${esc(smData.error)}</div>`;
-      }
-    }
-
-    gscManageResults.innerHTML = resultHtml;
-  });
-}
-
-if (btnSubmitGscSitemap) {
-  btnSubmitGscSitemap.addEventListener('click', async () => {
-    const google_login = document.getElementById('gsc-manage-account').value;
-    const site_url = document.getElementById('gsc-manage-site').value.trim();
-    const sitemap_url = document.getElementById('gsc-manage-sitemap').value.trim();
-
-    if (!google_login || !site_url || !sitemap_url) {
-      gscManageResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please enter account login, property site URL, and sitemap URL.</span>';
-      return;
-    }
-
-    gscManageResults.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Submitting sitemap to Search Console...</span>';
-
-    const smResp = await fetch('/api/gsc/sitemap/submit', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ google_login, site_url, sitemap_url })
-    });
-
-    const smData = await smResp.json();
-    if (smResp.ok) {
-      gscManageResults.innerHTML = `<span style="color:#137333; font-size:13px; font-weight:bold;">✓ ${esc(smData.message)}</span>`;
-    } else {
-      gscManageResults.innerHTML = `<span style="color:#c5221f; font-size:13px;">Error: ${esc(smData.error)}</span>`;
-    }
+    gscBulkResults.innerHTML = `
+      <div style="background:#fff; border:1px solid #d8e0eb; border-radius:8px; padding:12px; font-size:13px;">
+        ${data.results.map(r => `
+          <div style="margin-bottom:4px; color:${r.status === 'SUCCESS' ? '#137333' : '#c5221f'};">
+            <b>${esc(r.site_url)}</b>: ${esc(r.details)}
+          </div>
+        `).join('')}
+      </div>
+    `;
+    showToast("Bulk Search Console deployment completed!", "success");
   });
 }
 
@@ -308,11 +315,11 @@ if (gtmGenBtn && gtmGenUrlInput) {
   gtmGenBtn.addEventListener('click', async () => {
     const url = gtmGenUrlInput.value.trim();
     if (!url) {
-      gtmGenResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please enter a valid website URL.</span>';
+      showToast("Please enter a valid website URL.", "error");
       return;
     }
 
-    gtmGenResults.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Analyzing page DOM elements and recommending GTM tags...</span>';
+    gtmGenResults.innerHTML = renderSkeletonCard();
 
     const resp = await fetch('/api/gtm/generate-events', {
       method: 'POST',
@@ -367,9 +374,11 @@ if (gtmGenBtn && gtmGenUrlInput) {
         if (deployResp.ok) {
           btn.textContent = '✓ Deployed!';
           btn.style.background = '#137333';
+          showToast(`Deployed ${ev.tag_name} to GTM!`, 'success');
         } else {
           btn.textContent = 'Failed';
           btn.style.background = '#c5221f';
+          showToast("Failed to deploy tag to GTM.", "error");
         }
       });
     });
@@ -388,15 +397,15 @@ if (askBtn && askInput) {
     const google_login = document.getElementById('comp-login').value.trim();
 
     if (!property_id || !google_login) {
-      askResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please enter a GA4 Property ID and Login email above first.</span>';
+      showToast("Please enter a GA4 Property ID and Login email first.", "error");
       return;
     }
     if (!question) {
-      askResults.innerHTML = '<span style="font-size:13px; color:#c5221f;">Please enter a question.</span>';
+      showToast("Please enter a question.", "error");
       return;
     }
 
-    askResults.innerHTML = '<span style="font-size:13px; color:#1a2e58;">Querying GA4 Data API...</span>';
+    askResults.innerHTML = renderSkeletonCard();
 
     const resp = await fetch('/api/ga4/ask', {
       method: 'POST',
@@ -503,6 +512,7 @@ if (refresh) refresh.addEventListener('click', async () => {
   const r = await fetch('/api/refresh', {method:'POST'});
   const data = await r.json();
   refresh.textContent = `Refreshed ${data.count || 0} records`;
+  showToast(`Refreshed ${data.count || 0} Google records!`, 'success');
   setTimeout(() => { refresh.textContent = 'Refresh Google data'; refresh.disabled = false; }, 1800);
   search();
 });
@@ -526,6 +536,7 @@ if (scopeSelect) {
   });
 }
 
+// GA4 Comparison Engine Run Trigger with Chart Rendering
 const runCompBtn = document.getElementById('run-ga4-comp');
 if (runCompBtn) {
   runCompBtn.addEventListener('click', async () => {
@@ -536,6 +547,7 @@ if (runCompBtn) {
     let page_path = document.getElementById('comp-page-path').value.trim();
     const source_medium = document.getElementById('comp-source-medium').value;
     const tone = document.getElementById('comp-tone').value;
+    const preset = document.getElementById('comp-preset').value;
     const p1_start = document.getElementById('p1-start').value;
     const p1_end = document.getElementById('p1-end').value;
 
@@ -545,14 +557,14 @@ if (runCompBtn) {
     else if (scope_type === 'top_50') { scope_type = 'multiple'; limit = 50; }
 
     const resBox = document.getElementById('ai-comp-results');
-    resBox.innerHTML = '<p style="font-size:13px; color:#1a2e58;">Running GA4 Data API report and compiling AI analysis…</p>';
+    resBox.innerHTML = renderSkeletonCard();
 
     const resp = await fetch('/api/ga4/compare', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         property_id, google_login, period_type, scope_type,
-        page_path, source_medium, tone, p1_start, p1_end, limit
+        page_path, source_medium, tone, preset, p1_start, p1_end, limit
       })
     });
 
@@ -605,6 +617,11 @@ Key Events: ${m2.keyEvents.toLocaleString()}
         <ul style="margin:0 0 12px; padding-left:18px; font-size:13px; color:#202124;">
           ${ai.insights.map(i => `<li>${i.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/`(.*?)`/g, '<code>$1</code>')}</li>`).join('')}
         </ul>
+
+        <!-- VISUAL CHART CANVAS -->
+        <div style="background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb; margin-bottom:12px;">
+          <canvas id="ga4CompareChart" height="120"></canvas>
+        </div>
 
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb; font-size:13px;">
           <div>
@@ -667,16 +684,58 @@ Key Events: ${m2.keyEvents.toLocaleString()}
       </div>
     `;
 
+    // Render Chart
+    renderChart(data);
+
     document.getElementById('btn-copy-analysis').addEventListener('click', () => {
       navigator.clipboard.writeText(plainTextAnalysis);
       const copyBtn = document.getElementById('btn-copy-analysis');
       copyBtn.textContent = '✓ Copied!';
+      showToast("Copied analysis text to clipboard!", "success");
       setTimeout(() => { copyBtn.textContent = '📋 Copy Analysis'; }, 2000);
     });
 
     document.getElementById('btn-open-save-modal').addEventListener('click', () => {
       document.getElementById('save-modal').style.display = 'flex';
     });
+  });
+}
+
+function renderChart(data) {
+  const ctx = document.getElementById('ga4CompareChart');
+  if (!ctx) return;
+
+  if (chartInstance) {
+    chartInstance.destroy();
+  }
+
+  const m1 = data.metrics_p1;
+  const m2 = data.metrics_p2;
+
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Sessions', 'Engaged Sessions', 'Key Events (x100)'],
+      datasets: [
+        {
+          label: 'Selected Period (P1)',
+          data: [m1.sessions, m1.engagedSessions, m1.keyEvents * 100],
+          backgroundColor: '#1a2e58'
+        },
+        {
+          label: 'Prior Period (P2)',
+          data: [m2.sessions, m2.engagedSessions, m2.keyEvents * 100],
+          backgroundColor: '#8a95a7'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'top' },
+        title: { display: true, text: 'Period Performance Metric Comparison' }
+      }
+    }
   });
 }
 
@@ -702,7 +761,7 @@ if (confirmSaveBtn) {
     const enableAlerts = document.getElementById('modal-enable-alerts').value === 'yes';
 
     if (!customer_name || !summary_title) {
-      alert("Please enter both customer name and summary title.");
+      showToast("Please enter both customer name and summary title.", "error");
       return;
     }
 
@@ -720,7 +779,7 @@ if (confirmSaveBtn) {
 
     const saveRes = await saveResp.json();
     if (!saveResp.ok) {
-      alert("Error saving report: " + saveRes.error);
+      showToast("Error saving report: " + saveRes.error, "error");
       return;
     }
 
@@ -742,7 +801,7 @@ if (confirmSaveBtn) {
     }
 
     document.getElementById('save-modal').style.display = 'none';
-    alert("Report saved successfully!");
+    showToast("Report saved successfully!", "success");
   });
 }
 
