@@ -6,16 +6,45 @@ function headers(extra = {}) {
   return { 'xi-api-key': config.elevenlabs.key, ...extra };
 }
 
+/**
+ * Turn ElevenLabs' raw error JSON into something actionable. The prefix
+ * error in particular is almost always an OpenAI key (sk-) pasted into the
+ * ElevenLabs slot (sk_), or a legacy key from before the prefix existed.
+ */
+export function elevenError(status, body) {
+  let detail = {};
+  try { detail = JSON.parse(body)?.detail || {}; } catch { /* plain text */ }
+  const code = detail.status || detail.code || '';
+
+  if (code === 'invalid_api_key_prefix') {
+    const key = config.elevenlabs.key;
+    const looksOpenAI = key.startsWith('sk-');
+    return new Error(
+      `ElevenLabs rejected the API key: it must start with "sk_". ` +
+      (looksOpenAI
+        ? 'The value in ELEVENLABS_API_KEY starts with "sk-", which is an OpenAI key — the two are easy to mix up. Put the OpenAI key in OPENAI_API_KEY and generate an ElevenLabs key at elevenlabs.io under Developers, API Keys.'
+        : 'This looks like a legacy key from before ElevenLabs added the prefix. Generate a fresh one at elevenlabs.io under Developers, API Keys, and copy it straight away — it is only shown once.')
+    );
+  }
+  if (code === 'invalid_api_key' || status === 401) {
+    return new Error('ElevenLabs did not accept that API key. Check it was copied whole, with no trailing space, and that it has not been revoked.');
+  }
+  if (status === 403) {
+    return new Error('That ElevenLabs key is valid but lacks permission for this action, or the request came from an IP outside the key\'s allowlist.');
+  }
+  if (status === 429) {
+    return new Error('ElevenLabs rate limit or character quota reached. Check remaining characters on the plan.');
+  }
+  return new Error(`ElevenLabs ${status}: ${String(body).slice(0, 200)}`);
+}
+
 let cache = { at: 0, voices: [] };
 
 export async function listVoices({ force = false } = {}) {
   if (!force && cache.voices.length && Date.now() - cache.at < 5 * 60 * 1000) return cache.voices;
 
   const res = await fetch(`${config.elevenlabs.base}/voices`, { headers: headers() });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`ElevenLabs ${res.status}: ${body.slice(0, 200)}`);
-  }
+  if (!res.ok) throw elevenError(res.status, await res.text());
   const data = await res.json();
   const voices = (data.voices || []).map((v) => ({
     voiceId: v.voice_id,
@@ -129,7 +158,7 @@ export async function matchVoices(want, count = 3) {
 export async function getVoice(voiceId) {
   const res = await fetch(`${config.elevenlabs.base}/voices/${encodeURIComponent(voiceId)}`, { headers: headers() });
   if (res.status === 404) throw new Error(`No ElevenLabs voice with the ID ${voiceId}.`);
-  if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw elevenError(res.status, await res.text());
   const v = await res.json();
   return {
     voiceId: v.voice_id,
@@ -164,7 +193,7 @@ export async function renderAudio({ voiceId, script, energy = 'conversational' }
   if (!res.ok) {
     const body = await res.text();
     log.error('elevenlabs.tts', body.slice(0, 300));
-    throw new Error(`ElevenLabs render failed (${res.status}).`);
+    throw elevenError(res.status, body);
   }
   return Buffer.from(await res.arrayBuffer());
 }
@@ -200,17 +229,17 @@ export async function composeMusic({ prompt, seconds = 35 }) {
   if (!res.ok) {
     const body = await res.text();
     log.error('elevenlabs.music', body.slice(0, 300));
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 403 && !/invalid_api_key/.test(body)) {
       throw new Error('Your ElevenLabs plan does not include Music. A paid plan is required, and it also carries the commercial licence.');
     }
-    throw new Error(`Eleven Music failed (${res.status}).`);
+    throw elevenError(res.status, body);
   }
   return Buffer.from(await res.arrayBuffer());
 }
 
 export async function accountCheck() {
   const res = await fetch(`${config.elevenlabs.base}/user/subscription`, { headers: headers() });
-  if (!res.ok) throw new Error(`ElevenLabs ${res.status}`);
+  if (!res.ok) throw elevenError(res.status, await res.text());
   const d = await res.json();
   return {
     tier: d.tier,
