@@ -1,0 +1,26 @@
+SMART 1 RESTAURANT TOOL — FILES TO UPLOAD TO GITHUB
+====================================================
+
+WHAT'S IN HERE (2 changed files, in the exact repo layout):
+  app.py                  -> goes at the ROOT of the repo
+  templates/index.html    -> goes inside the "templates" folder
+
+WHAT CHANGED:
+  - Website is now REQUIRED (accepts a site, Facebook, Instagram, or Google page).
+  - The AI now actually reads that website to tailor the report.
+  - Form fixed to say "Step 1 of 4".
+  - The tool posts its height so the landing page can auto-size the iframe.
+
+HOW TO UPLOAD (GitHub website — easiest):
+  1. Unzip this folder.
+  2. Go to your smart1food repo on github.com.
+  3. Click "Add file" -> "Upload files".
+  4. Drag in BOTH:
+        - app.py
+        - the "templates" folder (with index.html inside)
+     GitHub keeps the folder structure and overwrites the old files.
+  5. Add a note like "Require + AI-read website; embed auto-resize" and
+     click "Commit changes".
+  6. Render redeploys automatically. When it's live, do one test report.
+
+Nothing else in the repo changes. Your keys/config on Render stay as-is.

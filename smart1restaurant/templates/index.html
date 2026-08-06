@@ -508,6 +508,22 @@ window.addEventListener('pagehide',function(){ try{ sendPartialLead(); }catch(e)
 // loader clears immediately (the page listens for 's1-report-ready').
 if(document.documentElement.classList.contains('embed')){
   try{ if(window.parent && window.parent!==window){ window.parent.postMessage('s1-report-ready','*'); } }catch(e){}
+  // Auto-resize: post our height to the parent landing page so the iframe grows/shrinks
+  // with the form and report (no nested scrollbar on mobile). The page listens for
+  // {type:'s1-embed-height'}. Falls back gracefully if not embedded.
+  (function(){
+    if(!(window.parent && window.parent!==window))return;
+    var last=0;
+    function postHeight(){
+      var h=Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      if(Math.abs(h-last)>4){ last=h; try{ window.parent.postMessage({type:'s1-embed-height',height:h},'*'); }catch(e){} }
+    }
+    postHeight();
+    window.addEventListener('load',postHeight);
+    window.addEventListener('resize',postHeight);
+    if(window.ResizeObserver){ try{ new ResizeObserver(postHeight).observe(document.body); }catch(e){} }
+    setInterval(postHeight,1000);
+  })();
 }
 
 // Shared-report view mode: /r/<id> injects __REPORT_VIEW_ID__. Load the stored
