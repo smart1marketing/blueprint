@@ -87,6 +87,9 @@ export interface Project {
   overrides?: CreativeOverride[];
   /** Set once a delivery zip has been produced. */
   delivered?: { at: string; zipUrl: string; fileCount: number }[];
+  /** The job id of the automatic render started at intake, so the public
+   *  status endpoint can report real progress instead of guessing. */
+  autoJobId?: string;
 
   cloudinaryFolder?: string;
   assets: AssetLink[];

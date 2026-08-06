@@ -512,6 +512,24 @@ that worked:
 - **Match creative to the size, don't squeeze.** Already the architecture:
   every size has its own layout and its own copy budget.
 
+## The wait is part of the product
+
+Nobody leaves the page to find out what happened. After submitting:
+
+1. An **animated skeleton** of a 300x250 draws itself while the first render
+   runs — the shimmer says "working", the shape says "your ad".
+2. Within seconds it is replaced by a **real first concept**: one 300x250 of
+   concept A, rendered immediately and outside the job queue, so there is
+   something concrete to react to while the full set builds. A live counter
+   ("4 of 22 done") ticks underneath, fed by real job progress.
+3. When every size is finished, **Review all your ads** appears, opening the
+   full proof page.
+
+There is no give-up timer and no "we'll email you" hand-off. The only
+terminal states are honest ones, reported by the server rather than guessed
+from a timeout: a render that actually failed (staff are auto-notified), or a
+submission that cannot render until a logo arrives.
+
 ## Internal-only mode
 
 Set `INTAKE_CODE` and the request form gates itself behind a team access

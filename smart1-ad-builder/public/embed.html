@@ -998,40 +998,91 @@
           '<p>Thanks, ' + esc(data.contact.split(' ')[0] || 'there') + '. A confirmation is on its way to ' + esc(data.email) + '.</p>' +
           '<div class="ref">' + esc(rid) + '</div>' +
           '<div id="buildwait" style="margin-top:26px">' +
-          '<p style="color:var(--ink-2)"><span class="spinner"></span> Building your ad previews now — this usually takes under a minute…</p>' +
+          '<div id="skelbox">' + '<svg id="adskel" width="300" height="250" viewBox="0 0 300 250" xmlns="http://www.w3.org/2000/svg" ' +
+  'style="border:1px solid var(--line);border-radius:8px;background:#fff;max-width:100%">' +
+  '<defs><linearGradient id="sh" x1="0" y1="0" x2="1" y2="0">' +
+  '<stop offset="0" stop-color="#E9EFF5"/><stop offset=".5" stop-color="#D6E1EC"/><stop offset="1" stop-color="#E9EFF5"/>' +
+  '<animateTransform attributeName="gradientTransform" type="translate" from="-1 0" to="1 0" dur="1.6s" repeatCount="indefinite"/>' +
+  '</linearGradient></defs>' +
+  '<circle cx="34" cy="32" r="14" fill="url(#sh)"/>' +
+  '<rect x="56" y="24" rx="4" width="90" height="16" fill="url(#sh)"/>' +
+  '<rect x="20" y="72" rx="5" width="170" height="24" fill="url(#sh)">' +
+  '<animate attributeName="width" values="0;170" dur="1.1s" fill="freeze"/></rect>' +
+  '<rect x="20" y="104" rx="5" width="130" height="16" fill="url(#sh)">' +
+  '<animate attributeName="width" values="0;130" dur="1.1s" begin=".35s" fill="freeze"/></rect>' +
+  '<rect x="200" y="60" rx="8" width="80" height="120" fill="url(#sh)"/>' +
+  '<rect x="20" y="176" rx="7" width="120" height="38" fill="#1F5FC0" opacity=".85">' +
+  '<animate attributeName="opacity" values=".35;.85;.35" dur="1.8s" repeatCount="indefinite"/></rect>' +
+  '<rect x="20" y="228" rx="3" width="86" height="8" fill="url(#sh)"/>' +
+  '</svg>' +
+          '<p style="color:var(--ink-2);margin:14px 0 0"><span class="spinner"></span> ' +
+          'Building your ads now — your first concept appears here in a moment.</p></div>' +
+          '<div id="firstbox" style="display:none">' +
+          '<img id="firstimg" alt="Your first ad concept" ' +
+          'style="border:1px solid var(--line);border-radius:8px;max-width:100%;box-shadow:0 4px 14px rgba(16,34,46,.12)">' +
+          '<p style="margin:14px 0 4px;font-weight:600;color:var(--ink)">Here\'s your first concept.</p>' +
+          '<p class="hint" id="progressline" style="margin:0">Building the rest of your sizes now…</p></div>' +
+          '<div id="readybox" style="display:none;margin-top:18px">' +
+          '<p style="color:var(--ok);font-weight:600">All sizes are ready.</p>' +
+          '<a id="prooflink" href="#" target="_blank" rel="noopener" ' +
+          'style="display:inline-block;background:var(--accent);color:#fff;text-decoration:none;' +
+          'padding:14px 30px;border-radius:8px;font-weight:600;font-size:16px">Review all your ads</a>' +
+          '<p class="hint" style="margin-top:12px">Approve them or request changes right on that page.</p></div>' +
           '</div></div>';
         parent.postMessage({ type: 'smart1:submitted', requestId: rid }, '*');
         reportHeight();
 
-        // Poll until the render lands, then swap the spinner for the link.
-        // Give up quietly after ~2 minutes: some submissions genuinely cannot
-        // render yet (no logo found or uploaded) and those get previews by
-        // email once assets are in.
-        var tries = 0;
-        var timer = setInterval(function () {
-          tries++;
+        // Stay on the page the whole time. The skeleton gives way to the real
+        // 300x250 the moment it exists (usually seconds); the full review link
+        // appears when every size is done. No email hand-off, no give-up
+        // timer — only genuinely terminal states end the wait: a failed
+        // render, or a submission that cannot render until assets arrive.
+        // Polling slows from 2.5s to 6s after the first minute to be polite.
+        var shownFirst = false;
+        var polls = 0;
+        function poll() {
+          polls++;
           fetch(API + '/api/requests/' + encodeURIComponent(rid) + '/status')
             .then(function (r) { return r.json(); })
             .then(function (st) {
-              if (st.ready && st.proofUrl) {
-                clearInterval(timer);
-                document.getElementById('buildwait').innerHTML =
-                  '<p style="color:var(--ok);font-weight:600">Your previews are ready.</p>' +
-                  '<a href="' + esc(st.proofUrl) + '" target="_blank" rel="noopener" ' +
-                  'style="display:inline-block;background:var(--accent);color:#fff;text-decoration:none;' +
-                  'padding:14px 30px;border-radius:8px;font-weight:600;font-size:16px">View your ads</a>' +
-                  '<p class="hint" style="margin-top:12px">You can approve them or request changes right on that page.</p>';
-                reportHeight();
-              } else if (tries > 40) {
-                clearInterval(timer);
-                document.getElementById('buildwait').innerHTML =
-                  '<p style="color:var(--ink-2)">Your previews are taking a little longer — we\'ll email them to ' +
-                  esc(data.email) + ' as soon as they\'re ready.</p>';
+              if (st.firstLook && !shownFirst) {
+                shownFirst = true;
+                document.getElementById('firstimg').src = API + st.firstLook;
+                document.getElementById('skelbox').style.display = 'none';
+                document.getElementById('firstbox').style.display = '';
                 reportHeight();
               }
+              if (st.progress && st.progress.total > 0 && !st.ready) {
+                document.getElementById('progressline').textContent =
+                  'Building the rest of your sizes… ' + st.progress.done + ' of ' + st.progress.total + ' done.';
+              }
+              if (st.ready && st.proofUrl) {
+                document.getElementById('prooflink').href = API + st.proofUrl;
+                document.getElementById('readybox').style.display = '';
+                document.getElementById('progressline').textContent = '';
+                document.getElementById('skelbox').style.display = 'none';
+                reportHeight();
+                return; // stop polling
+              }
+              if (st.state === 'failed') {
+                document.getElementById('buildwait').innerHTML =
+                  '<p style="color:var(--ink-2)">Something needs attention on our side — our team has been ' +
+                  'notified automatically and will follow up with your previews.</p>';
+                reportHeight();
+                return;
+              }
+              if (st.state === 'waiting-assets') {
+                document.getElementById('buildwait').innerHTML =
+                  '<p style="color:var(--ink-2)">We have everything except a logo we can use, so our team will ' +
+                  'prepare your previews personally and follow up shortly.</p>';
+                reportHeight();
+                return;
+              }
+              setTimeout(poll, polls < 24 ? 2500 : 6000);
             })
-            .catch(function () { /* transient; keep polling */ });
-        }, 3000);
+            .catch(function () { setTimeout(poll, 5000); });
+        }
+        setTimeout(poll, 1500);
       })
       .catch(function (err) {
         submit.disabled = false;

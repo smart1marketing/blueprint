@@ -315,6 +315,29 @@ const server = http.createServer(async (req, res) => {
           );
           const job = enqueue({ campaign: result.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
           console.log(`[intake] ${requestId} queued for auto-render as job ${job.id}`);
+          project.autoJobId = job.id;
+          projects.save(project);
+
+          // First look: one 300x250 of concept A, rendered immediately and
+          // outside the queue. The full batch takes as long as it takes; this
+          // gives the person watching the confirmation screen a real ad to
+          // react to within a few seconds so they stay on the page.
+          (async () => {
+            try {
+              const first = await renderPreview({
+                brand: result.campaign.brand,
+                concept: result.campaign.concepts[0],
+                platform: platforms[0] ?? 'google',
+                size: '300x250',
+                assetRoot: ROOT,
+              });
+              const dir = path.join(OUT, 'firstlook');
+              fs.mkdirSync(dir, { recursive: true });
+              fs.writeFileSync(path.join(dir, `${requestId}.png`), first.png);
+            } catch (e: any) {
+              console.warn(`[firstlook] ${requestId}: ${e?.message ?? e}`);
+            }
+          })();
 
           // Poll rather than modify the job runner's contract — this keeps
           // notifications a bystander to rendering, not a dependency of it.
@@ -469,11 +492,31 @@ const server = http.createServer(async (req, res) => {
       const requestFile = path.join(OUT, 'requests', `${requestId}.json`);
       if (!fs.existsSync(requestFile)) return json(res, 404, { error: 'Unknown request' }, cors);
       const manifest = latestManifest(OUT, requestId);
+      const ready = Boolean(manifest && manifest.entries.length);
+      const project = projects.byRequest(requestId);
+      const job = project?.autoJobId ? getJob(project.autoJobId) : null;
+      // 'rendering' while a job is queued or running; 'failed' if it died;
+      // 'waiting-assets' when nothing was renderable (usually: no logo yet).
+      const state = ready ? 'ready'
+        : job ? (job.status === 'failed' ? 'failed' : 'rendering')
+        : 'waiting-assets';
+      const firstLookFile = path.join(OUT, 'firstlook', `${requestId}.png`);
       return json(res, 200, {
         received: true,
-        ready: Boolean(manifest && manifest.entries.length),
-        proofUrl: manifest ? `/proof/${requestId}` : null,
+        ready,
+        state,
+        progress: job ? job.progress : null,
+        firstLook: fs.existsSync(firstLookFile) ? `/firstlook/${requestId}.png` : null,
+        proofUrl: ready ? `/proof/${requestId}` : null,
       }, cors);
+    }
+
+    const flMatch = url.pathname.match(/^\/firstlook\/([\w-]+)\.png$/);
+    if (flMatch && req.method === 'GET') {
+      const f = path.join(OUT, 'firstlook', `${flMatch[1]}.png`);
+      if (!fs.existsSync(f)) return json(res, 404, { error: 'Not ready' });
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(f));
     }
 
     const proofMatch = url.pathname.match(/^\/proof\/([\w-]+)$/);
