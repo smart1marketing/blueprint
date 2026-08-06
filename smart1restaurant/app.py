@@ -319,6 +319,16 @@ def clean_payload(data: dict) -> dict:
     cleaned = {k: str(data.get(k, "")).strip()[:1500] for k in fields}
     if not re.fullmatch(r"\d{5}(-\d{4})?", cleaned["restaurant_zip"]):
         raise ValueError("A valid U.S. ZIP code is required.")
+    # Website is required — the AI reads it to tailor the plan. Accept a bare domain
+    # or a social page; normalize to a fetchable https URL.
+    site = cleaned["website"]
+    if not site:
+        raise ValueError("A website, Facebook, Instagram, or Google listing is required.")
+    if not re.match(r"^https?://", site, re.I):
+        site = "https://" + site.lstrip("/")
+    if not re.match(r"^https?://[^\s.]+\.[^\s.]{2,}", site, re.I):
+        raise ValueError("Please enter a valid web address (e.g. yourrestaurant.com).")
+    cleaned["website"] = site
     # lead_id lets GHL correlate the partial lead POST with the completed report POST.
     cleaned["lead_id"] = str(data.get("lead_id", "")).strip()[:64] or uuid.uuid4().hex[:16]
     return cleaned
@@ -332,14 +342,60 @@ def _valid_contact(payload: dict) -> bool:
 # OpenAI report generation (with one retry)
 # ---------------------------------------------------------------------------
 
-def _call_openai(payload: dict) -> Any:
+def fetch_site_text(url: str) -> str:
+    """Best-effort fetch of the restaurant's website/social page as plain text so the
+    AI can ground the report in their real menu, prices, and vibe. Returns '' on any
+    failure so report generation is never blocked by a slow or missing site."""
+    if not url:
+        return ""
+    if not re.match(r"^https?://", url, re.I):
+        url = "https://" + url.lstrip("/")
+    try:
+        r = requests.get(
+            url,
+            timeout=6,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; Smart1Bot/1.0; +https://smart1marketing.com)"},
+        )
+        r.raise_for_status()
+        html = r.text or ""
+    except Exception:
+        app.logger.info("Website fetch skipped (unreachable): %s", url)
+        return ""
+    parts = []
+    mt = re.search(r"(?is)<title[^>]*>(.*?)</title>", html)
+    if mt:
+        parts.append("TITLE: " + re.sub(r"\s+", " ", mt.group(1)).strip())
+    md = re.search(r'(?is)<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']', html)
+    if md:
+        parts.append("META: " + re.sub(r"\s+", " ", md.group(1)).strip())
+    body = re.sub(r"(?is)<(script|style|noscript|svg|head)[^>]*>.*?</\1>", " ", html)
+    body = re.sub(r"(?is)<[^>]+>", " ", body)
+    body = re.sub(r"&[a-z0-9#]+;", " ", body)
+    body = re.sub(r"\s+", " ", body).strip()
+    parts.append(body)
+    return " \n".join(parts)[:4000]
+
+
+def _call_openai(payload: dict, site_text: str = "") -> Any:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not configured.")
     client = OpenAI(api_key=api_key)
+    site_block = ""
+    if site_text:
+        site_block = (
+            "\n\nThe restaurant's own website/social page text is provided below. Use it to GROUND the report in "
+            "this specific restaurant — infer cuisine specifics and signature items, price point, service style, "
+            "hours and strong dayparts, neighborhoods or landmarks they mention, and brand tone. Let these refine "
+            "market_summary, market_opportunity, demand_triggers, and the monthly_plan messaging so the report "
+            "clearly reads as written for THIS restaurant. If the text is thin, generic, or irrelevant, rely on the "
+            "structured inputs instead and do not invent specifics.\n"
+            f"--- WEBSITE TEXT START ---\n{site_text}\n--- WEBSITE TEXT END ---\n"
+        )
     user_prompt = (
         "\nBuild a trigger-driven Restaurant Demand & Geofencing Report from these inputs:\n"
         f"{json.dumps(payload, indent=2)}"
+        f"{site_block}"
         "\n\nThe restaurant did NOT provide daypart patterns, a media budget, trigger preferences, or "
         "lists of nearby generators and competitors. You must supply all of these yourself:\n"
         "- Assume realistic lunch, happy-hour, dinner, and (if relevant) late-night daypart patterns from the "
@@ -373,7 +429,10 @@ def _call_openai(payload: dict) -> Any:
         "nearby offices and residential density during commute and pre-meal windows, since diners stream audio "
         "while deciding where to eat. Specify a daypart running around lunch and evening commute windows.\n"
         "- demand_triggers: 5-8 short trigger labels for this market (e.g. 'Lunch rush 11-1', '90°+ patio "
-        "weather', 'Rainy day', 'Home game night', 'Holiday weekend').\n"
+        "weather', 'Rainy day', 'Home game night', 'Holiday weekend'). For markets with cold seasons, "
+        "ALSO include relevant winter-weather advisory triggers such as 'Freeze warning', 'Ice storm', "
+        "'Frost warning', 'First snow', and 'Cold snap' (these drive comfort-food dine-in and delivery "
+        "demand). Choose triggers that fit the market's climate.\n"
         "- monthly_plan: all 12 months (January through December). Each month has a focus title, a short "
         "customer-facing message, 1-2 relevant demand trigger labels drawn from demand_triggers, and a "
         "'pacing' string. Match focus to the season and local calendar (patio/summer promotion, back-to-school, "
@@ -410,12 +469,14 @@ def _call_openai(payload: dict) -> Any:
 
 def generate_report(payload: dict) -> Any:
     """Generate the report, retrying once on transient API or JSON-parse failures."""
+    # Fetch the site once (not per retry) so the AI can review the restaurant's own page.
+    site_text = fetch_site_text(payload.get("website", ""))
     try:
-        return _call_openai(payload)
+        return _call_openai(payload, site_text)
     except Exception:
         app.logger.warning("OpenAI report attempt 1 failed; retrying once.", exc_info=True)
         time.sleep(1.2)
-        return _call_openai(payload)
+        return _call_openai(payload, site_text)
 
 
 # ---------------------------------------------------------------------------
