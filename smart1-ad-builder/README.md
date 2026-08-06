@@ -512,6 +512,30 @@ that worked:
 - **Match creative to the size, don't squeeze.** Already the architecture:
   every size has its own layout and its own copy budget.
 
+## Nothing hangs silently
+
+A render that stalls used to look identical to a render that was merely slow:
+the customer watched the skeleton forever and nobody was told anything. Four
+defenses now close that class of failure:
+
+1. **The first look renders before the batch is queued**, not alongside it.
+   On a small instance both renders previously competed for the same starved
+   CPU, so the one image the customer was watching for arrived last, if ever.
+2. **A watchdog** fails any job still running after `RENDER_WATCHDOG_MIN`
+   minutes (default 10), notifies staff with the reason, and flips the public
+   status to `failed` — so the customer sees an honest message instead of an
+   eternal skeleton.
+3. **Memory guards**: libvips defaults its thread pool to the *host's* core
+   count (8 on Render's machines) regardless of the container's real CPU
+   share. `sharp.concurrency` now defaults to 2 (`SHARP_CONCURRENCY` to
+   raise it) and the buffer cache is off — renders are written once and never
+   re-read.
+4. **The diagnostics page lists recent render jobs** — status, sizes done,
+   age, and the error when there is one — so "it seems stuck" becomes a row
+   in a table instead of a guess. If the batch finishes but the quick first
+   look was lost to a restart, the status endpoint falls back to serving the
+   batch's own 300x250.
+
 ## The wait is part of the product
 
 Nobody leaves the page to find out what happened. After submitting:

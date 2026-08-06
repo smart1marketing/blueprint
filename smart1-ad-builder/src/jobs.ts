@@ -227,6 +227,35 @@ async function runJob(id: string): Promise<void> {
 
 /** Drain the queue one job at a time. Rendering is CPU-bound; parallelism here
  *  just makes every job slower and risks the memory limit on a small instance. */
+/**
+ * Watchdog: a job 'running' longer than RENDER_WATCHDOG_MIN (default 10) is
+ * marked failed. A render that genuinely needs longer is indistinguishable
+ * from a hang to the person staring at the skeleton screen — and a failed
+ * state notifies staff and tells the customer the truth, while 'running
+ * forever' does neither. Restart-resistant because jobs persist to disk with
+ * their startedAt.
+ */
+export function startWatchdog(onTimeout?: (job: Job) => void): void {
+  const limitMs = Number(process.env.RENDER_WATCHDOG_MIN ?? 10) * 60_000;
+  if (limitMs <= 0) return;
+  setInterval(() => {
+    for (const job of jobs.values()) {
+      if (job.status !== 'running' || !job.startedAt) continue;
+      const age = Date.now() - Date.parse(job.startedAt);
+      if (age > limitMs) {
+        job.status = 'failed';
+        job.error = `Watchdog: still running after ${Math.round(age / 60000)} minutes — treated as hung. ` +
+          `The instance may be underpowered for a batch this size.`;
+        job.finishedAt = new Date().toISOString();
+        inputs.delete(job.id);
+        persist(job.id);
+        console.error(`[watchdog] job ${job.id} killed after ${Math.round(age / 60000)}m`);
+        try { onTimeout?.(job); } catch { /* notification failure must not kill the loop */ }
+      }
+    }
+  }, 30_000).unref();
+}
+
 export function startWorkerLoop(intervalMs = 500): void {
   setInterval(async () => {
     if (running || queue.length === 0) return;

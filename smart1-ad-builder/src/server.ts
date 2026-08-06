@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import type { Campaign } from './types';
 import { validateCampaign } from './validate';
-import { enqueue, getJob, listJobs, startWorkerLoop, recoverJobs } from './jobs';
+import { enqueue, getJob, listJobs, startWorkerLoop, recoverJobs, startWatchdog } from './jobs';
 import { renderPreview } from './render';
 import { buildCampaign, type Submission } from './intake';
 import { loadTemplates } from './registry';
@@ -313,15 +313,11 @@ const server = http.createServer(async (req, res) => {
           const platforms = (body.platforms ?? ['google']).filter(
             (p: string) => p === 'google' || p === 'amazon',
           );
-          const job = enqueue({ campaign: result.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
-          console.log(`[intake] ${requestId} queued for auto-render as job ${job.id}`);
-          project.autoJobId = job.id;
-          projects.save(project);
-
-          // First look: one 300x250 of concept A, rendered immediately and
-          // outside the queue. The full batch takes as long as it takes; this
-          // gives the person watching the confirmation screen a real ad to
-          // react to within a few seconds so they stay on the page.
+          // First look BEFORE the batch job. Order matters on a small
+          // instance: one 300x250 rendered alone lands in seconds, while the
+          // same render competing with a 20-size batch for one starved CPU is
+          // exactly how a customer watches a skeleton for 17 minutes.
+          const pRef = project;
           (async () => {
             try {
               const first = await renderPreview({
@@ -334,10 +330,14 @@ const server = http.createServer(async (req, res) => {
               const dir = path.join(OUT, 'firstlook');
               fs.mkdirSync(dir, { recursive: true });
               fs.writeFileSync(path.join(dir, `${requestId}.png`), first.png);
+              console.log(`[firstlook] ${requestId} written`);
             } catch (e: any) {
               console.warn(`[firstlook] ${requestId}: ${e?.message ?? e}`);
             }
-          })();
+            const job = enqueue({ campaign: result.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
+            console.log(`[intake] ${requestId} queued for auto-render as job ${job.id}`);
+            pRef.autoJobId = job.id;
+            projects.save(pRef);
 
           // Poll rather than modify the job runner's contract — this keeps
           // notifications a bystander to rendering, not a dependency of it.
@@ -377,6 +377,7 @@ const server = http.createServer(async (req, res) => {
               );
             }
           }, 2000);
+          })().catch((e: any) => console.error(`[intake] ${requestId} background render failed: ${e?.message ?? e}`));
         } else {
           // Not renderable — usually missing a logo. Still worth a heads-up so
           // staff know a customer is waiting on an asset request, not nothing.
@@ -500,7 +501,16 @@ const server = http.createServer(async (req, res) => {
       const state = ready ? 'ready'
         : job ? (job.status === 'failed' ? 'failed' : 'rendering')
         : 'waiting-assets';
-      const firstLookFile = path.join(OUT, 'firstlook', `${requestId}.png`);
+      let firstLookFile = path.join(OUT, 'firstlook', `${requestId}.png`);
+      if (!fs.existsSync(firstLookFile) && manifest) {
+        // The quick render can lose a race with a restart; the batch output
+        // contains the same creative, so serve that instead of nothing.
+        const entry = manifest.entries.find((e) => e.size === '300x250' && fs.existsSync(e.localFile));
+        if (entry) {
+          fs.mkdirSync(path.dirname(firstLookFile), { recursive: true });
+          fs.copyFileSync(entry.localFile, firstLookFile);
+        }
+      }
       return json(res, 200, {
         received: true,
         ready,
@@ -722,7 +732,7 @@ const server = http.createServer(async (req, res) => {
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
       });
-      return res.end(renderDiagnostics(report));
+      return res.end(renderDiagnostics(report, listJobs()));
     }
 
     /* ------------------------------------------------- landing page reader */
@@ -943,12 +953,30 @@ const server = http.createServer(async (req, res) => {
 
 // Single-process mode runs the queue in-band. Set WORKER_MODE=external once a
 // separate Render Background Worker is deployed against the same queue.
+// Rendering runs next to the web server on whatever instance Render gives us.
+// libvips defaults its thread pool to the HOST's core count (8 on Render's
+// machines) regardless of the container's actual CPU allowance, which on a
+// small instance means thrashing instead of rendering. Two threads is the
+// honest ceiling; SHARP_CONCURRENCY overrides for bigger instances.
+sharp.concurrency(Number(process.env.SHARP_CONCURRENCY ?? 2));
+sharp.cache(false); // rendered buffers are never re-read; caching them only holds memory
+
 // Recover anything left mid-render by a prior restart before the loop starts
 // draining, so a Render deploy cannot silently drop a customer's job.
 const recovery = recoverJobs(OUT);
 if (recovery.recovered) console.log(`[boot] requeued ${recovery.recovered} job(s) interrupted by the last restart`);
 
 if (process.env.WORKER_MODE !== 'external') startWorkerLoop();
+startWatchdog((job) => {
+  void notify(
+    {
+      subject: `Render watchdog killed job ${job.id}`,
+      body: job.error ?? 'A render ran too long and was stopped.',
+      url: `${PUBLIC_URL}/diagnostics`,
+    },
+    OUT,
+  );
+});
 
 // Expired rate-limit buckets would otherwise accumulate for every client seen.
 setInterval(() => sweepBuckets(), 10 * 60 * 1000).unref();

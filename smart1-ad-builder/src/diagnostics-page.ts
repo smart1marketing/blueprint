@@ -26,7 +26,41 @@ function row(c: Check): string {
   </tr>`;
 }
 
-export function renderDiagnostics(r: Report): string {
+export interface JobRow {
+  id: string; status: string; progress: { done: number; total: number };
+  startedAt?: string; finishedAt?: string; error?: string;
+}
+
+function jobsSection(jobs: JobRow[]): string {
+  if (!jobs.length) return '';
+  const age = (iso?: string) => {
+    if (!iso) return '—';
+    const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+    return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.round(m / 60)}h ago`;
+  };
+  const rows = jobs.slice(-12).reverse().map((j) => `
+    <tr>
+      <td class="mono">${j.id}</td>
+      <td><span class="lvl ${j.status === 'complete' ? 'ok' : j.status === 'failed' ? 'fail' : 'warn'}">${j.status.toUpperCase()}</span></td>
+      <td class="mono">${j.progress.done}/${j.progress.total}</td>
+      <td>${age(j.startedAt)}</td>
+      <td>${j.error ? `<span class="detail">${j.error.slice(0, 140)}</span>` : ''}</td>
+    </tr>`).join('');
+  return `
+  <h2>Render jobs (this instance)</h2>
+  <table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)">Job</th>
+      <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)">Status</th>
+      <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)">Sizes</th>
+      <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)">Started</th>
+      <th style="text-align:left;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)">Error</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+export function renderDiagnostics(r: Report, jobs: JobRow[] = []): string {
   const groups = new Map<string, Check[]>();
   for (const c of r.checks) {
     if (!groups.has(c.group)) groups.set(c.group, []);
@@ -117,6 +151,8 @@ export function renderDiagnostics(r: Report): string {
 
   ${[...groups.entries()].map(([g, list]) =>
     `<h2>${esc(g)}</h2><table>${list.map(row).join('')}</table>`).join('')}
+
+  ${jobsSection(jobs)}
 
   <div class="bar">
     <button onclick="location.reload()">Run again</button>
