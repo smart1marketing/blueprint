@@ -22,3 +22,17 @@ for (const [from, to] of pairs) {
   cpSync(src, join(root, to), { recursive: true });
   console.log(`copied ${from} -> ${to}`);
 }
+
+// Build stamp: a timestamp written at build time, surfaced by /healthz,
+// /version, and the boot log. This is how we tell, with certainty, whether the
+// code running on Render matches what we shipped — ending the "is the new
+// version actually deployed?" guesswork.
+import { writeFileSync as _wf } from 'node:fs';
+const stamp = {
+  builtAt: new Date().toISOString(),
+  node: process.version,
+};
+try {
+  _wf(new URL('../dist/src/build-stamp.json', import.meta.url), JSON.stringify(stamp));
+  console.log('build stamp:', stamp.builtAt);
+} catch (e) { console.warn('could not write build stamp:', e.message); }

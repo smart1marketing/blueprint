@@ -228,8 +228,14 @@
 
   <form id="f" novalidate>
     <div class="hp" aria-hidden="true">
-      <label>Do not fill this in<input type="text" name="company_url_confirm" tabindex="-1" autocomplete="off"></label>
+      <label>Leave this field empty<input type="text" name="company_url_confirm" tabindex="-1" autocomplete="off" aria-hidden="true"></label>
     </div>
+    <!-- Second honeypot signal: a timestamp stamped when the form loads. A
+         human takes at least a few seconds to fill this out; a bot posts
+         instantly. The server treats a sub-2-second submit as suspicious
+         rather than trusting the text trap alone, which browser autofill can
+         trip for a real person. -->
+    <input type="hidden" id="loadedAt" value="">
 
     <!-- ============================ STEP 1 ============================ -->
     <section class="step on" data-step="0">
@@ -471,6 +477,7 @@
   var banner = document.getElementById('banner');
   var submit = document.getElementById('submit');
   var API = (document.currentScript && document.currentScript.dataset.api) || '';
+  document.getElementById('loadedAt').value = String(Date.now());
 
   /* ------------------------------------------------- team access gate */
   // __NEEDS_CODE__ is replaced by the server when it serves this page.
@@ -980,6 +987,8 @@
       data.pickedLogoUrl = picked ? picked.value : ((discovered.logoOptions || [])[0] || {}).url;
     }
     data.honeypot = form.elements.company_url_confirm.value;
+    var loadedAt = Number(document.getElementById('loadedAt').value) || 0;
+    data.elapsedMs = loadedAt ? (Date.now() - loadedAt) : null;
     data.pageUrl = document.referrer || '';
 
     submit.disabled = true;
@@ -992,6 +1001,14 @@
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
         if (!res.ok) throw new Error(res.body && res.body.error ? res.body.error : 'Submission failed');
+        // The server flags a spam-trapped submission rather than rendering it.
+        // Surface that honestly instead of showing a skeleton that never fills.
+        if (res.body.rejected) {
+          submit.disabled = false; submit.textContent = 'Submit request';
+          show('bad', 'We could not process this submission automatically (it tripped our spam filter). ' +
+            'Please email todd@smart1marketing.com and we\'ll build it for you right away.');
+          return;
+        }
         var rid = res.body.requestId;
         document.getElementById('root').innerHTML =
           '<div class="done"><h2>Request received</h2>' +

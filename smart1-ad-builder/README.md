@@ -512,6 +512,36 @@ that worked:
 - **Match creative to the size, don't squeeze.** Already the architecture:
   every size has its own layout and its own copy budget.
 
+## Why a real submission could vanish as `AD-2026-000000`
+
+The intake handler has an anti-spam honeypot: a hidden field a human never
+sees. When it is filled, the server returns a fake-success id
+(`AD-<year>-000000`) and renders nothing — the correct response to a bot, but
+the exact symptom of a confirmation screen whose skeleton spins forever.
+
+The trap was too aggressive. Browser autofill and password managers fill
+hidden fields for genuine humans, ignoring `autocomplete="off"` — so a real
+person could trip it. It now takes **two** agreeing signals to reject:
+
+- the hidden text field is filled, **and**
+- the form was submitted implausibly fast (under ~1.2s), which autofill+human
+  typing never is.
+
+A filled honeypot with human timing is treated as autofill and allowed
+through. Every rejection is now logged (`[intake] REJECTED as bot: …`) instead
+of vanishing silently, and the confirmation screen tells a rejected user to
+email us rather than spinning.
+
+## Knowing what is deployed
+
+The build writes a timestamp that the running server reports three ways:
+`GET /version`, the `builtAt` field in `/healthz`, and the boot log
+(`build: 2026-…`). This ends the "is the new code actually live?" question for
+good — compare the timestamp to when you deployed. Intake and render steps now
+log verbosely (`[intake] … accepted`, `[firstlook] … written in 455ms`,
+`[intake] … queued batch job …`), so a stuck submission is a visible trail in
+the Render logs rather than silence.
+
 ## Nothing hangs silently
 
 A render that stalls used to look identical to a render that was merely slow:

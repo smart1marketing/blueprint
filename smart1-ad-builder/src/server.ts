@@ -40,6 +40,12 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const OUT = process.env.OUTPUT_DIR ?? path.join(ROOT, 'out');
 const PUBLIC = path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT ?? 3000);
+
+/** Build stamp written by the build step; tells us what is actually deployed. */
+const BUILD_STAMP: { builtAt?: string; node?: string } = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'build-stamp.json'), 'utf8')); }
+  catch { return { builtAt: 'unknown (dev / unbuilt)' }; }
+})();
 /** Base URL for links inside notifications. Set on Render to the public host. */
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/$/, '');
 const projects = new ProjectStore(OUT);
@@ -174,6 +180,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         status: 'ok',
         service: 'smart1-ad-builder',
+        builtAt: BUILD_STAMP.builtAt,
         uptime: Math.round(process.uptime()),
         queued: listJobs().filter((j) => j.status === 'queued').length,
         embed: {
@@ -185,6 +192,10 @@ const server = http.createServer(async (req, res) => {
           configured: Boolean(process.env.ALLOWED_FRAME_ANCESTORS),
         },
       });
+    }
+
+    if (route === 'GET /version') {
+      return json(res, 200, BUILD_STAMP);
     }
 
     // The embeddable intake form. Framed by the customer's marketing site, so
@@ -233,10 +244,26 @@ const server = http.createServer(async (req, res) => {
       const cors = corsHeaders(req.headers.origin);
       const body = JSON.parse(await readBody(req, 200_000)) as Record<string, any>;
 
-      // Silently accept honeypot hits. Telling a bot it was detected just
-      // teaches whoever wrote it to leave the field alone next time.
-      if (body.honeypot) {
-        return json(res, 200, { requestId: `AD-${new Date().getFullYear()}-000000` }, cors);
+      // Bot trap. Two signals must AGREE before we treat a submission as a
+      // bot, because either one alone has a real-world false positive:
+      //   - the hidden text field, which browser autofill / password managers
+      //     will fill for a genuine human despite autocomplete=off;
+      //   - submission speed: a human spends at least a couple of seconds, a
+      //     script posts instantly.
+      // A filled honeypot with human-plausible timing is almost always
+      // autofill, so we let it through (and clear the field). Only a filled
+      // honeypot AND an instant submit is rejected — and even then we LOG it,
+      // so it shows up in the Render logs rather than vanishing as a silent
+      // fake success id.
+      const trap = String(body.honeypot ?? '').trim();
+      const elapsed = typeof body.elapsedMs === 'number' ? body.elapsedMs : null;
+      const instant = elapsed !== null && elapsed < 1200;
+      if (trap && (instant || elapsed === null)) {
+        console.warn(`[intake] REJECTED as bot: honeypot="${trap.slice(0, 40)}" elapsedMs=${elapsed}`);
+        return json(res, 200, { requestId: `AD-${new Date().getFullYear()}-000000`, rejected: true }, cors);
+      }
+      if (trap) {
+        console.warn(`[intake] honeypot was filled (elapsedMs=${elapsed}) but timing looks human — treating as autofill, allowing through`);
       }
 
       const missing = ['business', 'website', 'contact', 'email', 'campaignName', 'promoting']
@@ -250,6 +277,7 @@ const server = http.createServer(async (req, res) => {
       // ~40 bits — unguessable at any polite request rate.
       const requestId = `AD-${new Date().getFullYear()}-` +
         Array.from(crypto.randomBytes(8), (b) => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 31]).join('').slice(0, 8);
+      console.log(`[intake] ${requestId} accepted from ${body.email ?? '?'} — building campaign…`);
       const record = { requestId, receivedAt: new Date().toISOString(), ...body };
       const dir = path.join(OUT, 'requests');
       fs.mkdirSync(dir, { recursive: true });
@@ -293,7 +321,8 @@ const server = http.createServer(async (req, res) => {
           projects.addAsset(project.projectId, { kind: kind as any, source: source as any });
         }
         (build as any).projectId = project.projectId;
-        console.log(`[intake] ${requestId} -> project ${project.projectId}, renderable=${result.renderable}`);
+        console.log(`[intake] ${requestId} -> project ${project.projectId}, renderable=${result.renderable}` +
+          (result.renderable ? '' : ` (not renderable: ${result.notes.slice(0, 2).join('; ')})`));
 
         // Read the landing page in the background: the customer should not wait
         // on a third-party fetch to see their confirmation screen.
@@ -319,7 +348,9 @@ const server = http.createServer(async (req, res) => {
           // exactly how a customer watches a skeleton for 17 minutes.
           const pRef = project;
           (async () => {
+            const t0 = Date.now();
             try {
+              console.log(`[firstlook] ${requestId} rendering 300x250…`);
               const first = await renderPreview({
                 brand: result.campaign.brand,
                 concept: result.campaign.concepts[0],
@@ -330,12 +361,12 @@ const server = http.createServer(async (req, res) => {
               const dir = path.join(OUT, 'firstlook');
               fs.mkdirSync(dir, { recursive: true });
               fs.writeFileSync(path.join(dir, `${requestId}.png`), first.png);
-              console.log(`[firstlook] ${requestId} written`);
+              console.log(`[firstlook] ${requestId} written in ${Date.now() - t0}ms (${first.png.length} bytes)`);
             } catch (e: any) {
               console.warn(`[firstlook] ${requestId}: ${e?.message ?? e}`);
             }
             const job = enqueue({ campaign: result.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
-            console.log(`[intake] ${requestId} queued for auto-render as job ${job.id}`);
+            console.log(`[intake] ${requestId} queued batch job ${job.id} for ${platforms.join('+')}`);
             pRef.autoJobId = job.id;
             projects.save(pRef);
 
@@ -1029,6 +1060,7 @@ server.listen(PORT, HOST, () => {
   console.log(`  output dir: ${OUT}`);
   console.log(`  worker:     ${process.env.WORKER_MODE === 'external' ? 'external' : 'in-process'}`);
   console.log(`  embed page: ${fs.existsSync(path.join(PUBLIC, 'embed.html')) ? 'present' : 'MISSING'}`);
+  console.log(`  build:      ${BUILD_STAMP.builtAt}`);
   console.log(`  frame-ancestors: ${FRAME_ANCESTORS}`);
   if (!process.env.ALLOWED_FRAME_ANCESTORS) {
     console.warn(
