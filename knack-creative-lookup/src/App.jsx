@@ -42,54 +42,36 @@ const App = () => {
         );
       }
 
-      // Query object_135 with optimized batch size
+      // Query object_135 - ONLY LOAD FIRST PAGE (250 records)
       const objectId = 'object_135';
-      let allRecords = [];
-      let pageNumber = 1;
-      let hasMore = true;
-      const batchSize = 250; // Smaller batch size to be safe with memory
+      const batchSize = 250;
 
-      // Paginate through records
-      while (hasMore && pageNumber <= 10) { // Max 10 pages = 2,500 records
-        try {
-          const response = await axios.get(
-            `https://api.knack.com/v1/objects/${objectId}/records`,
-            {
-              headers: {
-                'X-Knack-REST-API-Key': apiKey,
-                'X-Knack-Application-Id': appId,
-                'Content-Type': 'application/json'
-              },
-              params: {
-                rows_per_page: batchSize,
-                page: pageNumber
-              },
-              timeout: 10000 // 10 second timeout per request
-            }
-          );
-
-          const records = response.data.records || [];
-          
-          if (records.length === 0) {
-            hasMore = false;
-          } else {
-            allRecords = allRecords.concat(records);
-            pageNumber++;
-          }
-        } catch (pageErr) {
-          console.warn(`Error fetching page ${pageNumber}:`, pageErr);
-          hasMore = false;
+      const response = await axios.get(
+        `https://api.knack.com/v1/objects/${objectId}/records`,
+        {
+          headers: {
+            'X-Knack-REST-API-Key': apiKey,
+            'X-Knack-Application-Id': appId,
+            'Content-Type': 'application/json'
+          },
+          params: {
+            rows_per_page: batchSize,
+            page: 1 // ONLY LOAD PAGE 1
+          },
+          timeout: 10000 // 10 second timeout
         }
-      }
+      );
 
-      if (allRecords.length === 0) {
+      const records = response.data.records || [];
+      
+      if (records.length === 0) {
         setError('No records found');
         setIoRecords([]);
         setClients([]);
         return;
       }
 
-      setIoRecords(allRecords);
+      setIoRecords(records);
 
       // Extract unique clients from field_2384 (no duplicates)
       const uniqueClients = [...new Set(
