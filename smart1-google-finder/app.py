@@ -86,7 +86,6 @@ def close_db(error):
 
 
 def init_db(conn):
-    # 1. Create tables if they don't exist
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS google_accounts (
@@ -138,13 +137,6 @@ def init_db(conn):
         )
         """
     )
-
-    # 2. MIGRATION CHECK: Add 'status' column to 'google_accounts' if missing from pre-existing DB
-    cursor = conn.execute("PRAGMA table_info(google_accounts);")
-    columns = [row[1] for row in cursor.fetchall()]
-    if "status" not in columns:
-        conn.execute("ALTER TABLE google_accounts ADD COLUMN status TEXT DEFAULT 'ACTIVE';")
-
     conn.commit()
 
 
@@ -878,9 +870,10 @@ def gtm_deploy_event():
 
 @app.route("/api/gsc/bulk-add", methods=["POST"])
 def api_gsc_bulk_add():
+    """Bulk adds properties and sitemaps across Search Console accounts."""
     data = request.json or {}
     google_login = data.get("google_login", "").strip().lower()
-    entries = data.get("entries", [])
+    entries = data.get("entries", []) # List of { site_url, sitemap_url }
 
     if not google_login or not entries:
         return jsonify({"error": "Missing login email or domain list."}), 400
@@ -922,6 +915,7 @@ def api_gsc_bulk_add():
 
 @app.route("/api/ga4/anomalies", methods=["POST"])
 def api_ga4_anomalies():
+    """Detects unusual traffic drops or spikes (>20% change) for a property."""
     data = request.json or {}
     property_id = data.get("property_id", "").strip()
     google_login = data.get("google_login", "").strip().lower()
@@ -937,6 +931,7 @@ def api_ga4_anomalies():
         access_token = refresh_access_token(google_login, account["refresh_token"])
         url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
         
+        # Recent 7 days vs Prior 7 days
         req_body = {
             "dateRanges": [
                 {"startDate": "7daysAgo", "endDate": "yesterday"},
