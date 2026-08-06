@@ -70,8 +70,14 @@ const TLD = '(?:com|net|org|co|io|us|biz|info|shop|agency|studio)';
  * @param {Array<{from:string,to:string}>} pronunciations project overrides
  * @returns {{spoken:string, changes:Array<{from:string,to:string,why:string}>}}
  */
-export function normalizeForSpeech(text, pronunciations = []) {
+export function normalizeForSpeech(text, pronunciations = [], language = 'en') {
   let out = String(text || '');
+  // Everything below rewrites numbers, money and dates into ENGLISH words.
+  // Running it on a Spanish or German script would read "$89" as
+  // "eighty-nine dollars" in the middle of Spanish copy. For any other
+  // language we apply only the language-neutral steps and let the voice
+  // model handle the rest.
+  const english = String(language || 'en').toLowerCase().startsWith('en');
   const changes = [];
   const note = (from, to, why) => {
     if (from !== to) changes.push({ from, to, why });
@@ -110,6 +116,15 @@ export function normalizeForSpeech(text, pronunciations = []) {
     },
     'web address');
 
+  if (!english) {
+    // Language-neutral only: spacing digits still helps every language.
+    swap(/(?:\+?1[\s.-])?\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})\b/g,
+      (_, a, b, c) => `${a.split('').join(' ')}, ${b.split('').join(' ')}, ${c.split('').join(' ')}`,
+      'phone number');
+    out = out.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
+    return { spoken: out, changes, language };
+  }
+
   // 4. Phone numbers, spoken digit by digit with pauses between groups.
   swap(/(?:\+?1[\s.-])?\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})\b/g,
     (_, a, b, c) => `${digitsToWords(a)}, ${digitsToWords(b)}, ${digitsToWords(c)}`,
@@ -147,7 +162,7 @@ export function normalizeForSpeech(text, pronunciations = []) {
   }, 'number');
 
   out = out.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
-  return { spoken: out, changes };
+  return { spoken: out, changes, language };
 }
 
 /* ---------- timing ---------- */

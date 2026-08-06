@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { config, missingKeys } from '../config.js';
-import { TONES, VOICE_CHARACTERISTICS, toneById } from '../catalog.js';
+import { TONES, VOICE_CHARACTERISTICS, LANGUAGES_PRIMARY, LANGUAGES_MORE, toneById } from '../catalog.js';
 import { store, log, id } from '../services/store.js';
 import { startJob, getJob } from '../services/jobs.js';
 import { fetchBrand } from '../services/brandfetch.js';
@@ -124,6 +124,55 @@ api.post('/review/:projectId/decision', wrap(async (req, res) => {
 }));
 
 /* ================================================================== */
+/* Status badge — cheap, cached, no session needed                     */
+/* ================================================================== */
+
+let statusCache = { at: 0, body: null };
+
+async function probe(fn) {
+  try { await fn(); return true; } catch { return false; }
+}
+
+/**
+ * A one-line health summary for the header badge. Cached for a minute so
+ * polling it never costs a round of live API calls, and it reports counts
+ * rather than service names so it is safe to read without signing in.
+ */
+api.get('/status', wrap(async (_req, res) => {
+  if (statusCache.body && Date.now() - statusCache.at < 60000) {
+    return ok(res, { status: { ...statusCache.body, cached: true } });
+  }
+
+  const results = await Promise.all([
+    probe(async () => {
+      const r = await fetch(`${config.openai.base}/models/${config.openai.textModel}`, {
+        headers: { Authorization: `Bearer ${config.openai.key}` }
+      });
+      if (!r.ok) throw new Error();
+    }),
+    probe(() => fetchBrand('smart1marketing.com')),
+    probe(() => eleven.accountCheck()),
+    probe(() => cdn.usage()),
+    probe(async () => { if (!config.ghl.opportunityWebhook) throw new Error(); }),
+    probe(async () => { if (!config.auth.password || config.auth.secret === 'change-me-in-production') throw new Error(); }),
+    probe(async () => { if (!config.audio.enabled || !(await audio.ffmpegAvailable())) throw new Error(); })
+  ]);
+
+  const total = results.length;
+  const passing = results.filter(Boolean).length;
+  const body = {
+    ok: passing === total,
+    passing,
+    total,
+    failing: total - passing,
+    label: passing === total ? 'All systems go' : `${total - passing} of ${total} need attention`,
+    checkedAt: new Date().toISOString()
+  };
+  statusCache = { at: Date.now(), body };
+  ok(res, { status: body });
+}));
+
+/* ================================================================== */
 /* Everything below needs a team session                               */
 /* ================================================================== */
 
@@ -133,6 +182,8 @@ api.get('/catalog', (_req, res) =>
   ok(res, {
     tones: TONES,
     voiceCharacteristics: VOICE_CHARACTERISTICS,
+    languagesPrimary: LANGUAGES_PRIMARY,
+    languagesMore: LANGUAGES_MORE,
     provenTones: insights.topTones(4).map((t) => t.toneId),
     audioPost: config.audio.enabled
   })
@@ -238,7 +289,8 @@ api.post('/projects', wrap(async (req, res) => {
       homeUrl: c.homeUrl.trim(),
       landingUrl: (c.landingUrl || '').trim(),
       promotion: (c.promotion || '').trim(),
-      disclaimer: (c.disclaimer || '').trim()
+      disclaimer: (c.disclaimer || '').trim(),
+      language: (c.language || 'en').trim()
     },
     brand: req.body.brand || null,
     pronunciations: req.body.pronunciations || [],
@@ -544,7 +596,7 @@ api.post('/projects/:projectId/commercials/:spotId/speech-preview', (req, res) =
   const spot = project.commercials.find((c) => c.id === req.params.spotId);
   if (!spot) return fail(res, 404, 'That spot is not in this project.');
   const overrides = req.body.pronunciations || project.pronunciations;
-  ok(res, { preview: speech.normalizeForSpeech(spot.script, overrides) });
+  ok(res, { preview: speech.normalizeForSpeech(spot.script, overrides, project.customer.language) });
 });
 
 /* ---------------- version history ---------------- */
@@ -612,7 +664,7 @@ function startRender(projectId, spotId, voice) {
     if (!s) throw new Error('That spot is no longer in the project.');
 
     // 1. Rewrite the copy the way it should be spoken.
-    const { spoken, changes } = speech.normalizeForSpeech(s.script, p.pronunciations);
+    const { spoken, changes } = speech.normalizeForSpeech(s.script, p.pronunciations, p.customer.language);
 
     // 2. Voice it.
     const raw = await eleven.renderAudio({
@@ -795,7 +847,8 @@ api.get('/library/:projectId/settings', (req, res) => {
       customer: {
         customerName: p.customer.customerName, company: p.customer.company, email: p.customer.email,
         teamMember: p.customer.teamMember, homeUrl: p.customer.homeUrl,
-        landingUrl: p.customer.landingUrl, disclaimer: p.customer.disclaimer || ''
+        landingUrl: p.customer.landingUrl, disclaimer: p.customer.disclaimer || '',
+        language: p.customer.language || 'en'
       },
       brand: p.brand, tones: p.tones, voiceCharacteristics: p.voiceCharacteristics,
       pronunciations: p.pronunciations || [], musicBed: p.musicBed || null,

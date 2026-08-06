@@ -1,6 +1,6 @@
 import { config } from '../config.js';
 import { log } from './store.js';
-import { TONES, toneById } from '../catalog.js';
+import { TONES, toneById, languageLabel } from '../catalog.js';
 
 async function chatJSON(system, user, { maxTokens = 1800 } = {}) {
   if (!config.openai.key) throw new Error('OpenAI key is not set. Add OPENAI_API_KEY.');
@@ -124,6 +124,8 @@ Give exactly 3 recommendedTones, best first.`,
 /** Write a matched 15-second and 30-second pair in one call so they share a hook. */
 export async function writeScripts({ analysis, brand, customer, toneId, revisionNote, previous }) {
   const disclaimer = String(customer.disclaimer || '').trim();
+  const lang = languageLabel(customer.language || 'en');
+  const nonEnglish = (customer.language || 'en') !== 'en';
   const tone = toneById(toneId);
   if (!tone) throw new Error('Unknown tone.');
 
@@ -132,7 +134,7 @@ export async function writeScripts({ analysis, brand, customer, toneId, revision
     : '';
 
   return chatJSON(
-    `You write streaming-radio commercials for Smart 1 Marketing. Radio is heard, not read: write for the ear. Rules you never break — the brand name is said at least twice in a :30 and at least once in a :15; the call to action is the last thing heard; you never invent an offer, price, discount, guarantee or statistic that was not supplied; you never write sound effects the client did not ask for; a :15 runs 35-42 words and a :30 runs 70-85 words at a natural read pace. Reply as JSON only.`,
+    `You write streaming-radio commercials for Smart 1 Marketing. Radio is heard, not read: write for the ear.${nonEnglish ? ` WRITE THE SCRIPTS ENTIRELY IN ${lang.toUpperCase()}. Write as a native ${lang} copywriter would — idiomatic, not translated. Keep the brand name, any web address and any required disclaimer exactly as supplied, even if they are English. Word-count targets are counted in ${lang} words.` : ''} Rules you never break — the brand name is said at least twice in a :30 and at least once in a :15; the call to action is the last thing heard; you never invent an offer, price, discount, guarantee or statistic that was not supplied; you never write sound effects the client did not ask for; a :15 runs 35-42 words and a :30 runs 70-85 words at a natural read pace. Reply as JSON only.`,
     `TONE: ${tone.label} — ${tone.direction}
 
 BRIEF
@@ -161,9 +163,11 @@ The script fields contain only words to be spoken. No labels, no "VO:", no times
 /** Suggested voice profile, generated in the background while the client picks. */
 export async function suggestVoiceProfile({ analysis, customer, toneIds }) {
   const tones = toneIds.map((t) => toneById(t)?.label).filter(Boolean).join(', ');
+  const lang = languageLabel(customer?.language || 'en');
   return chatJSON(
     `You are a casting director for radio voiceover. You recommend a voice, not a person. Reply as JSON only.`,
-    `Tones selected: ${tones}
+    `The spot will be recorded in ${lang}; recommend an accent a native ${lang} listener would trust.
+Tones selected: ${tones}
 Business: ${analysis?.summary || customer.company || customer.customerName}
 Listener: ${analysis?.audience || ''}
 Offer: ${analysis?.offer || ''}
@@ -181,8 +185,9 @@ Return JSON:
 /** Headline + art direction for the streaming companion banner. */
 export async function bannerCopy({ analysis, brand, customer, toneId }) {
   const tone = toneById(toneId);
+  const lang = languageLabel(customer?.language || 'en');
   return chatJSON(
-    `You write companion banner copy for streaming audio ads. The banner is small and glanceable: a listener sees it on a phone lock screen for a few seconds. Reply as JSON only.`,
+    `You write companion banner copy for streaming audio ads, in ${lang}. The banner is small and glanceable: a listener sees it on a phone lock screen for a few seconds. Reply as JSON only.`,
     `Tone: ${tone.label} — ${tone.direction}
 Business: ${brand?.name || customer.company || customer.customerName}
 Offer: ${analysis?.offer || customer.promotion || ''}
@@ -233,11 +238,12 @@ export async function bannerArt({ brand, toneId, headline }) {
  */
 export async function tightenScript({ script, seconds, trimWords, toneId, analysis, customer }) {
   const tone = toneById(toneId);
+  const lang = languageLabel(customer?.language || 'en');
   const disclaimer = String(customer?.disclaimer || '').trim();
   const target = Math.max(8, (script || '').split(/\s+/).filter(Boolean).length - trimWords);
 
   return chatJSON(
-    `You are a radio copy editor. You cut for time. You never drop the brand name, the offer, the call to action or a required disclaimer — you cut adjectives, subordinate clauses and setup instead. Reply as JSON only.`,
+    `You are a radio copy editor working in ${lang}. Your rewrite must stay in ${lang}. You cut for time. You never drop the brand name, the offer, the call to action or a required disclaimer — you cut adjectives, subordinate clauses and setup instead. Reply as JSON only.`,
     `This :${seconds} read came in ${trimWords} word${trimWords === 1 ? '' : 's'} too long for the slot.
 
 TONE: ${tone?.label || ''} — keep it.

@@ -33,9 +33,22 @@ const norm = (s = '') => String(s).toLowerCase().replace(/[^a-z]/g, '');
 
 const ACCENT_ALIASES = {
   american: ['american', 'us', 'usa', 'transatlantic'],
+  spanish: ['spanish', 'castilian', 'latin', 'mexican', 'espanol'],
+  german: ['german', 'deutsch'],
   british: ['british', 'english', 'uk', 'received'],
+  irish: ['irish', 'ireland'],
+  scottish: ['scottish', 'scots', 'scotland'],
   australian: ['australian', 'aussie'],
-  transatlantic: ['transatlantic', 'american', 'british']
+  new_zealand: ['new zealand', 'kiwi'],
+  canadian: ['canadian', 'canada', 'american'],
+  transatlantic: ['transatlantic', 'american', 'british'],
+  southern_us: ['southern', 'south', 'texas', 'american'],
+  new_york: ['new york', 'brooklyn', 'american'],
+  mexican: ['mexican', 'mexico', 'latin', 'spanish'],
+  castilian: ['castilian', 'spain', 'spanish'],
+  latin_american: ['latin', 'latino', 'spanish'],
+  brazilian: ['brazilian', 'brazil', 'portuguese'],
+  chinese: ['chinese', 'mandarin']
 };
 
 const ENERGY_WORDS = {
@@ -67,7 +80,7 @@ function scoreVoice(voice, want) {
     if (norm(l.age) === norm(want.age)) { score += 3; reasons.push(String(l.age).replace('_', ' ')); }
   }
   if (want.accent && want.accent !== 'any') {
-    const aliases = ACCENT_ALIASES[want.accent] || [want.accent];
+    const aliases = ACCENT_ALIASES[want.accent] || [String(want.accent).replace(/_/g, ' ')];
     if (aliases.some((a) => norm(l.accent).includes(norm(a)))) { score += 3; reasons.push(l.accent); }
   }
   if (want.energy) {

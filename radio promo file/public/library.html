@@ -10,6 +10,7 @@
 <header class="rack">
   <div class="rack-inner">
     <div class="brandmark"><span class="one">S1</span><span class="rest">Radio Studio</span><span class="sub">library</span></div>
+    <a class="statusdot" id="s1status" href="/diagnostics.html" title="System status"><i></i><span>Checking…</span></a>
     <nav class="rack-links"><a href="/">Studio</a><a href="/how-it-works.html">How it works</a><a href="/diagnostics.html">Diagnostics</a></nav>
   </div>
 </header>
@@ -25,9 +26,10 @@
 </main>
 
 <script type="module">
-import { ensureAuth, esc } from '/js/auth.js';
+import { ensureAuth, esc, mountStatus } from '/js/auth.js';
 const results = document.getElementById('results');
 await ensureAuth(results);
+mountStatus();
 
 async function load(q='') {
   results.innerHTML = '<div class="panel flat"><p class="small muted mono">Searching…</p></div>';

@@ -66,3 +66,25 @@ export async function signOut() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
   location.reload();
 }
+
+/**
+ * Small green/red badge in the header that links to the full diagnostics
+ * page. Answers "is anything broken?" without leaving whatever you're doing.
+ */
+export async function mountStatus(selector = '#s1status') {
+  const el = document.querySelector(selector);
+  if (!el) return;
+  el.className = 'statusdot checking';
+  el.innerHTML = '<i></i><span>Checking…</span>';
+  try {
+    const res = await fetch('/api/status', { credentials: 'same-origin' });
+    const data = await res.json();
+    const st = data.status;
+    el.className = `statusdot ${st.ok ? 'up' : 'down'}`;
+    el.innerHTML = `<i></i><span>${esc(st.label)}</span>`;
+    el.title = `${st.passing} of ${st.total} checks passing · click for detail`;
+  } catch {
+    el.className = 'statusdot down';
+    el.innerHTML = '<i></i><span>Status unavailable</span>';
+  }
+}

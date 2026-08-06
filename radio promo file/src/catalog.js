@@ -23,6 +23,38 @@ export const TONES = [
 
 export const toneById = (toneId) => TONES.find((t) => t.id === toneId) || null;
 
+/**
+ * Language the spot is written and read in. The three common choices are
+ * radio buttons; everything else sits behind one dropdown so the screen
+ * stays readable.
+ */
+export const LANGUAGES_PRIMARY = [
+  { id: 'en', label: 'English' },
+  { id: 'es', label: 'Spanish' }
+];
+
+export const LANGUAGES_MORE = [
+  { id: 'de', label: 'German' },      { id: 'fr', label: 'French' },
+  { id: 'it', label: 'Italian' },     { id: 'pt', label: 'Portuguese' },
+  { id: 'pt-BR', label: 'Portuguese (Brazil)' }, { id: 'nl', label: 'Dutch' },
+  { id: 'pl', label: 'Polish' },      { id: 'sv', label: 'Swedish' },
+  { id: 'no', label: 'Norwegian' },   { id: 'da', label: 'Danish' },
+  { id: 'fi', label: 'Finnish' },     { id: 'cs', label: 'Czech' },
+  { id: 'ro', label: 'Romanian' },    { id: 'el', label: 'Greek' },
+  { id: 'tr', label: 'Turkish' },     { id: 'ru', label: 'Russian' },
+  { id: 'uk', label: 'Ukrainian' },   { id: 'ar', label: 'Arabic' },
+  { id: 'hi', label: 'Hindi' },       { id: 'ta', label: 'Tamil' },
+  { id: 'ja', label: 'Japanese' },    { id: 'ko', label: 'Korean' },
+  { id: 'zh', label: 'Chinese (Mandarin)' },     { id: 'id', label: 'Indonesian' },
+  { id: 'ms', label: 'Malay' },       { id: 'fil', label: 'Filipino' },
+  { id: 'vi', label: 'Vietnamese' },  { id: 'hu', label: 'Hungarian' },
+  { id: 'bg', label: 'Bulgarian' },   { id: 'hr', label: 'Croatian' },
+  { id: 'sk', label: 'Slovak' }
+];
+
+export const languageLabel = (id) =>
+  [...LANGUAGES_PRIMARY, ...LANGUAGES_MORE].find((l) => l.id === id)?.label || 'English';
+
 /** Voice characteristic pickers — every group renders as radio buttons. */
 export const VOICE_CHARACTERISTICS = [
   {
@@ -47,10 +79,40 @@ export const VOICE_CHARACTERISTICS = [
     id: 'accent', label: 'Accent',
     options: [
       { id: 'american', label: 'American' },
-      { id: 'british', label: 'British' },
-      { id: 'australian', label: 'Australian' },
-      { id: 'transatlantic', label: 'Transatlantic' },
+      { id: 'spanish', label: 'Spanish' },
+      { id: 'german', label: 'German' },
       { id: 'any', label: 'No preference' }
+    ],
+    // Anything less common goes in one dropdown rather than twenty more
+    // radio buttons nobody can scan.
+    more: [
+      { id: 'british', label: 'British' },
+      { id: 'irish', label: 'Irish' },
+      { id: 'scottish', label: 'Scottish' },
+      { id: 'australian', label: 'Australian' },
+      { id: 'new_zealand', label: 'New Zealand' },
+      { id: 'canadian', label: 'Canadian' },
+      { id: 'transatlantic', label: 'Transatlantic' },
+      { id: 'southern_us', label: 'Southern US' },
+      { id: 'new_york', label: 'New York' },
+      { id: 'mexican', label: 'Mexican Spanish' },
+      { id: 'castilian', label: 'Castilian Spanish' },
+      { id: 'latin_american', label: 'Latin American Spanish' },
+      { id: 'french', label: 'French' },
+      { id: 'italian', label: 'Italian' },
+      { id: 'portuguese', label: 'Portuguese' },
+      { id: 'brazilian', label: 'Brazilian Portuguese' },
+      { id: 'dutch', label: 'Dutch' },
+      { id: 'swedish', label: 'Swedish' },
+      { id: 'polish', label: 'Polish' },
+      { id: 'russian', label: 'Russian' },
+      { id: 'indian', label: 'Indian' },
+      { id: 'arabic', label: 'Arabic' },
+      { id: 'japanese', label: 'Japanese' },
+      { id: 'korean', label: 'Korean' },
+      { id: 'chinese', label: 'Chinese' },
+      { id: 'nigerian', label: 'Nigerian' },
+      { id: 'south_african', label: 'South African' }
     ]
   },
   {

@@ -1,5 +1,5 @@
 import { showLoader, stopLoader } from './svg.js';
-import { ensureAuth, signOut, api, esc } from './auth.js';
+import { ensureAuth, signOut, api, esc, mountStatus } from './auth.js';
 
 /* ------------------------------------------------------------------ */
 /* Plumbing                                                            */
@@ -130,6 +130,54 @@ const radioCard = (group, value, title, sub, checked, badge) => `
   </label>`;
 
 const form = (el) => Object.fromEntries(new FormData(el).entries());
+
+/**
+ * A few common choices as radio buttons, then one "Other" that reveals a
+ * dropdown. Twenty-odd languages or accents as radio buttons is unreadable.
+ */
+function radioWithOther(group, primary, more, selected) {
+  const isOther = selected && !primary.some((o) => o.id === selected);
+  return `
+    <div class="options">
+      ${primary.map((o) => radioCard(group, o.id, o.label, '', selected === o.id)).join('')}
+      <label class="opt">
+        <input type="radio" name="${group}" value="__other" ${isOther ? 'checked' : ''} data-other="${group}">
+        <span class="face"><b>Other…</b><em>choose from the list</em></span>
+      </label>
+    </div>
+    <div class="otherwrap" data-otherwrap="${group}" ${isOther ? '' : 'hidden'}>
+      <label class="field" style="margin:12px 0 0">
+        <span class="lbl">Choose one</span>
+        <select name="${group}_other">
+          <option value="">Select…</option>
+          ${more.map((o) => `<option value="${esc(o.id)}" ${selected === o.id ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}
+        </select>
+      </label>
+    </div>`;
+}
+
+/** Show or hide the dropdown as the radios change, inside one form. */
+function wireOther(formEl) {
+  formEl.querySelectorAll('[data-other]').forEach((otherInput) => {
+    const group = otherInput.dataset.other;
+    const wrap = formEl.querySelector(`[data-otherwrap="${CSS.escape(group)}"]`);
+    formEl.querySelectorAll(`input[name="${CSS.escape(group)}"]`).forEach((input) => {
+      input.addEventListener('change', () => {
+        const on = otherInput.checked;
+        wrap.hidden = !on;
+        if (on) wrap.querySelector('select')?.focus();
+      });
+    });
+  });
+}
+
+/** Collapse "__other" + its dropdown back into a single value. */
+function resolveOther(values, group) {
+  if (values[group] === '__other') values[group] = values[`${group}_other`] || 'any';
+  delete values[`${group}_other`];
+  return values;
+}
+
 const toneLabel = (id) => state.catalog.tones.find((t) => t.id === id)?.label || id;
 
 /** Words-to-clock meter shown under every editable script. */
@@ -172,6 +220,15 @@ function renderSetup() {
         ${field('promotion', 'Promotion details', { textarea: true, placeholder: 'The offer, the dates, anything that has to be said word for word, anything to stay away from.' })}
         ${field('disclaimer', 'Required disclaimer', { textarea: true, value: c.disclaimer, placeholder: 'Offer ends August 31. See dealer for details. APR subject to credit approval.', help: 'Read verbatim in every spot. It eats into the word budget, so the scripts are written shorter to make room.' })}
 
+        <div class="chargroup" style="margin-bottom:6px">
+          <div class="grouplabel">Which language should the spot be in?</div>
+          ${radioWithOther('language',
+            state.catalog.languagesPrimary || [{ id: 'en', label: 'English' }],
+            state.catalog.languagesMore || [],
+            c.language || 'en')}
+          <span class="help">The script is written natively in this language, not translated, and the voice reads it in the same language.</span>
+        </div>
+
         <div class="actions">
           <button type="button" class="btn ghost" id="lookupBrand">Pull brand from the website</button>
           <span class="spacer"></span>
@@ -190,6 +247,7 @@ function renderSetup() {
 
   document.getElementById('lookupBrand').addEventListener('click', lookupBrand);
   document.getElementById('setupForm').addEventListener('submit', submitSetup);
+  wireOther(document.getElementById('setupForm'));
 
   const search = document.getElementById('reuseSearch');
   if (search) {
@@ -288,7 +346,8 @@ async function applyReuse(projectId) {
 
 async function submitSetup(ev) {
   ev.preventDefault();
-  const customer = form(ev.target);
+  const customer = resolveOther(form(ev.target), 'language');
+  if (!customer.language || customer.language === 'any') customer.language = 'en';
   setBusy(true, 'Opening project');
   try {
     if (!state.brand && customer.homeUrl) {
@@ -688,7 +747,9 @@ async function renderCast() {
       ${groups.map((g) => `
         <div class="chargroup">
           <div class="grouplabel">${esc(g.label)}</div>
-          <div class="options">${g.options.map((o, i) => radioCard(g.id, o.id, o.label, '', i === 0)).join('')}</div>
+          ${g.more && g.more.length
+            ? radioWithOther(g.id, g.options, g.more, state.project.voiceCharacteristics?.[g.id] || g.options[0].id)
+            : `<div class="options">${g.options.map((o, i) => radioCard(g.id, o.id, o.label, '', i === 0)).join('')}</div>`}
         </div>`).join('')}
       <div class="actions"><button type="submit" class="btn">Find three voices</button></div>
     </form>
@@ -704,6 +765,7 @@ async function renderCast() {
   `);
 
   document.getElementById('castForm').addEventListener('submit', findVoices);
+  wireOther(document.getElementById('castForm'));
   document.getElementById('customVoiceForm').addEventListener('submit', addCustomVoice);
   document.getElementById('singleVoice').addEventListener('change', async (ev) => {
     await api(`/projects/${state.projectId}/settings`, { method: 'POST', body: { singleVoice: ev.target.checked } });
@@ -721,6 +783,8 @@ async function loadBeds() {
     const { beds, note } = await api('/beds');
     state.beds = beds;
     state.bedNote = note || null;
+    // Nothing in the library yet? Land on Compose rather than an empty list.
+    if (!state.bedTab) state.bedTab = beds.length ? 'library' : 'generate';
     paintBeds();
   } catch (err) {
     box.innerHTML = `<div class="notice warn">${esc(err.message)}</div>`;
@@ -919,7 +983,17 @@ async function uploadBed(ev) {
 function applyProfile(profile, box) {
   Object.entries(profile.recommendation || {}).forEach(([group, value]) => {
     const input = document.querySelector(`#castForm input[name="${CSS.escape(group)}"][value="${CSS.escape(value)}"]`);
-    if (input) input.checked = true;
+    if (input) { input.checked = true; return; }
+    // Not one of the radio buttons — try the "Other" dropdown for this group.
+    const select = document.querySelector(`#castForm select[name="${CSS.escape(group)}_other"]`);
+    const option = select && [...select.options].find((o) => o.value === value);
+    if (option) {
+      select.value = value;
+      const other = document.querySelector(`#castForm input[name="${CSS.escape(group)}"][value="__other"]`);
+      if (other) { other.checked = true; }
+      const wrap = document.querySelector(`#castForm [data-otherwrap="${CSS.escape(group)}"]`);
+      if (wrap) wrap.hidden = false;
+    }
   });
   box.innerHTML = `<div class="notice">Suggested casting is pre-selected below. ${esc(profile.why || '')}</div>`;
 }
@@ -939,7 +1013,7 @@ async function loadVoiceProfile() {
 
 async function findVoices(ev) {
   ev.preventDefault();
-  const characteristics = form(ev.target);
+  const characteristics = resolveOther(form(ev.target), 'accent');
   const box = document.getElementById('voiceBox');
   showLoader(box, 'voices');
   setBusy(true, 'Auditioning');
@@ -1367,6 +1441,7 @@ function render() {
   await ensureAuth(stage);
 
   document.getElementById('signOut')?.addEventListener('click', signOut);
+  mountStatus();
 
   try {
     const catalog = await api('/catalog');

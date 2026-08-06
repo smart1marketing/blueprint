@@ -311,3 +311,25 @@ details summary::-webkit-details-marker { color: var(--cyan); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* "Other…" dropdown revealed by a radio group */
+.otherwrap[hidden]{display:none}
+.otherwrap select{max-width:340px}
+
+/* header status badge — links through to full diagnostics */
+.statusdot{
+  display:inline-flex;align-items:center;gap:7px;text-decoration:none;
+  font-size:.66rem;letter-spacing:.11em;text-transform:uppercase;font-weight:700;
+  border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:5px 12px;
+  color:#9fb0cb;white-space:nowrap;margin-left:auto;
+}
+.statusdot:hover{border-color:rgba(255,255,255,.5);color:#fff}
+.statusdot i{width:8px;height:8px;border-radius:50%;background:#4a5f80;flex:none}
+.statusdot.up{color:#8ff0d5;border-color:rgba(28,211,162,.5)}
+.statusdot.up i{background:var(--teal);box-shadow:0 0 8px rgba(28,211,162,.8)}
+.statusdot.down{color:#ffc9c0;border-color:rgba(232,84,63,.6)}
+.statusdot.down i{background:var(--red);box-shadow:0 0 8px rgba(232,84,63,.8)}
+.statusdot.checking i{background:#7b8ba5;animation:throb 1.2s ease-in-out infinite}
+/* when the badge is present the ON AIR lamp no longer needs the auto margin */
+.statusdot ~ .onair{margin-left:10px}
+@media(max-width:620px){.statusdot span{display:none}.statusdot{padding:6px 9px}}
