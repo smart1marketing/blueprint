@@ -21,6 +21,8 @@ const multer = require('multer');
 const { analyzeExpenses, isAccepted, ACCEPTED } = require('./expenses');
 const { analyzeWebsite } = require('./website');
 const { estimateAudience } = require('./audience');
+const { estimateMarket, suggestCompetitors, compareSites } = require('./market');
+const { analyzeWebsite: scanSite } = require('./website');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -83,7 +85,14 @@ Rules:
 - Compare the client's spend to the industry midpoint at their revenue, in dollars, at least once.
 - Two growth scenarios are supplied (+15% and +25% lead volume). Reference both when they are calculable, so the client sees a realistic near-term figure and a stretch figure.
 - Where a warning sign was answered "unsure", treat the uncertainty itself as the finding. Do not describe it as a yes or a no.
+- If capacity is "No — already at capacity", do NOT recommend growing lead volume. Frame the opportunity as pricing, efficiency, cost per customer, and mix instead, and say why. If capacity allows growth, the growth scenarios apply as usual.
+- If revenue is mostly repeat customers, note that marketing's real job is replacement rate and reactivation, not volume, and judge the spend accordingly.
+- If a Google rating and review count are supplied, weigh them: in local services a sub-4.0 rating or thin review count often suppresses lead flow more than any budget decision. A strong rating that is not displayed on the website is a finding.
+- If top services are named, connect at least one finding or next step to them specifically — for example whether the highest-revenue service is visible on the website and in the spend.
+- In next steps, be honest about the build-vs-hire fork once: these fixes can be handled in-house given someone with the hours and analytics experience, or by a single accountable partner. Never name Smart 1 in that sentence.
+- ROI is deliberately conservative first-month math: (new customers times average sale, minus spend) divided by spend. If lifetime value is meaningfully higher than average sale, you may note once that the true return including repeat purchases is higher than the ROI figure shown, without recalculating it.
 - If the target market is provided, note at least one implication for channel choice or targeting. If it is not provided, say what you cannot assess without it.
+- When savings figures are supplied above, state the annual figure at least once and frame it as profit that either stays in the business or buys more of what already works. Always call the 20% and 25% rates typical or illustrative, never a quote or a guarantee.
 - Where multiple digital vendors are in use, explain why a single consolidated view of spend, leads, and closed sales would change what the client can optimize. Be concrete about what breaks without it: duplicate billing for the same customer, last-click credit misallocating budget, overlapping audiences, and no accountable owner of cost per acquired customer.
 - Treat in-house marketing payroll as part of the true cost of acquisition. If headcount cost is supplied, state the fully loaded monthly figure at least once.
 - Asset ownership, lead response time, and CRM tracking each deserve a finding when the answer is a risk: a vendor owning the domain or ad accounts, a response time of a day or more, or no tracking from lead to sale.
@@ -116,7 +125,7 @@ function buildUserPrompt(p = {}) {
   const cp = p.competition || {};
   const wb = p.website || null;
   const aud = estimateAudience({
-    population: s.areaPopulation,
+    population: p.marketData?.population,
     audienceType: mk.audienceType, ageRanges: mk.ageRanges,
     incomeBand: mk.incomeBand, genderSkew: mk.genderSkew, homeownersOnly: mk.homeownersOnly,
   });
@@ -178,8 +187,8 @@ Lead response time: ${pr.leadResponseTime || 'not answered'}
 Tracks leads to closed sale: ${pr.crmTracking || 'not answered'}
 
 COMPETITION
-Knows who their competitors are: ${cp.knowsCompetitors || 'not answered'}
-Named competitors: ${(cp.competitors || []).map((c) => `${c.name || 'unnamed'}${c.website ? ` (${c.website})` : ''}`).join('; ') || 'none named'}
+Confirmed competitors: ${(cp.competitors || []).map((c) => `${c.name || 'unnamed'}${c.website ? ` (${c.website})` : ''}`).join('; ') || 'none confirmed'}
+Head-to-head site comparisons: ${(cp.competitors || []).filter((c) => c.comparison?.comparison).map((c) => `${c.name}: ${c.comparison.comparison.verdict || ''}`).join(' | ') || 'none completed'}
 Stated differentiation: ${cp.differentiation || 'none stated'}
 Losing work to: ${cp.losingTo || 'not stated'}
 
@@ -190,7 +199,9 @@ Not found: ${(wb.missing || []).join('; ') || 'nothing'}
 ${wb.analysis?.summary ? `Reviewer summary: ${wb.analysis.summary}` : ''}` : (s.website ? `${s.website} was supplied but not scanned.` : 'No website supplied.')}
 
 ESTIMATED REACHABLE AUDIENCE
-${aud ? `Service area${s.cityMarket ? ` (${s.cityMarket})` : ''} population ${aud.population.toLocaleString('en-US')}
+${aud ? `Service area${p.marketData?.areaName ? ` (${p.marketData.areaName})` : ''} population ${aud.population.toLocaleString('en-US')} (${p.marketData?.confidence || 'estimated'} confidence: ${p.marketData?.basis || 'estimated'})
+${p.marketData?.demographicNote ? `Area character: ${p.marketData.demographicNote}` : ''}
+${p.marketData?.medianHouseholdIncome ? `Median household income: ${money(p.marketData.medianHouseholdIncome)}` : ''}
 Estimated reachable primary audience: ${aud.primary.toLocaleString('en-US')} (working range ${aud.low.toLocaleString('en-US')}–${aud.high.toLocaleString('en-US')})
 This is a directional estimate from national averages, not local census data. Treat it as an order of magnitude.` : 'Not estimated — service-area population was not supplied.'}
 
@@ -204,6 +215,17 @@ Audience notes: ${mk.audienceNotes || 'none'}
 
 BUSINESS CONTEXT FROM THE PARTNER
 ${mk.contextNotes || 'None supplied.'}
+
+ADDITIONAL SIGNALS (optional questions)
+Revenue mix: ${p.context2?.repeatShare || 'not answered'}
+Capacity for more leads: ${p.context2?.capacity || 'not answered'}
+Google rating: ${p.context2?.gRating || 'not answered'}${p.context2?.gReviews ? `, ${p.context2.gReviews} reviews` : ''}
+Top services by revenue: ${p.context2?.topServices || 'not provided'}
+
+POSSIBLE SAVINGS (illustrative rates, already calculated)
+${p.savings && p.savings.monthly > 0 ? `Consolidating digital vendors: ${money(p.savings.consolidate)}/month (20% of ${money(p.savings.digital)} digital spend, ${p.savings.vendorCount} vendors)
+Removing traditional/digital overlap: ${money(p.savings.overlap)}/month (25% of ${money(p.savings.traditional)} traditional spend)
+Combined: ${money(p.savings.monthly)}/month, ${money(p.savings.annual)}/year` : 'No consolidation savings apply — too few vendors or no overlapping spend.'}
 
 INDUSTRY CONTEXT
 Known patterns in this industry:
@@ -378,6 +400,7 @@ function leadPayload(body = {}, pdfUrl) {
   return {
     source: 'Marketing Efficiency Audit',
     stage: pdfUrl ? 'completed' : 'started',
+    lastScreen: body.lastScreen || '',
     partnerName: body.partnerName || snap.preparedBy || body.name || '',
     partnerFirm: body.partnerFirm || snap.partnerFirm || body.firm || '',
     name: body.name || '',
@@ -464,9 +487,9 @@ sweepPdfs();
 app.post('/api/report', async (req, res) => {
   const payload = req.body || {};
   try {
-    if (!payload.audience && payload.snapshot?.areaPopulation) {
+    if (!payload.audience && payload.marketData?.population) {
       payload.audience = estimateAudience({
-        population: payload.snapshot.areaPopulation,
+        population: payload.marketData.population,
         audienceType: payload.market?.audienceType,
         ageRanges: payload.market?.ageRanges,
         incomeBand: payload.market?.incomeBand,
@@ -503,6 +526,60 @@ app.post('/api/report', async (req, res) => {
   } catch (err) {
     console.error('pdf build failed:', err);
     res.status(500).json({ error: 'Report could not be generated.' });
+  }
+});
+
+/* ---------------------------------------------------------------
+   Market sizing — always returns a population, AI or fallback
+---------------------------------------------------------------- */
+app.post('/api/market', async (req, res) => {
+  const context = req.body?.context || {};
+  if (rateLimited(req.ip, 30)) return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  const market = await estimateMarket({ context, apiKey: OPENAI_API_KEY, model: OPENAI_MODEL });
+  res.json({ ok: true, market });
+});
+
+/* ---------------------------------------------------------------
+   Competitor discovery
+---------------------------------------------------------------- */
+app.post('/api/competitors', async (req, res) => {
+  const context = req.body?.context || {};
+  if (rateLimited(req.ip, 25)) return res.status(429).json({ error: 'Too many requests. Try again later.' });
+  const out = await suggestCompetitors({ context, apiKey: OPENAI_API_KEY, model: OPENAI_MODEL });
+  res.json({ ok: true, ...out });
+});
+
+/* ---------------------------------------------------------------
+   Head-to-head: scan a competitor site and compare it to the client's
+---------------------------------------------------------------- */
+app.post('/api/compare', async (req, res) => {
+  const { clientScan, competitor } = req.body || {};
+  if (!competitor?.website) return res.status(400).json({ error: 'No competitor website supplied.' });
+  if (rateLimited(req.ip, 40)) return res.status(429).json({ error: 'Too many requests. Try again later.' });
+
+  try {
+    const scanned = await scanSite({ url: competitor.website, context: {}, apiKey: null });
+    const comparison = await compareSites({
+      clientScan, competitorName: competitor.name || competitor.website,
+      competitorScan: scanned.scan, apiKey: OPENAI_API_KEY, model: OPENAI_MODEL,
+    });
+    res.json({
+      ok: true,
+      name: competitor.name,
+      website: competitor.website,
+      scan: {
+        finalUrl: scanned.scan.finalUrl,
+        conversionPoints: scanned.scan.conversionPoints,
+        counts: scanned.scan.counts,
+        trackers: scanned.scan.trackers,
+        booking: scanned.scan.booking,
+        chat: scanned.scan.chat,
+        flags: scanned.scan.flags,
+      },
+      comparison,
+    });
+  } catch (err) {
+    res.json({ ok: false, name: competitor.name, website: competitor.website, error: err.message });
   }
 });
 
@@ -594,6 +671,13 @@ app.post('/api/expenses', upload.single('file'), async (req, res) => {
   }
 
   res.json(result);
+});
+
+app.get('/sample-report.pdf', (req, res) => {
+  const sample = path.join(__dirname, 'public', 'sample-report.pdf');
+  if (!fs.existsSync(sample)) return res.status(404).send('Sample report not yet generated.');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.sendFile(sample);
 });
 
 app.get('/audit/:file', (req, res) => {

@@ -217,7 +217,7 @@ function buildAuditPdf(payload = {}) {
         y += blockH;
       }
 
-      rangeBar('Marketing spend as a share of revenue', b.budgetLo, b.budgetHi, m.spendPct,
+      rangeBar('Media spend as a share of revenue (staff and events excluded)', b.budgetLo, b.budgetHi, m.spendPct,
         (v) => v.toFixed(0) + '%', b.spendVerdict, b.spendClass, (v) => v.toFixed(1) + '%');
 
       rangeBar('Cost per lead', b.cplLo, b.cplHi, m.cpl, (v) => money(v),
@@ -296,6 +296,32 @@ function buildAuditPdf(payload = {}) {
         });
       }
 
+      /* ---------- 5d. target market ---------- */
+      const hasMarket = mk.audienceType || mk.serviceRadius || (mk.ageRanges || []).length || mk.incomeBand || mk.genderSkew || mk.audienceNotes || mk.contextNotes;
+      if (hasMarket) {
+        sectionTitle('Target market and business context');
+        const mRows = [
+          ['Sells to', mk.audienceType],
+          ['Service area', mk.serviceRadius],
+          ['Primary age ranges', (mk.ageRanges || []).join(', ')],
+          ['Household income', mk.incomeBand],
+          ['Gender skew', mk.genderSkew],
+        ].filter((r2) => r2[1]);
+        mRows.forEach((row) => {
+          ensure(17);
+          doc.font('Helvetica').fontSize(9).fillColor(C.muted).text(row[0], PAGE.m, y, { width: CONTENT_W * 0.5 });
+          doc.font('Helvetica-Bold').fontSize(9).fillColor(C.navy)
+            .text(row[1], PAGE.m + CONTENT_W * 0.5, y, { width: CONTENT_W * 0.5, align: 'right' });
+          y += 16;
+        });
+        y += 6;
+        if (mk.audienceNotes) body(`Audience notes: ${mk.audienceNotes}`, { size: 9, color: C.ink, after: 6 });
+        if (mk.contextNotes) {
+          body('Business context supplied by the partner', { font: 'Helvetica-Bold', size: 9.5, color: C.navy, after: 4 });
+          body(mk.contextNotes, { size: 9, color: C.muted, after: 16 });
+        }
+      }
+
       /* ---------- 5b. industry spending ---------- */
       sectionTitle(`What ${s.industry || 'this industry'} typically spends`);
 
@@ -304,7 +330,7 @@ function buildAuditPdf(payload = {}) {
         ['Typical budget range', `${b.budgetLo ?? '?'}%–${b.budgetHi ?? '?'}% of revenue`],
         ['Industry midpoint', b.budgetMid != null ? b.budgetMid.toFixed(1) + '% of revenue' : '—'],
         ['Midpoint at this revenue', midSpend != null ? money(midSpend) + ' / mo' : '—'],
-        ['This client', m.spendPct != null ? pct(m.spendPct) + ' of revenue' : '—'],
+        ['This client (media)', m.spendPct != null ? pct(m.spendPct) + ' of revenue' : '—'],
       ];
       const indH = 58;
       panel(indH);
@@ -334,8 +360,8 @@ function buildAuditPdf(payload = {}) {
         y += 14;
       }
 
-      if (midSpend != null && m.spend) {
-        const gap = m.spend - midSpend;
+      if (midSpend != null && (m.mediaSpend || m.spend)) {
+        const gap = (m.mediaSpend ?? m.spend) - midSpend;
         body(`${gap >= 0 ? 'Above' : 'Below'} the industry midpoint by ${money(Math.abs(gap))} per month, or ${money(Math.abs(gap) * 12)} a year.`,
           { font: 'Helvetica-Bold', size: 9.5, color: C.navy, after: 4 });
       }
@@ -366,7 +392,11 @@ function buildAuditPdf(payload = {}) {
 
       /* ---------- 5b3. audience estimate ---------- */
       if (aud && aud.steps) {
-        sectionTitle(`Estimated reachable audience${s.cityMarket ? ` — ${s.cityMarket}` : ''}`);
+        const md = payload.marketData || {};
+        sectionTitle(`Estimated reachable audience${md.areaName ? ` — ${md.areaName}` : (s.cityMarket ? ` — ${s.cityMarket}` : '')}`);
+        if (md.basis) {
+          body(`${md.basis} (${md.confidence || 'estimated'} confidence)`, { size: 8.5, color: C.muted, after: 8 });
+        }
         aud.steps.forEach((st) => {
           ensure(17);
           const em = !!st.emphasis;
@@ -381,7 +411,12 @@ function buildAuditPdf(payload = {}) {
           body(`Working range: ${aud.low.toLocaleString('en-US')} - ${aud.high.toLocaleString('en-US')}.`,
             { font: 'Helvetica-Bold', size: 9.5, color: C.navy, after: 5 });
         }
-        body('A directional estimate from national age, income, household, and business-density averages applied to the population supplied. Not local census data. Confirm against census or ad-platform reach figures before setting a budget.',
+        if (md.demographicNote) body(`About this area: ${md.demographicNote}`, { size: 9, color: C.ink, after: 6 });
+        if (md.medianHouseholdIncome) {
+          body(`Median household income ${money(md.medianHouseholdIncome)}${md.medianAge ? ` · median age ${md.medianAge}` : ''}`,
+            { size: 9, color: C.muted, after: 6 });
+        }
+        body('A directional estimate: an approximate service-area population filtered by national age, income, household, and business-density averages. Not local census data. Confirm against census or ad-platform reach figures before setting a budget.',
           { size: 8, color: C.muted, after: 16 });
       }
 
@@ -451,8 +486,25 @@ function buildAuditPdf(payload = {}) {
         if (cp.differentiation) body(`What sets them apart: ${cp.differentiation}`, { size: 9.5, color: C.ink, after: 6 });
         else body('No differentiation was stated. Where a business cannot say why a customer should choose them, advertising competes on price by default, which raises cost per lead.',
           { size: 9.5, color: C.muted, after: 6 });
-        if (cp.losingTo) body(`Losing work to: ${cp.losingTo}`, { size: 9.5, color: C.ink, after: 16 });
-        else y += 10;
+        if (cp.losingTo) body(`Losing work to: ${cp.losingTo}`, { size: 9.5, color: C.ink, after: 10 });
+
+        // Head-to-head site comparisons, where the background scan succeeded
+        const compared = (cp.competitors || []).filter((x) => x.comparison && x.comparison.comparison);
+        compared.forEach((x) => {
+          const cc = x.comparison.comparison;
+          body(`${x.name} — site comparison`, { font: 'Helvetica-Bold', size: 9.5, color: C.navy, after: 4 });
+          if (cc.verdict) body(cc.verdict, { size: 9, color: C.ink, after: 5 });
+          if ((cc.competitorAdvantages || []).length) {
+            body('What they do that this client does not:', { size: 8.5, color: C.muted, after: 3 });
+            bullets(cc.competitorAdvantages, C.red);
+          }
+          if ((cc.clientAdvantages || []).length) {
+            body('What this client does that they do not:', { size: 8.5, color: C.muted, after: 3 });
+            bullets(cc.clientAdvantages, C.green);
+          }
+          if (cc.takeaway) body(cc.takeaway, { font: 'Helvetica-Bold', size: 9, color: C.navy, after: 12 });
+        });
+        if (!compared.length) y += 10;
       }
 
       /* ---------- 5c. how they buy ---------- */
@@ -502,30 +554,119 @@ function buildAuditPdf(payload = {}) {
           { size: 9, color: C.muted, after: 16 });
       } else { y += 10; }
 
-      /* ---------- 5d. target market ---------- */
-      const hasMarket = mk.audienceType || mk.serviceRadius || (mk.ageRanges || []).length || mk.incomeBand || mk.genderSkew || mk.audienceNotes || mk.contextNotes;
-      if (hasMarket) {
-        sectionTitle('Target market and business context');
-        const mRows = [
-          ['Sells to', mk.audienceType],
-          ['Service area', mk.serviceRadius],
-          ['Primary age ranges', (mk.ageRanges || []).join(', ')],
-          ['Household income', mk.incomeBand],
-          ['Gender skew', mk.genderSkew],
-        ].filter((r2) => r2[1]);
-        mRows.forEach((row) => {
+      /* ---------- 6b. vendor consolidation ---------- */
+      const vendorCount = pr.digitalVendors
+        ? pr.digitalVendors.split(/[,\n;]+/).map((v) => v.trim()).filter(Boolean).length
+        : (s.vendors || 0);
+      if (vendorCount >= 2) {
+        y += 6;
+        sectionTitle('Why consolidating digital vendors is worth considering');
+        body('The problem is not the number of vendors. It is that no one sees the whole picture.',
+          { font: 'Helvetica-Bold', size: 10, color: C.navy, after: 6 });
+        body(`With ${vendorCount} vendors each running part of the marketing, each reports on its own slice and each slice looks acceptable in isolation. Nobody can answer the only question that matters: which dollar produced which customer.`,
+          { size: 9.5, color: C.ink, after: 10 });
+        const overlap = m.spend ? m.spend * 0.1 : null;
+        bullets([
+          'Attribution breaks at the seams. A visitor who sees a social ad, searches the brand later, and calls from the map listing gets counted by whichever vendor claims the last click. Two vendors bill for the same customer.',
+          'Budget moves in the wrong direction. Spend shifts toward whichever vendor reports most confidently rather than whichever produces revenue.',
+          `Duplicate spend goes unnoticed. Overlapping retargeting, brand-term bidding against the client's own organic listing, and two vendors buying the same audience are only visible when someone sees every account at once.${overlap ? ` At ${money(m.spend)} a month, ten percent overlap is ${money(overlap)} a month, or ${money(overlap * 12)} a year.` : ''}`,
+          'Testing becomes impossible. Optimization needs one variable changed at a time against one measure of success. Separate vendors optimizing separate metrics cancel each other out.',
+          'Nobody owns the outcome. When leads fall, each vendor points to its own numbers and is right. Consolidation creates one accountable party for cost per acquired customer.',
+        ], C.gold);
+        body('Consolidation does not have to mean one vendor for everything. It means one place where all spend, leads, and closed sales are visible together, and one party accountable for that view.',
+          { size: 9.5, color: C.ink, after: 16 });
+      }
+
+      /* ---------- 6a. savings ---------- */
+      const sv = payload.savings;
+      if (sv && sv.monthly > 0) {
+        y += 4;
+        sectionTitle('Possible savings from tightening the program');
+
+        const svH = 62;
+        ensure(svH);
+        doc.roundedRect(PAGE.m, y, CONTENT_W, svH, 8).fillAndStroke('#EAFBF7', '#B7EDE2');
+        doc.font('Helvetica-Bold').fontSize(22).fillColor(C.green2)
+          .text(money(sv.annual) + ' a year', PAGE.m + 20, y + 14, { width: CONTENT_W - 40 });
+        doc.font('Helvetica').fontSize(9).fillColor(C.muted)
+          .text(`${money(sv.monthly)} per month · ${((sv.monthly / (sv.total || 1)) * 100).toFixed(1)}% of current spend`,
+            PAGE.m + 20, y + 41, { width: CONTENT_W - 40 });
+        y += svH + 16;
+
+        if (sv.consolidate > 0) {
+          body('Consolidating digital vendors', { font: 'Helvetica-Bold', size: 10, color: C.navy, after: 4 });
+          body(`${sv.vendorCount} vendors across ${money(sv.digital)} a month of digital spend. Where several vendors work from one plan and one measurement standard rather than their own, roughly 20% of digital spend is typically recoverable: duplicate tools, overlapping audiences, brand terms bid against organic listings, and management fees paid twice on the same work. That is ${money(sv.consolidate)} a month here.`,
+            { size: 9.5, color: C.ink, after: 12 });
+        }
+        if (sv.overlap > 0) {
+          body('Removing traditional and digital overlap', { font: 'Helvetica-Bold', size: 10, color: C.navy, after: 4 });
+          body(`${money(sv.traditional)} a month in traditional media running alongside ${money(sv.digital)} in digital. Bought separately, the two usually reach the same people at the same time without either side knowing. Aligning the calendar and the audience typically frees about 25% of traditional spend without reducing reach — ${money(sv.overlap)} a month here.`,
+            { size: 9.5, color: C.ink, after: 12 });
+        }
+
+        // Before/after on the metrics that move. Both columns are derived from the
+        // same spend figure so the comparison can never be internally inconsistent.
+        const oldSpend = m.spend || 0;
+        const newSpend = Math.max(0, oldSpend - sv.monthly);
+        const per = (total, divisor) => (divisor > 0 && total > 0 ? total / divisor : null);
+        const roiOf = (cost) => (m.revenue != null && cost > 0 ? ((m.revenue - cost) / cost) * 100 : null);
+        const oldCpl = per(oldSpend, m.leads), newCpl = per(newSpend, m.leads);
+        const oldCac = per(oldSpend, m.customers), newCac = per(newSpend, m.customers);
+        const oldRoi = roiOf(oldSpend), newRoi = roiOf(newSpend);
+        const rows2 = [
+          ['Monthly spend', money(oldSpend), money(newSpend)],
+          newCpl != null ? ['Cost per lead', money(oldCpl), money(newCpl)] : null,
+          newCac != null ? ['Customer acquisition cost', money(oldCac), money(newCac)] : null,
+          newRoi != null ? ['Marketing ROI', Math.round(oldRoi) + '%', Math.round(newRoi) + '%'] : null,
+        ].filter(Boolean);
+
+        ensure(rows2.length * 17 + 24);
+        doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.muted)
+          .text('TODAY', PAGE.m + CONTENT_W * 0.55, y, { width: CONTENT_W * 0.22, align: 'right' })
+          .text('AFTER SAVINGS', PAGE.m + CONTENT_W * 0.77, y, { width: CONTENT_W * 0.23, align: 'right' });
+        y += 14;
+        rows2.forEach((r3) => {
           ensure(17);
-          doc.font('Helvetica').fontSize(9).fillColor(C.muted).text(row[0], PAGE.m, y, { width: CONTENT_W * 0.5 });
-          doc.font('Helvetica-Bold').fontSize(9).fillColor(C.navy)
-            .text(row[1], PAGE.m + CONTENT_W * 0.5, y, { width: CONTENT_W * 0.5, align: 'right' });
+          doc.font('Helvetica').fontSize(9).fillColor(C.navy).text(r3[0], PAGE.m, y, { width: CONTENT_W * 0.55 });
+          doc.font('Helvetica').fontSize(9).fillColor(C.muted).text(r3[1], PAGE.m + CONTENT_W * 0.55, y, { width: CONTENT_W * 0.22, align: 'right' });
+          doc.font('Helvetica-Bold').fontSize(9).fillColor(C.green2).text(r3[2], PAGE.m + CONTENT_W * 0.77, y, { width: CONTENT_W * 0.23, align: 'right' });
           y += 16;
         });
+        y += 8;
+        body('The 20% and 25% figures are typical recovery rates for programs with these characteristics, not a quote or a guarantee. The actual figure depends on what the vendor invoices contain, which is what the expense review exists to establish.',
+          { size: 8, color: C.muted, after: 16 });
+      }
+
+      /* ---------- 6a2. vendor questions ---------- */
+      {
+        y += 4;
+        sectionTitle('Five questions to ask any marketing vendor');
+        body('These apply to the current vendors and to anyone the client might hire. The answers separate vendors who manage outcomes from vendors who bill for activity.',
+          { size: 9, color: C.muted, after: 10 });
+        const VQ = [
+          ['Can you show me cost per acquired customer by channel?', 'Not cost per click or per lead — per customer who paid. A vendor who cannot produce this is reporting activity, not results.'],
+          ['Who owns the ad accounts, the website, and the tracking?', 'The client should own all three. A vendor who owns them has leverage a supplier should not have.'],
+          ['What is the notice period, and what transfers when we leave?', 'Month-to-month with full asset transfer is the professional standard. Long lock-ins usually protect the vendor, not the work.'],
+          ['What did you change last month, and what happened?', 'Ongoing management should produce a running log of tests and results. No log usually means the account is on autopilot while fees continue.'],
+          ['Where does my budget overlap with anything else we run?', 'A vendor who only sees their own slice cannot answer. That inability is the cost of fragmentation, stated out loud.'],
+        ];
+        VQ.forEach(([q, why], i) => {
+          const tw = CONTENT_W - 30;
+          doc.font('Helvetica-Bold').fontSize(9.5);
+          const qh = doc.heightOfString(q, { width: tw });
+          doc.font('Helvetica').fontSize(8.5);
+          const wh = doc.heightOfString(why, { width: tw, lineGap: 1.5 });
+          ensure(qh + wh + 15);
+          doc.circle(PAGE.m + 8, y + 7, 8).fill(C.navy);
+          doc.font('Helvetica-Bold').fontSize(8).fillColor(C.white)
+            .text(String(i + 1), PAGE.m + 3, y + 4, { width: 10, align: 'center' });
+          doc.font('Helvetica-Bold').fontSize(9.5).fillColor(C.navy)
+            .text(q, PAGE.m + 24, y, { width: tw });
+          doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
+            .text(why, PAGE.m + 24, y + qh + 2, { width: tw, lineGap: 1.5 });
+          y += qh + wh + 13;
+        });
         y += 6;
-        if (mk.audienceNotes) body(`Audience notes: ${mk.audienceNotes}`, { size: 9, color: C.ink, after: 6 });
-        if (mk.contextNotes) {
-          body('Business context supplied by the partner', { font: 'Helvetica-Bold', size: 9.5, color: C.navy, after: 4 });
-          body(mk.contextNotes, { size: 9, color: C.muted, after: 16 });
-        }
       }
 
       /* ---------- 6. written findings ---------- */
@@ -573,29 +714,6 @@ function buildAuditPdf(payload = {}) {
           doc.moveTo(PAGE.m, y).lineTo(PAGE.m + CONTENT_W, y).lineWidth(0.5).strokeColor(C.line).dash(2, { space: 2 }).stroke().undash();
           y += 8;
         });
-      }
-
-      /* ---------- 6b. vendor consolidation ---------- */
-      const vendorCount = pr.digitalVendors
-        ? pr.digitalVendors.split(/[,\n;]+/).map((v) => v.trim()).filter(Boolean).length
-        : (s.vendors || 0);
-      if (vendorCount >= 2) {
-        y += 6;
-        sectionTitle('Why consolidating digital vendors is worth considering');
-        body('The problem is not the number of vendors. It is that no one sees the whole picture.',
-          { font: 'Helvetica-Bold', size: 10, color: C.navy, after: 6 });
-        body(`With ${vendorCount} vendors each running part of the marketing, each reports on its own slice and each slice looks acceptable in isolation. Nobody can answer the only question that matters: which dollar produced which customer.`,
-          { size: 9.5, color: C.ink, after: 10 });
-        const overlap = m.spend ? m.spend * 0.1 : null;
-        bullets([
-          'Attribution breaks at the seams. A visitor who sees a social ad, searches the brand later, and calls from the map listing gets counted by whichever vendor claims the last click. Two vendors bill for the same customer.',
-          'Budget moves in the wrong direction. Spend shifts toward whichever vendor reports most confidently rather than whichever produces revenue.',
-          `Duplicate spend goes unnoticed. Overlapping retargeting, brand-term bidding against the client's own organic listing, and two vendors buying the same audience are only visible when someone sees every account at once.${overlap ? ` At ${money(m.spend)} a month, ten percent overlap is ${money(overlap)} a month, or ${money(overlap * 12)} a year.` : ''}`,
-          'Testing becomes impossible. Optimization needs one variable changed at a time against one measure of success. Separate vendors optimizing separate metrics cancel each other out.',
-          'Nobody owns the outcome. When leads fall, each vendor points to its own numbers and is right. Consolidation creates one accountable party for cost per acquired customer.',
-        ], C.gold);
-        body('Consolidation does not have to mean one vendor for everything. It means one place where all spend, leads, and closed sales are visible together, and one party accountable for that view.',
-          { size: 9.5, color: C.ink, after: 16 });
       }
 
       /* ---------- 7. questions + next steps ---------- */

@@ -35,17 +35,18 @@ const TRADITIONAL_MEDIA = [
 const AGE_RANGES = ['18–24', '25–34', '35–44', '45–54', '55–64', '65+'];
 
 const FLAGS = [
-  { id:'f1',  label:'Spends more than $2,500 monthly on marketing', points:2 },
   { id:'f2',  label:'Cannot clearly explain marketing ROI', points:3 },
   { id:'f3',  label:'Lead volume has declined over the last 6 months', points:3 },
   { id:'f4',  label:'Marketing expenses increased without revenue growth', points:4 },
-  { id:'f5',  label:'Multiple marketing vendors are being used', points:2 },
   { id:'f6',  label:'Website receives traffic but few inquiries', points:3 },
   { id:'f7',  label:'Does not know cost per lead', points:4 },
   { id:'f8',  label:'Does not track conversions', points:4 },
   { id:'f9',  label:'Agency reporting is difficult to understand', points:2 },
   { id:'f10', label:'No marketing strategy review within 12 months', points:3 },
 ];
+
+/* Total weight of all warning signs, used to normalise the score. */
+const FLAG_MAX = FLAGS.reduce((t, f) => t + f.points, 0);
 
 const SPEND_ITEMS = [
   { name:'Google Advertising', max:100000, step:250,
@@ -90,7 +91,7 @@ const SPEND_CATEGORIES = SPEND_ITEMS.map((i) => i.name);
 const state = {
   flags:{}, spend:{}, lead:null, results:null, analysis:null, pdfUrl:null, unlocked:false,
   profile:{}, media:new Set(), ages:new Set(), expenses:null, uploadMode:'ai',
-  competitors:[], website:null,
+  competitors:[], comparisons:{}, competitorBasis:'', website:null, market:null, scanRunning:false,
 };
 let gaugeTimer = null;
 
@@ -187,10 +188,25 @@ function buildUI() {
 
   buildCompetitors();
   buildScan();
+  buildCountSliders();
+  buildInfoBubbles();
 
-  // Prefill the scan box from the snapshot
+  $('#ageAll').addEventListener('click', () => {
+    const all = state.ages.size === AGE_RANGES.length;
+    state.ages.clear();
+    if (!all) AGE_RANGES.forEach((a) => state.ages.add(a));
+    $('#ageRanges').querySelectorAll('.chip-btn').forEach((b) => {
+      b.classList.toggle('sel', !all);
+      b.setAttribute('aria-pressed', String(!all));
+    });
+    $('#ageAll').textContent = all ? 'Select all' : 'Clear all';
+  });
+
+  // Prefill the scan box from the snapshot, and scan in the background once we have a URL
   $('#website').addEventListener('change', () => {
-    if (!$('#scanUrl').value) $('#scanUrl').value = $('#website').value.trim();
+    const url = $('#website').value.trim();
+    if (!$('#scanUrl').value) $('#scanUrl').value = url;
+    if (url && !state.website && !state.scanRunning) runScan({ background: true });
   });
 
   // Reveal the training question only when some work is done in house
@@ -202,6 +218,38 @@ function buildUI() {
 }
 
 /** Paints the filled portion of a range input, since browsers don't do it natively. */
+/** Locations and vendor count, shown as sliders with a live read-out. */
+function buildCountSliders() {
+  [['locations', '#locationsVal', 20], ['vendors', '#vendorsVal', 20]].forEach(([id, out, max]) => {
+    const el = $(`#${id}`);
+    if (!el) return;
+    const sync = () => {
+      const v = Number(el.value);
+      $(out).textContent = v >= max ? `${max}+` : String(v);
+      paintSlider(el);
+    };
+    el.addEventListener('input', sync);
+    sync();
+  });
+}
+
+/** Info circles that reveal a short explanation beneath the question. */
+function buildInfoBubbles() {
+  const map = { loc: '#infoLoc', ven: '#infoVen', dig: '#infoDig', trad: '#infoTrad', leads: '#infoLeads' };
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-count-info],[data-q-info]');
+    if (!btn) return;
+    e.preventDefault();
+    const key = btn.dataset.countInfo || btn.dataset.qInfo;
+    const help = $(map[key]);
+    if (!help) return;
+    const open = !help.hidden;
+    help.hidden = open;
+    btn.setAttribute('aria-expanded', String(!open));
+    btn.classList.toggle('on', !open);
+  });
+}
+
 function paintSlider(el) {
   const pct = (Number(el.value) / Number(el.max)) * 100;
   el.style.setProperty('--fill', `${pct}%`);
@@ -231,7 +279,6 @@ function buildTriToggles() {
       state.profile[group.dataset.q] = btn.dataset.v;
       if (group.dataset.q === 'seasonalMarketing') $('#seasonWrap').hidden = btn.dataset.v !== 'yes';
       if (group.dataset.q === 'liveEvents') $('#eventsWrap').hidden = btn.dataset.v !== 'yes';
-      if (group.dataset.q === 'knowsCompetitors') $('#compWrap').hidden = btn.dataset.v === 'no';
     });
   });
 }
@@ -270,37 +317,141 @@ if (EMBED) {
 
 
 /* ---------- Competitors ---------- */
-function competitorRow(i) {
-  return `<div class="comp-row" data-i="${i}">
-    <input type="text" class="comp-name" placeholder="Competitor name" aria-label="Competitor ${i + 1} name">
-    <input type="text" class="comp-site" placeholder="website.com" aria-label="Competitor ${i + 1} website">
-    <button type="button" class="comp-del" aria-label="Remove competitor ${i + 1}">&times;</button>
-  </div>`;
-}
-
 function buildCompetitors() {
-  const host = $('#competitorRows');
-  if (!host) return;
-  host.innerHTML = competitorRow(0) + competitorRow(1);
+  const find = $('#findCompetitors');
+  if (!find) return;
+  find.addEventListener('click', discoverCompetitors);
 
   $('#addCompetitor').addEventListener('click', () => {
-    if (host.querySelectorAll('.comp-row').length >= 5) return;
-    host.insertAdjacentHTML('beforeend', competitorRow(host.querySelectorAll('.comp-row').length));
+    const name = $('#newCompName').value.trim();
+    const site = $('#newCompSite').value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    if (!name && !site) return;
+    addConfirmed({ name: name || site, website: site, type: 'added', why: 'Added by the partner', confidence: 'high' });
+    $('#newCompName').value = '';
+    $('#newCompSite').value = '';
   });
 
-  host.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('comp-del')) return;
-    if (host.querySelectorAll('.comp-row').length > 1) e.target.closest('.comp-row').remove();
+  $('#compSuggestions').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const card = btn.closest('.sug');
+    const c = JSON.parse(card.dataset.comp);
+    if (btn.dataset.act === 'yes') addConfirmed(c);
+    card.remove();
+    if (!$('#compSuggestions').querySelector('.sug')) $('#compSuggestions').hidden = true;
   });
+
+  $('#confirmedRows').addEventListener('click', (e) => {
+    const btn = e.target.closest('.comp-del');
+    if (!btn) return;
+    const i = Number(btn.dataset.i);
+    state.competitors.splice(i, 1);
+    renderConfirmed();
+  });
+}
+
+function compStatus(kind, message) {
+  const el = $('#compStatus');
+  el.hidden = false;
+  el.className = 'upload-status' + (kind === 'error' ? ' err' : kind === 'ok' ? ' ok' : '');
+  el.innerHTML = kind === 'working'
+    ? `<svg class="spinner" viewBox="0 0 56 56" width="22" height="22" aria-hidden="true">
+         <circle class="sp-track" cx="28" cy="28" r="22" fill="none" stroke-width="5"/>
+         <circle class="sp-arc" cx="28" cy="28" r="22" fill="none" stroke-width="5" stroke-linecap="round"/>
+       </svg><span>${esc(message)}</span>`
+    : esc(message);
+}
+
+async function discoverCompetitors() {
+  const btn = $('#findCompetitors');
+  btn.disabled = true;
+  compStatus('working', 'Looking up businesses that compete in this market…');
+  try {
+    const res = await fetch('/api/competitors', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: {
+        website: $('#website').value.trim(),
+        clientName: $('#clientName').value.trim(),
+        zipCode: $('#zipCode').value.trim(),
+        cityMarket: $('#cityMarket').value.trim(),
+        industry: $('#industry').value,
+        serviceRadius: $('#serviceRadius')?.value || '',
+      } }),
+    });
+    const data = await res.json();
+    const list = data.competitors || [];
+    if (!list.length) {
+      compStatus('error', data.basis || 'No competitors could be suggested for this market. Add them manually below.');
+      return;
+    }
+    state.competitorBasis = data.basis || '';
+    compStatus('ok', `${list.length} possible competitors. Confirm the ones that actually compete.${data.note ? ' ' + data.note : ''}`);
+    renderSuggestions(list);
+  } catch (err) {
+    compStatus('error', 'Competitor lookup failed. Add them manually below.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderSuggestions(list) {
+  const host = $('#compSuggestions');
+  host.hidden = false;
+  host.innerHTML = list.map((c) => `
+    <div class="sug" data-comp='${esc(JSON.stringify(c))}'>
+      <div class="sug-main">
+        <b>${esc(c.name)}</b>
+        <span class="sug-meta">${c.website ? esc(c.website) : 'no website found'} · ${esc(c.type)}${c.why ? ` · ${esc(c.why)}` : ''}</span>
+      </div>
+      <div class="sug-acts">
+        <button type="button" class="sug-yes" data-act="yes">Competitor</button>
+        <button type="button" class="sug-no" data-act="no">Not one</button>
+      </div>
+    </div>`).join('');
+}
+
+function addConfirmed(c) {
+  if (state.competitors.some((x) => x.name.toLowerCase() === c.name.toLowerCase())) return;
+  state.competitors.push(c);
+  renderConfirmed();
+  if (c.website) queueComparison(c);
+}
+
+function renderConfirmed() {
+  const wrap = $('#compConfirmed');
+  wrap.hidden = state.competitors.length === 0;
+  $('#confirmedRows').innerHTML = state.competitors.map((c, i) => {
+    const cmp = state.comparisons[c.name];
+    const badge = !c.website ? '<span class="cmp-badge none">no site to check</span>'
+      : cmp === 'pending' ? '<span class="cmp-badge pending">checking site…</span>'
+      : cmp && cmp.ok ? '<span class="cmp-badge done">site checked</span>'
+      : cmp ? '<span class="cmp-badge fail">site unreachable</span>' : '';
+    return `<div class="comp-item confirmed">
+      <div><b>${esc(c.name)}</b><span>${c.website ? esc(c.website) : 'no website'}</span>${badge}</div>
+      <button type="button" class="comp-del" data-i="${i}" aria-label="Remove ${esc(c.name)}">&times;</button>
+    </div>`;
+  }).join('');
+}
+
+/** Scan and compare a competitor's site without blocking the questionnaire. */
+function queueComparison(c) {
+  state.comparisons[c.name] = 'pending';
+  renderConfirmed();
+  fetch('/api/compare', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ competitor: c, clientScan: state.website?.scan || null }),
+  })
+    .then((r) => r.json())
+    .then((d) => { state.comparisons[c.name] = d; renderConfirmed(); })
+    .catch(() => { state.comparisons[c.name] = { ok: false }; renderConfirmed(); });
 }
 
 function readCompetitors() {
-  return [...document.querySelectorAll('#competitorRows .comp-row')]
-    .map((r) => ({
-      name: r.querySelector('.comp-name').value.trim(),
-      website: r.querySelector('.comp-site').value.trim(),
-    }))
-    .filter((c) => c.name || c.website);
+  return state.competitors.map((c) => ({
+    name: c.name, website: c.website, type: c.type, why: c.why,
+    comparison: state.comparisons[c.name] && state.comparisons[c.name].ok
+      ? state.comparisons[c.name] : null,
+  }));
 }
 
 /* ---------- Website scan ---------- */
@@ -323,13 +474,17 @@ function scanStatus(kind, message) {
     : esc(message);
 }
 
-async function runScan() {
+async function runScan(opts = {}) {
   const url = $('#scanUrl').value.trim() || $('#website').value.trim();
-  if (!url) { scanStatus('error', 'Enter the website address first.'); return; }
+  if (!url) { if (!opts.background) scanStatus('error', 'Enter the website address first.'); return; }
+  if (state.scanRunning) return;
 
+  state.scanRunning = true;
   $('#scanResult').hidden = true;
   $('#scanBtn').disabled = true;
-  scanStatus('working', `Reading ${url} for conversion points…`);
+  scanStatus('working', opts.background
+    ? `Checking ${url} in the background — carry on, results appear in the report.`
+    : `Reading ${url} for conversion points…`);
 
   try {
     const res = await fetch('/api/website', {
@@ -354,6 +509,7 @@ async function runScan() {
   } catch (err) {
     scanStatus('error', err.message || 'That site could not be scanned.');
   } finally {
+    state.scanRunning = false;
     $('#scanBtn').disabled = false;
   }
 }
@@ -500,7 +656,10 @@ function renderExpenseResult(a) {
 
 /* ---------- Navigation ---------- */
 const ORDER = ['intro','step1','profile','compete','step2','step3','step4','market','results'];
+let current = 'intro';
 function goto(id) {
+  current = id;
+  if (id !== 'intro' && id !== 'results') scheduleSave();
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   const i = ORDER.indexOf(id);
   const prog = $('#progress');
@@ -527,6 +686,12 @@ function calculate() {
   const bm = INDUSTRIES[industry] || INDUSTRIES['Other / Not listed'];
   const annualRevenue = num('#annualRevenue');
   const spend = totalSpend();
+  // Benchmark ranges are published for media spend. Staff payroll and events are
+  // real costs (kept in ROI) but comparing them against media-only ranges would
+  // make every client with an in-house team look like an overspender.
+  const NON_MEDIA = ['In-house Marketing Staff', 'Live Events / Sponsorships'];
+  const mediaSpend = SPEND_CATEGORIES.reduce(
+    (t, c) => t + (NON_MEDIA.includes(c) ? 0 : (Number(state.spend[c]) || 0)), 0);
   const leads = num('#leads');
   const customers = num('#customers');
   const avgSale = num('#avgSale');
@@ -540,7 +705,7 @@ function calculate() {
   const clv = avgSale > 0 ? avgSale * purchasesPerYear * customerYears : null;
   const revenue = customers > 0 && avgSale > 0 ? customers * avgSale : null;
   const roi = revenue != null && spend > 0 ? ((revenue - spend) / spend) * 100 : null;
-  const spendPct = annualRevenue > 0 && spend > 0 ? ((spend * 12) / annualRevenue) * 100 : null;
+  const spendPct = annualRevenue > 0 && mediaSpend > 0 ? ((mediaSpend * 12) / annualRevenue) * 100 : null;
 
   const scenarios = LIFTS.map((pct2) => {
     const addLeads = leads * (pct2 / 100);
@@ -567,7 +732,7 @@ function calculate() {
 
   /* Marketing Efficiency Score™ — 100 points */
   const pts = leakPoints();
-  let score = 45 * (1 - pts / 30);                       // measurement & visibility
+  let score = 45 * (1 - pts / FLAG_MAX);                // measurement & visibility
   if (spendVerdict === 'within range') score += 20;      // spend alignment
   else if (spendVerdict === 'below range') score += 14;
   else if (spendVerdict === 'above range') score += (spendPct <= bm.budget[1] * 1.25 ? 12 : 5);
@@ -598,20 +763,24 @@ function calculate() {
     score >= 35 ? 'Hidden inefficiencies may be affecting profitability. A detailed review is advised.' :
     'Multiple indicators suggest marketing spend is not optimized. Review strongly encouraged.';
 
+  const leakRatio = FLAG_MAX ? pts / FLAG_MAX : 0;
   const leakTier =
-    pts <= 5 ? 'Healthy' : pts <= 10 ? 'Monitor' : pts <= 15 ? 'Opportunity exists' :
-    pts <= 20 ? 'Significant opportunity' : 'Immediate review recommended';
+    leakRatio <= 0.17 ? 'Healthy' :
+    leakRatio <= 0.34 ? 'Monitor' :
+    leakRatio <= 0.50 ? 'Opportunity exists' :
+    leakRatio <= 0.67 ? 'Significant opportunity' : 'Immediate review recommended';
 
   return {
     snapshot: {
       clientName: $('#clientName').value.trim(), industry,
-      annualRevenue, locations: num('#locations'), vendors: num('#vendors'),
+      annualRevenue,
+      locations: Number($('#locations').value) || 1,
+      vendors: Number($('#vendors').value) || 0,
       preparedBy: $('#preparedBy').value.trim(),
       partnerFirm: $('#partnerFirm').value.trim(),
       website: $('#website').value.trim(),
       zipCode: $('#zipCode').value.trim(),
       cityMarket: $('#cityMarket').value.trim(),
-      areaPopulation: num('#areaPopulation'),
     },
     spend: state.spend,
     profile: {
@@ -636,8 +805,8 @@ function calculate() {
       crmTracking: $('#crmTracking').value,
     },
     competition: {
-      knowsCompetitors: state.profile.knowsCompetitors || 'not answered',
       competitors: readCompetitors(),
+      suggestionBasis: state.competitorBasis || '',
       differentiation: $('#differentiation').value.trim(),
       losingTo: $('#losingTo').value.trim(),
     },
@@ -652,6 +821,8 @@ function calculate() {
       missing: state.website.scan.missing,
       analysis: state.website.analysis,
     } : null,
+    marketData: state.market,
+    savings: null,
     market: {
       audienceType: $('#audienceType').value,
       serviceRadius: $('#serviceRadius').value,
@@ -669,8 +840,15 @@ function calculate() {
       totalMonthly: state.expenses.analysis?.totalMonthly ?? null,
       period: state.expenses.analysis?.period ?? null,
     } : null,
+    context2: {
+      repeatShare: $('#repeatShare').value,
+      capacity: $('#capacity').value,
+      gRating: $('#gRating').value,
+      gReviews: $('#gReviews').value,
+      topServices: $('#topServices').value.trim(),
+    },
     metrics: { spend, leads, customers, avgSale, purchasesPerYear, customerYears,
-      cpl, cac, closeRate, clv, revenue, roi, spendPct,
+      cpl, cac, closeRate, clv, revenue, roi, spendPct, mediaSpend,
       liftPct: LIFTS[0], scenarios,
       opportunityMonthly, opportunityAnnual },
     benchmark: { budgetLo: bm.budget[0], budgetHi: bm.budget[1],
@@ -684,7 +862,7 @@ function calculate() {
       response: state.flags[f.id] || 'not answered',
       answer: isFlagged(state.flags[f.id]),
     })),
-    leakPoints: pts, leakTier, score, scoreTier, scoreNote,
+    leakPoints: pts, leakMax: FLAG_MAX, leakTier, score, scoreTier, scoreNote,
   };
 }
 
@@ -775,6 +953,8 @@ function renderReport(r) {
   renderWebsite(r);
   renderCompetition(r);
   renderConsolidation(r);
+  renderSavings(r);
+  renderVendorQuestions(r);
   renderProfile(r);
   renderMarket(r);
 
@@ -799,15 +979,16 @@ const label = (v) => YN[v] || (v && v !== 'not answered' && v !== 'not asked' ? 
 function renderIndustry(r) {
   const b = r.benchmark, m = r.metrics, s = r.snapshot;
   const avgSpend = s.annualRevenue ? (s.annualRevenue * b.budgetMid) / 100 / 12 : null;
-  const gap = avgSpend != null && m.spend ? m.spend - avgSpend : null;
+  const gap = avgSpend != null && m.mediaSpend ? m.mediaSpend - avgSpend : null;
 
   $('#industryPanel').innerHTML = `
     <h4>What ${esc(s.industry)} businesses typically spend</h4>
+    <p class="ind-note src-note">Benchmark ranges cover media and vendor spend. In-house staff and live events are counted in ROI but excluded here so the comparison is like for like.</p>
     <div class="kv">
       <div class="kv-item"><div class="k">Typical budget range</div><div class="v">${b.budgetLo}%–${b.budgetHi}% of revenue</div></div>
       <div class="kv-item"><div class="k">Industry midpoint</div><div class="v">${b.budgetMid.toFixed(1)}% of revenue</div></div>
       <div class="kv-item"><div class="k">Midpoint at this revenue</div><div class="v">${avgSpend != null ? usd(avgSpend) + ' / mo' : 'Revenue not provided'}</div></div>
-      <div class="kv-item"><div class="k">This client</div>
+      <div class="kv-item"><div class="k">This client (media spend)</div>
         <div class="v ${b.spendClass === 'ok' ? 'good' : b.spendClass === 'bad' ? 'flag' : ''}">${m.spendPct != null ? m.spendPct.toFixed(1) + '% of revenue' : 'Not calculable'}</div></div>
     </div>
     ${gap != null ? `<p class="ind-note"><b>${gap >= 0 ? 'Above' : 'Below'} the industry midpoint by ${usd(Math.abs(gap))} per month</b>
@@ -905,22 +1086,16 @@ function estimateAudience(mk, population) {
 }
 
 function renderAudience(r) {
-  const est = estimateAudience(r.market, r.snapshot.areaPopulation);
+  const mk2 = r.marketData || {};
+  const est = estimateAudience(r.market, mk2.population);
   const host = $('#audiencePanel');
-  if (!est) {
-    if (!r.snapshot.cityMarket && !r.snapshot.zipCode) { host.style.display='none'; return; }
-    host.style.display='';
-    host.innerHTML = `<h4>Audience size</h4>
-      <p class="ind-note">Audience size could not be estimated because the service-area population was not supplied.
-      Add an approximate population for ${esc(r.snapshot.cityMarket || r.snapshot.zipCode)} and the audit will size the reachable audience
-      against the age, income, and geography answers.</p>`;
-    return;
-  }
   host.style.display='';
+  if (!est) { host.style.display='none'; return; }
   const n = (v) => v.toLocaleString('en-US');
   const cpl = r.metrics.cpl;
   host.innerHTML = `
-    <h4>Estimated reachable audience${r.snapshot.cityMarket ? ` — ${esc(r.snapshot.cityMarket)}` : ''}${r.snapshot.zipCode ? ` ${esc(r.snapshot.zipCode)}` : ''}</h4>
+    <h4>Estimated reachable audience${mk2.areaName ? ` — ${esc(mk2.areaName)}` : ''}</h4>
+    ${mk2.basis ? `<p class="ind-note src-note">Service area sized from ${r.snapshot.zipCode ? `ZIP ${esc(r.snapshot.zipCode)}` : 'the market supplied'} and the service radius. ${esc(mk2.basis)} <span class="conf ${mk2.confidence}">${esc(mk2.confidence)} confidence</span></p>` : ''}
     <div class="funnel">
       ${est.steps.map((s2) => `
         <div class="fn-row${s2.emphasis ? ' em' : ''}">
@@ -932,8 +1107,15 @@ function renderAudience(r) {
     ${r.metrics.leads ? `At ${r.metrics.leads} leads a month, the client is currently reaching roughly
       ${((r.metrics.leads / est.primary) * 100).toFixed(2)}% of that audience each month.` : ''}
     ${cpl ? ` Reaching one percent of it would be about ${((est.primary * 0.01)).toLocaleString('en-US', {maximumFractionDigits:0})} people.` : ''}</p>
-    <p class="ind-note"><em>A directional estimate from national age, income, household, and business-density averages applied to
-    the population supplied. Not local census data. Confirm against census or ad-platform reach figures before setting a budget.</em></p>`;
+    ${mk2.demographicNote ? `<p class="ind-note"><b>About this area:</b> ${esc(mk2.demographicNote)}</p>` : ''}
+    ${(mk2.medianHouseholdIncome || mk2.medianAge || mk2.homeownershipRate) ? `
+      <div class="kv">
+        ${mk2.medianHouseholdIncome ? `<div class="kv-item"><div class="k">Median household income</div><div class="v">${usd(mk2.medianHouseholdIncome)}</div></div>` : ''}
+        ${mk2.medianAge ? `<div class="kv-item"><div class="k">Median age</div><div class="v">${mk2.medianAge}</div></div>` : ''}
+        ${mk2.homeownershipRate ? `<div class="kv-item"><div class="k">Homeownership</div><div class="v">${Math.round(mk2.homeownershipRate * (mk2.homeownershipRate <= 1 ? 100 : 1))}%</div></div>` : ''}
+      </div>` : ''}
+    <p class="ind-note"><em>A directional estimate: an approximate service-area population filtered by national age, income,
+    household, and business-density averages. Not local census data. Confirm against census or ad-platform reach figures before setting a budget.</em></p>`;
 }
 
 /* ---------- Industry benchmarks and facts ---------- */
@@ -991,7 +1173,7 @@ function renderWebsite(r) {
 /* ---------- Competition ---------- */
 function renderCompetition(r) {
   const c = r.competition, host = $('#competitionPanel');
-  const any = c.competitors.length || c.differentiation || c.losingTo || c.knowsCompetitors !== 'not answered';
+  const any = c.competitors.length || c.differentiation || c.losingTo;
   if (!any) { host.style.display='none'; return; }
   host.style.display='';
 
@@ -1007,6 +1189,18 @@ function renderCompetition(r) {
       <p class="ind-note"><b>No differentiation was stated.</b> Where a business cannot articulate why a customer should choose
       them, advertising tends to compete on price by default, which raises cost per lead.</p>`}
     ${c.losingTo ? `<p class="ind-note"><b>Losing work to:</b> ${esc(c.losingTo)}</p>` : ''}
+    ${c.competitors.filter((x) => x.comparison?.comparison).map((x) => {
+      const cc = x.comparison.comparison;
+      return `<div class="cmp-block">
+        <b>${esc(x.name)} — site comparison</b>
+        ${cc.verdict ? `<p>${esc(cc.verdict)}</p>` : ''}
+        ${(cc.competitorAdvantages || []).length ? `<span class="cmp-lab">What they do that this client does not</span>
+          <ul class="facts">${cc.competitorAdvantages.map((a2) => `<li>${esc(a2)}</li>`).join('')}</ul>` : ''}
+        ${(cc.clientAdvantages || []).length ? `<span class="cmp-lab">What this client does that they do not</span>
+          <ul class="facts">${cc.clientAdvantages.map((a2) => `<li>${esc(a2)}</li>`).join('')}</ul>` : ''}
+        ${cc.takeaway ? `<p class="cmp-take">${esc(cc.takeaway)}</p>` : ''}
+      </div>`;
+    }).join('')}
     <p class="ind-note">${listed
       ? `With ${listed} named competitor${listed === 1 ? '' : 's'}, the practical next step is to compare their visibility on the
          terms this client depends on. In ${esc(r.snapshot.industry)}, ${b.mixDigital}% of typical spend goes to digital, so
@@ -1060,6 +1254,125 @@ function renderConsolidation(r) {
     <p class="ind-note">Consolidation does not have to mean one vendor for everything. It means one place where all spend, leads,
     and closed sales are visible together, and one party accountable for that view.
     ${tracked ? 'That work has to start with conversion tracking — until that exists, consolidating vendors just centralizes the same blind spot.' : ''}</p>`;
+}
+
+
+/* ---------- Consolidation savings ---------- */
+/**
+ * Two savings levers, applied to the spend they actually affect:
+ *  - consolidating digital vendors: 20% of digital spend
+ *  - removing overlap between traditional and digital: 25% of traditional spend
+ * Both are illustrative percentages, labelled as such wherever they appear.
+ */
+const DIGITAL_CATS = ['Google Advertising','Social Media Advertising','SEO','Streaming TV',
+  'Display / Programmatic Ads','Retargeting','Website Expenses','Marketing Software',
+  'Email Marketing','Agency Fees'];
+const TRADITIONAL_CATS = ['Linear TV Advertising','Radio Advertising','Billboard Advertising',
+  'Direct Mail','Live Events / Sponsorships'];
+
+function savingsModel(r) {
+  const spend = r.spend || {};
+  const sum = (cats) => cats.reduce((t, c) => t + (Number(spend[c]) || 0), 0);
+  const digital = sum(DIGITAL_CATS);
+  const traditional = sum(TRADITIONAL_CATS);
+  const total = r.metrics.spend || 0;
+
+  const vendorText = r.profile.digitalVendors || '';
+  const vendorCount = vendorText
+    ? vendorText.split(/[,\n;]+/).map((v) => v.trim()).filter(Boolean).length
+    : (r.snapshot.vendors || 0);
+
+  const consolidate = vendorCount >= 2 ? digital * 0.20 : 0;
+  const overlap = (traditional > 0 && digital > 0) ? traditional * 0.25 : 0;
+  const monthly = consolidate + overlap;
+
+  return { digital, traditional, total, vendorCount, consolidate, overlap, monthly, annual: monthly * 12 };
+}
+
+function renderSavings(r) {
+  const host = $('#savingsPanel');
+  const s2 = savingsModel(r);
+  if (s2.monthly <= 0) { host.style.display = 'none'; return; }
+  host.style.display = '';
+
+  const m = r.metrics;
+  // Both columns derive from the same spend figure, so the comparison stays consistent
+  const oldSpend = m.spend || 0;
+  const newSpend = Math.max(0, oldSpend - s2.monthly);
+  const per = (total, divisor) => (divisor > 0 && total > 0 ? total / divisor : null);
+  const roiOf = (cost) => (m.revenue != null && cost > 0 ? ((m.revenue - cost) / cost) * 100 : null);
+  const oldCpl = per(oldSpend, m.leads), newCpl = per(newSpend, m.leads);
+  const oldCac = per(oldSpend, m.customers), newCac = per(newSpend, m.customers);
+  const oldRoi = roiOf(oldSpend), newRoi = roiOf(newSpend);
+
+  host.innerHTML = `
+    <h4>Possible savings from tightening the program</h4>
+    <div class="save-hero">
+      <div class="save-big">${usd(s2.annual)}<span>a year</span></div>
+      <div class="save-sub">${usd(s2.monthly)} per month, or ${((s2.monthly / (s2.total || 1)) * 100).toFixed(1)}% of current spend</div>
+    </div>
+
+    <div class="save-rows">
+      ${s2.consolidate > 0 ? `
+        <div class="save-row">
+          <div class="save-lab"><b>Consolidating digital vendors</b>
+            <span>${s2.vendorCount} vendors across ${usd(s2.digital)} a month of digital spend. Where several vendors work
+            from one plan and one measurement standard rather than their own, roughly <b>20%</b> of digital spend is
+            typically recoverable — duplicate tools, overlapping audiences, brand terms bid against organic listings,
+            and management fees paid twice on the same work.</span>
+          </div>
+          <div class="save-amt">${usd(s2.consolidate)}<span>/mo</span></div>
+        </div>` : ''}
+      ${s2.overlap > 0 ? `
+        <div class="save-row">
+          <div class="save-lab"><b>Removing traditional and digital overlap</b>
+            <span>${usd(s2.traditional)} a month in traditional media running alongside ${usd(s2.digital)} in digital.
+            Where the two are bought separately they usually reach the same people at the same time without either side
+            knowing. Aligning the calendar and the audience typically frees about <b>25%</b> of traditional spend
+            without reducing reach.</span>
+          </div>
+          <div class="save-amt">${usd(s2.overlap)}<span>/mo</span></div>
+        </div>` : ''}
+    </div>
+
+    <h4 class="mt">What that would change</h4>
+    <div class="save-compare">
+      <div class="sc-head"><span></span><span>Today</span><span>After savings</span></div>
+      <div class="sc-row"><span>Monthly spend</span><span>${usd(oldSpend)}</span><span class="good">${usd(newSpend)}</span></div>
+      ${newCpl != null ? `<div class="sc-row"><span>Cost per lead</span><span>${usd(oldCpl)}</span><span class="good">${usd(newCpl)}</span></div>` : ''}
+      ${newCac != null ? `<div class="sc-row"><span>Customer acquisition cost</span><span>${usd(oldCac)}</span><span class="good">${usd(newCac)}</span></div>` : ''}
+      ${newRoi != null ? `<div class="sc-row"><span>Marketing ROI</span><span>${Math.round(oldRoi)}%</span><span class="good">${Math.round(newRoi)}%</span></div>` : ''}
+    </div>
+
+    <p class="ind-note">${usd(s2.annual)} a year is money that either stays as profit or buys more of what already works.
+    ${m.cpl != null && newCpl != null ? `At the current close rate, redirecting it into working media rather than banking it would fund
+    roughly ${Math.round(s2.monthly / newCpl)} more leads a month.` : ''}</p>
+    <p class="ind-note"><em>The 20% and 25% figures are typical recovery rates for programs with these characteristics, not a
+    quote or a guarantee. The actual figure depends on what the vendor invoices contain, which is what the expense review
+    exists to establish.</em></p>`;
+}
+
+
+/* ---------- Questions for any marketing vendor ---------- */
+const VENDOR_QUESTIONS = [
+  ['Can you show me cost per acquired customer by channel?', 'Not cost per click or per lead — per customer who paid. A vendor who cannot produce this is reporting activity, not results.'],
+  ['Who owns the ad accounts, the website, and the tracking?', 'The client should own all three. A vendor who owns them has leverage a supplier should not have.'],
+  ['What is the notice period, and what transfers when we leave?', 'Month-to-month with full asset transfer is the professional standard. Long lock-ins usually protect the vendor, not the work.'],
+  ['What did you change last month, and what happened?', 'Ongoing management should produce a running log of tests and results. No log usually means the account is on autopilot while fees continue.'],
+  ['Where does my budget overlap with anything else we run?', 'A vendor who only sees their own slice cannot answer. That inability is the cost of fragmentation, stated out loud.'],
+];
+
+function renderVendorQuestions(r) {
+  const host = $('#vendorQPanel');
+  if (!host) return;
+  host.innerHTML = `
+    <h4>Five questions to ask any marketing vendor</h4>
+    <p class="ind-note">These apply to the current vendors and to anyone the client might hire — us included. The answers separate vendors who manage outcomes from vendors who bill for activity.</p>
+    ${VENDOR_QUESTIONS.map(([q, why], i) => `
+      <div class="vq-row">
+        <span class="vq-n">${i + 1}</span>
+        <div><b>${esc(q)}</b><span>${esc(why)}</span></div>
+      </div>`).join('')}`;
 }
 
 /* ---------- AI findings ---------- */
@@ -1132,6 +1445,210 @@ function renderAnalysis(a, source) {
     ${a.partnerTalkingPoint ? `<div class="quote">“${esc(a.partnerTalkingPoint)}”</div>` : ''}`;
 }
 
+
+
+/* ---------- Save & resume ---------- */
+/**
+ * Everything typed is kept in this browser (localStorage) as it changes, so a
+ * closed tab costs nothing. Cleared when the audit completes or on "Start over".
+ * Nothing here leaves the machine until the partner submits.
+ */
+const SAVE_KEY = 'smart1-audit-v1';
+const SAVE_FIELDS = ['clientName','industry','annualRevenue','website','zipCode','cityMarket',
+  'preparedBy','partnerFirm','buyingModel','digitalVendors','traditionalOther','seasonDetail',
+  'eventsDetail','eventsCost','marketingHeadcount','marketingPayroll','assetOwnership',
+  'leadResponseTime','crmTracking','differentiation','losingTo','scanUrl','audienceType',
+  'serviceRadius','incomeBand','genderSkew','audienceNotes','contextNotes','leads','customers',
+  'avgSale','purchasesPerYear','customerYears','repeatShare','capacity','gRating','gReviews','topServices'];
+
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveProgress, 400);
+}
+
+function saveProgress() {
+  try {
+    const data = {
+      v: 1, at: Date.now(), screen: current,
+      fields: Object.fromEntries(SAVE_FIELDS.map((id) => [id, $(`#${id}`)?.value ?? ''])),
+      sliders: { locations: $('#locations').value, vendors: $('#vendors').value },
+      flags: state.flags,
+      profile: state.profile,
+      spend: state.spend,
+      media: [...state.media],
+      ages: [...state.ages],
+      competitors: state.competitors,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch { /* storage full or blocked — resume just won't be offered */ }
+}
+
+function clearProgress() {
+  try { localStorage.removeItem(SAVE_KEY); } catch { /* ignore */ }
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data.v !== 1) return null;
+    // Older than 14 days: treat as a fresh start
+    if (Date.now() - (data.at || 0) > 14 * 24 * 3600 * 1000) { clearProgress(); return null; }
+    return data;
+  } catch { return null; }
+}
+
+function applyProgress(data) {
+  Object.entries(data.fields || {}).forEach(([id, v]) => { const el = $(`#${id}`); if (el) el.value = v; });
+  if (data.sliders) {
+    $('#locations').value = data.sliders.locations || 1;
+    $('#vendors').value = data.sliders.vendors || 0;
+    buildCountSliders();
+  }
+  state.flags = data.flags || {};
+  state.profile = data.profile || {};
+  state.spend = data.spend || {};
+  state.media = new Set(data.media || []);
+  state.ages = new Set(data.ages || []);
+  state.competitors = data.competitors || [];
+
+  // Reflect restored state into the widgets
+  document.querySelectorAll('.toggle[data-flag]').forEach((g) => {
+    const v = state.flags[g.dataset.flag];
+    if (!v) return;
+    const btn = g.querySelector(`button[data-v="${v}"]`);
+    if (btn) { btn.classList.add('sel'); btn.setAttribute('aria-pressed', 'true'); }
+  });
+  document.querySelectorAll('.toggle[data-q]').forEach((g) => {
+    const v = state.profile[g.dataset.q];
+    if (!v) return;
+    const btn = g.querySelector(`button[data-v="${v}"]`);
+    if (btn) { btn.classList.add('sel'); btn.setAttribute('aria-pressed', 'true'); }
+    if (g.dataset.q === 'seasonalMarketing') $('#seasonWrap').hidden = v !== 'yes';
+    if (g.dataset.q === 'liveEvents') $('#eventsWrap').hidden = v !== 'yes';
+  });
+  const inHouse = /in house/i.test($('#buyingModel').value);
+  $('#trainingWrap').hidden = !inHouse;
+  ['#traditionalMedia', '#ageRanges'].forEach((sel, i) => {
+    const store = i === 0 ? state.media : state.ages;
+    document.querySelectorAll(`${sel} .chip-btn`).forEach((b) => {
+      const on = store.has(b.dataset.val);
+      b.classList.toggle('sel', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+  });
+  $('#spend').querySelectorAll('.sline').forEach((row) => {
+    const v = state.spend[row.dataset.cat] || 0;
+    row.querySelector('.amt-input').value = v > 0 ? v : '';
+    const slider = row.querySelector('.slider');
+    slider.value = Math.min(v, Number(slider.max));
+    row.classList.toggle('active', v > 0);
+    paintSlider(slider);
+  });
+  $('#spendTotal').textContent = usd(totalSpend());
+  renderConfirmed();
+  updateLeakTotal();
+}
+
+function offerResume() {
+  const data = loadProgress();
+  if (!data || !data.fields?.clientName) return;
+  const bar = document.createElement('div');
+  bar.className = 'resume-bar';
+  bar.innerHTML = `
+    <span>You have an audit in progress for <b>${esc(data.fields.clientName)}</b>.</span>
+    <span class="resume-acts">
+      <button type="button" class="btn btn-primary small" id="resumeYes">Pick up where you left off</button>
+      <button type="button" class="btn btn-ghost dark small" id="resumeNo">Start over</button>
+    </span>`;
+  $('#intro .wrap').prepend(bar);
+  $('#resumeYes').addEventListener('click', () => {
+    applyProgress(data);
+    bar.remove();
+    goto(data.screen && data.screen !== 'results' ? data.screen : 'step1');
+  });
+  $('#resumeNo').addEventListener('click', () => { clearProgress(); bar.remove(); });
+}
+
+
+/* ---------- Pre-report completeness check ---------- */
+/**
+ * Before calculating, show what is blank and what it costs the report. This is
+ * the difference between "why are there dashes" and a partner choosing to skip.
+ */
+function completenessGaps() {
+  const gaps = [];
+  const spend = totalSpend();
+  if (!num('#annualRevenue')) gaps.push({ field: 'Annual revenue', cost: 'No industry benchmark comparison or budget-gap figure.' });
+  if (spend <= 0) gaps.push({ field: 'Monthly investment', cost: 'No cost per lead, acquisition cost, ROI, or savings model. This is the most important section to fill.' });
+  if (!num('#leads')) gaps.push({ field: 'Marketing-generated leads', cost: 'No cost per lead or close rate.' });
+  if (!num('#customers')) gaps.push({ field: 'New customers per month', cost: 'No acquisition cost, ROI, or growth scenarios.' });
+  if (!num('#avgSale')) gaps.push({ field: 'Average sale value', cost: 'No revenue, lifetime value, or growth figures.' });
+  if (!$('#zipCode').value.trim() && !$('#cityMarket').value.trim()) gaps.push({ field: 'ZIP code or market', cost: 'Audience size falls back to a national average instead of this market.' });
+  if (!$('#website').value.trim()) gaps.push({ field: 'Client website', cost: 'No conversion scan and no competitor site comparison.' });
+  const answered = FLAGS.filter((f) => state.flags[f.id]).length;
+  if (answered < FLAGS.length) gaps.push({ field: `Warning signs (${FLAGS.length - answered} unanswered)`, cost: 'Unanswered questions cannot count toward the efficiency score.' });
+  return gaps;
+}
+
+function showSummary() {
+  const gaps = completenessGaps();
+  if (!gaps.length) return false; // nothing missing — go straight to the report
+  const host = $('#gapList');
+  host.innerHTML = gaps.map((g) => `
+    <div class="gap-row">
+      <b>${esc(g.field)}</b>
+      <span>${esc(g.cost)}</span>
+    </div>`).join('');
+  $('#summaryModal').hidden = false;
+  document.body.style.overflow = 'hidden';
+  return true;
+}
+
+function hideSummary() {
+  $('#summaryModal').hidden = true;
+  document.body.style.overflow = '';
+}
+
+/* ---------- Compiling overlay ---------- */
+const COMPILE_STEPS = [
+  ['Reading the inputs', 'Spend, leads, customers, and average sale.'],
+  ['Sizing the service area', 'Working out how many people this business can reach.'],
+  ['Comparing to industry benchmarks', 'Spend and cost per lead against the published ranges.'],
+  ['Checking the website', 'Conversion points and whether any of it is measured.'],
+  ['Reviewing the competition', 'How the confirmed competitors present themselves.'],
+  ['Modelling savings and growth', 'Where the money could go further.'],
+  ['Writing the findings', 'Putting it in language a client can act on.'],
+];
+
+let compileTimer = null;
+function startCompiling() {
+  const el = $('#compiling');
+  el.hidden = false;
+  document.body.style.overflow = 'hidden';
+  let i = 0;
+  const tick = () => {
+    $('#compStep').textContent = COMPILE_STEPS[i][0];
+    $('#compNote').textContent = COMPILE_STEPS[i][1];
+    $('#compFill').style.width = `${((i + 1) / COMPILE_STEPS.length) * 100}%`;
+    i = Math.min(i + 1, COMPILE_STEPS.length - 1);
+  };
+  tick();
+  clearInterval(compileTimer);
+  compileTimer = setInterval(tick, 1400);
+}
+function stopCompiling() {
+  clearInterval(compileTimer);
+  compileTimer = null;
+  $('#compFill').style.width = '100%';
+  setTimeout(() => {
+    $('#compiling').hidden = true;
+    document.body.style.overflow = '';
+  }, 320);
+}
+
 /* ---------- PDF report ---------- */
 function setDownload(state_, url) {
   [$('#dlBtn'), $('#dlBtn2')].forEach((btn) => {
@@ -1178,15 +1695,57 @@ async function buildPdf() {
 }
 
 /* ---------- Gate ---------- */
-$('#toGate').addEventListener('click', () => {
+async function fetchMarket() {
+  try {
+    const res = await fetch('/api/market', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ context: {
+        zipCode: $('#zipCode').value.trim(),
+        cityMarket: $('#cityMarket').value.trim(),
+        industry: $('#industry').value,
+        serviceRadius: $('#serviceRadius').value,
+        locations: Number($('#locations').value) || 1,
+        audienceType: $('#audienceType').value,
+      } }),
+    });
+    const data = await res.json();
+    state.market = data.market || null;
+  } catch { state.market = null; }
+}
+
+async function runReport() {
+  startCompiling();
+  const began = Date.now();
+
+  if (!state.market) await fetchMarket();
   state.results = calculate();
+  state.results.savings = savingsModel(state.results);
+
+  // Let the animation play long enough to read, without stalling if it was slow
+  const elapsed = Date.now() - began;
+  if (elapsed < 3200) await new Promise((ok) => setTimeout(ok, 3200 - elapsed));
+
   renderReport(state.results);
+  stopCompiling();
+  goto('results');
+  clearProgress(); // audit complete: nothing to resume
+
   if (state.unlocked) {
     $('#aiBadge').textContent = 'Generating…';
     $('#aiBody').innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel short"></div>';
     loadAnalysis(state.results);
   }
-  goto('results');
+}
+
+$('#toGate').addEventListener('click', () => {
+  if (!showSummary()) runReport();
+});
+$('#gapBack')?.addEventListener('click', () => {
+  hideSummary();
+});
+$('#gapGo')?.addEventListener('click', () => {
+  hideSummary();
+  runReport();
 });
 
 $('#unlock').addEventListener('click', async () => {
@@ -1212,6 +1771,7 @@ $('#unlock').addEventListener('click', async () => {
       leakPoints: state.results.leakPoints,
       leakTier: state.results.leakTier,
       monthlySpend: state.results.metrics.spend,
+      lastScreen: current,
     }),
   }).catch(() => {});
 
@@ -1227,6 +1787,12 @@ $('#restart').addEventListener('click', () => location.reload());
 
 /* ---------- Init ---------- */
 buildUI();
+document.addEventListener('input', scheduleSave);
+document.addEventListener('change', scheduleSave);
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.toggle,.chip-btn,.sug-acts,.comp-del,#ageAll')) scheduleSave();
+});
+offerResume();
 
 // The booking link is server-configured, so the button is wired at runtime
 fetch('/api/config')

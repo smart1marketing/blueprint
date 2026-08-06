@@ -15,6 +15,7 @@ Results are gated behind a name, firm, email, and phone capture, so the tool dou
 | `expenses.js` | Expense file text extraction (PDF, Excel, CSV, image) and AI category breakdown |
 | `website.js` | Website conversion scan: signal detection plus AI commentary, with SSRF protection |
 | `audience.js` | Directional reachable-audience estimate from service-area population |
+| `market.js` | AI service-area sizing, competitor discovery, and head-to-head site comparison |
 | `public/index.html` | Landing-page frame (nav, hero, footer) plus the six-section questionnaire and report |
 | `public/app.js` | Benchmark data, scoring model, all calculations, rendering |
 | `public/styles.css` | Smart 1 design system matched to the partner landing page, plus a print stylesheet |
@@ -31,12 +32,12 @@ The API key lives only on the server. The browser never sees it.
 
 Seven sections, roughly ten minutes:
 
-1. **Client snapshot** — industry, revenue, locations, vendor count, website URL, ZIP code, primary market, service-area population, and the partner's name and firm.
+1. **Client snapshot** — industry, revenue, website URL, ZIP code, primary market, and the partner's name and firm, plus sliders for number of locations (1–20+) and current marketing vendors (0–20+), each with an info circle. The service-area population is estimated from the ZIP rather than asked.
 2. **How they buy marketing** — whether digital and traditional spend each clear $2,500 a month, lead services, agency vs. in house (and whether in-house staff get training), traditional channels, digital vendors, in-house marketing headcount and payroll, live events, who owns the website and ad accounts, lead response time, CRM tracking, seasonality, and month-to-month consistency.
-3. **Competition and website** — whether the client knows their competitors, up to five named competitors with websites, stated differentiation, who they're losing work to, and a live scan of the client's own site.
-4. **Profit leak warning signs** — the ten questions from the Client Profit Leak Assessment™, each answered Yes / No / Unsure. Point values are never shown to the partner; an "unsure" carries the same weight as a "yes", because an unknown is itself a warning sign, and the report distinguishes the two.
+3. **Competition and website** — optional Google rating and review count, top services by revenue, then competitors looked up automatically from the website, ZIP, and industry; the partner confirms or dismisses each one and can add their own. Every confirmed competitor with a website is scanned and compared against the client's site in the background. The client's own conversion scan also starts in the background as soon as a URL is entered.
+4. **Profit leak warning signs** — eight questions, each answered Yes / No / Unsure. Two of the original ten (monthly spend above $2,500, multiple vendors) were removed because Section 2 already captures them directly. Point values are never shown to the partner; an "unsure" carries the same weight as a "yes", because an unknown is itself a warning sign, and the report distinguishes the two.
 5. **Monthly investment** — seventeen spend categories as sliders, each with a category-appropriate ceiling and an info circle explaining what belongs there, plus the optional expense-document upload.
-6. **Performance indicators** — leads, customers, average sale, purchase frequency, relationship length. The report models two growth scenarios automatically, +15% and +25% lead volume, rather than asking the partner to pick one.
+6. **Performance indicators** — marketing-generated leads (referrals and repeat customers explicitly excluded, so cost per lead reflects the marketing), customers from those leads, average sale, purchase frequency, relationship length, plus optional questions on repeat-revenue mix and whether the business could handle more leads. The report models +15% and +25% growth scenarios automatically — unless capacity is "already full", in which case the findings pivot to pricing and efficiency instead of volume.
 7. **Target market and context** — B2C or B2B, service radius, age ranges, household income, gender skew, homeowner focus, and free text for leadership changes, lost accounts, or new locations.
 
 Only Section 4 affects the numeric score. Everything else feeds the written findings, the report sections, and the questions the partner brings to the client meeting.
@@ -51,10 +52,12 @@ Two limits are stated in the output rather than hidden: the scan reads only the 
 
 ## Estimating audience size
 
-When the partner supplies a service-area population in Section 1, the audit filters it by the target-market answers and shows the arithmetic line by line:
+The partner is never asked for a population figure. The audit sends the ZIP code, city, industry, and service radius to the model, which estimates the reachable service area and returns it with a confidence rating, the basis for the figure, and local demographics where it knows them (median household income, median age, homeownership). If the model is unavailable or returns something implausible, a radius-based fallback applies, so **there is always an audience number**. The report always states which of the two produced it.
+
+That population is then filtered by the target-market answers, with the arithmetic shown line by line:
 
 ```
-Service-area population                             850,000
+Service-area population                             905,000
 Adults aged 35–44, 45–54, 55–64 (38% of population) 323,000
 Household income $100k–$200k (26% of households)     83,980
 Homeowners only (65% ownership rate)                 54,587
@@ -65,6 +68,42 @@ Working range: 38,211 – 70,963
 This is deliberately transparent arithmetic, not a data product. It uses approximate national US shares for age, income, household size, homeownership, and business density, and reports a ±30% band. Every figure carries the caveat that it is directional and should be confirmed against census or ad-platform reach data. `audience.js` holds the share tables if you want to substitute local figures.
 
 For B2B clients it estimates establishments instead, at roughly 25 per 1,000 residents. Without a population figure, the report says what it could not assess rather than guessing.
+
+
+
+## Partner experience
+
+Three things keep a busy accountant from abandoning a ten-minute form:
+
+- **Save and resume.** Every answer persists in the browser (localStorage) as it's typed. Returning to the page offers "Pick up where you left off" with the client's name; progress clears when the audit completes or on "Start over", and goes stale after 14 days. Nothing leaves the machine until submission.
+- **A completeness check before the report.** "Calculate results" first lists what's blank and what each blank costs — "Without leads and customers, the report can't compute cost per lead" — with the choice to go back or generate anyway. This is why dashes in the report are always a decision, never a surprise.
+- **A sample report on the intro page** (`/sample-report.pdf`, served from `public/`), so the partner sees the payoff before investing the time. Regenerate it whenever the format changes by saving any audit PDF over `public/sample-report.pdf`.
+
+## Calculation policy
+
+Decisions that shape the numbers, so nobody has to reverse-engineer them:
+
+- **ROI is deliberately conservative**: first-month math only — (new customers × average sale − spend) ÷ spend. Repeat purchases are excluded from ROI; the findings may note that true return including lifetime value runs higher, but the printed figure never inflates.
+- **Benchmark comparisons use media spend only.** In-house staff and live events count toward total spend and ROI, but are excluded from the % -of-revenue benchmark, because published industry ranges are media-only and including payroll would make every client with a team look like an overspender. The report labels this wherever the comparison appears.
+- **Leads means marketing-generated leads.** The form says so, and explains why: counting referrals flatters cost per lead and hides the real number.
+- **Savings rates are 20% (digital consolidation) and 25% (traditional/digital overlap)**, always labelled as typical recovery rates rather than quotes.
+
+## The vendor questions section
+
+Every report closes with "Five questions to ask any marketing vendor" — cost per acquired customer by channel, asset ownership, notice period, change log, and budget overlap. These apply to the client's current vendors and to anyone they might hire, which is exactly the point: the questions do the differentiating, and the report never has to.
+
+The webhook payload also carries `lastScreen`, so a GHL workflow can tell where a partner abandoned when a `started` lead never converts to `completed`.
+
+## Modelling savings
+
+Where the numbers support it, the report shows what tightening the program could return:
+
+- **Consolidating digital vendors** — 20% of digital spend, applied when two or more vendors are in play. Covers duplicate tools, overlapping audiences, brand terms bid against the client's own organic listing, and management fees paid twice on the same work.
+- **Removing traditional and digital overlap** — 25% of traditional spend, applied when both are running. Media bought separately usually reaches the same people at the same time without either side knowing.
+
+Both are followed by a before-and-after table on monthly spend, cost per lead, acquisition cost, and ROI. **Both columns are computed from the same spend figure** rather than reusing stored metrics, so the comparison can never show savings making a metric worse.
+
+The percentages are labelled as typical recovery rates, never a quote. Edit `savingsModel()` in `public/app.js` to change them, along with `DIGITAL_CATS` and `TRADITIONAL_CATS` which decide what counts as each.
 
 ## Uploading marketing expenses
 
@@ -82,6 +121,8 @@ If the file has no readable text — a scan saved as a PDF, say — the partner 
 ## Scoring model
 
 **Marketing Efficiency Score™ (0–100)**
+
+Warning-sign weights are normalised against `FLAG_MAX`, so adding or removing a question rescales the score automatically rather than silently shifting every tier.
 
 | Component | Points | Basis |
 |---|---|---|
