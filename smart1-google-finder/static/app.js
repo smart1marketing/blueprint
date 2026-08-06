@@ -832,3 +832,69 @@ if (manualBtn && manualInput) {
     `;
   });
 }
+// System Diagnostics Dashboard Modal Handler
+const btnOpenDiagnostics = document.getElementById('btn-open-diagnostics');
+const diagnosticsModal = document.getElementById('diagnostics-modal');
+const diagnosticsClose = document.getElementById('diagnostics-modal-close');
+const diagnosticsBody = document.getElementById('diagnostics-modal-body');
+
+if (btnOpenDiagnostics) {
+  btnOpenDiagnostics.addEventListener('click', async (e) => {
+    e.preventDefault();
+    diagnosticsModal.style.display = 'flex';
+    diagnosticsBody.innerHTML = renderSkeletonCard();
+
+    try {
+      const [healthRes, debugRes] = await Promise.all([
+        fetch('/health').then(r => r.json()),
+        fetch('/debug/accounts').then(r => r.json())
+      ]);
+
+      let html = `
+        <div style="font-size:13px;">
+          <h4 style="margin:0 0 8px; color:#1a2e58;">System Environment & Health Status:</h4>
+          <div style="background:#f8fafc; padding:12px; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:16px; line-height:1.6;">
+            <div>Overall System Health: <b>${healthRes.ok ? '🟢 Operational' : '🔴 Issue Detected'}</b></div>
+            <div>Google Client ID: ${healthRes.google_client_id_configured ? '🟢 Configured' : '🔴 Missing'}</div>
+            <div>Google Client Secret: ${healthRes.google_client_secret_configured ? '🟢 Configured' : '🔴 Missing'}</div>
+            <div>Token Encryption Key: ${healthRes.token_encryption_key_configured ? '🟢 Configured' : '🔴 Missing'}</div>
+            <div>Database Path: <code>${esc(healthRes.token_db_path)}</code></div>
+            <div>Connected Accounts Count: <b>${healthRes.connected_account_count}</b></div>
+          </div>
+
+          <h4 style="margin:0 0 8px; color:#1a2e58;">Connected Account API Connection Diagnostics:</h4>
+      `;
+
+      if (!debugRes.diagnostics || !debugRes.diagnostics.length) {
+        html += '<div style="color:#69758a; font-style:italic;">No Google accounts currently connected to test.</div>';
+      } else {
+        html += debugRes.diagnostics.map(acc => `
+          <div style="background:#fff; border:1px solid #d8e0eb; border-radius:8px; padding:12px; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="color:#1a2e58; font-size:14px;">${esc(acc.email)}</strong>
+              <span style="font-size:11px; background:${acc.token_refresh_status === 'SUCCESS' ? '#e6f4ea' : '#fce8e6'}; color:${acc.token_refresh_status === 'SUCCESS' ? '#137333' : '#c5221f'}; padding:2px 8px; border-radius:4px; font-weight:bold;">
+                OAuth Token: ${esc(acc.token_refresh_status)}
+              </span>
+            </div>
+            <div style="font-size:12px; color:#58677e; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; background:#f0f4f9; padding:8px; border-radius:6px;">
+              <div>GA4 Admin API: <b>${acc.ga4_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
+              <div>GTM API: <b>${acc.gtm_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
+              <div>Search Console API: <b>${acc.gsc_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      html += '</div>';
+      diagnosticsBody.innerHTML = html;
+    } catch (err) {
+      diagnosticsBody.innerHTML = `<div style="color:#c5221f; font-size:13px;">Failed to fetch system diagnostics: ${esc(err.message)}</div>`;
+    }
+  });
+}
+
+if (diagnosticsClose) {
+  diagnosticsClose.addEventListener('click', () => {
+    diagnosticsModal.style.display = 'none';
+  });
+}
