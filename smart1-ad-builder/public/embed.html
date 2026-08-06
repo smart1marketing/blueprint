@@ -207,6 +207,15 @@
   <h1>Request Your Display Ads</h1>
   <p class="lede">A few short steps. We handle the sizes, layouts and platform requirements from here.</p>
 
+  <!-- team access gate: shown only when the server has INTAKE_CODE set -->
+  <div id="gate" style="display:none;max-width:380px;margin:8px auto 0;text-align:center">
+    <p style="color:var(--ink-2);font-size:15px;margin:6px 0 16px">This tool is for the Smart 1 team. Enter the access code to continue.</p>
+    <input type="password" id="gateCode" autocomplete="off" placeholder="Team access code"
+      style="text-align:center;font-size:18px;letter-spacing:.08em">
+    <div class="error" id="gateErr" style="display:none;margin-top:8px">That code isn't right.</div>
+    <button type="button" id="gateGo" style="width:100%;margin-top:14px">Continue</button>
+  </div>
+
   <!-- progress stepper -->
   <div class="steps" id="steps">
     <div class="seg" data-goto="0"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">1</span></span><span class="t">Your Business</span></div></div>
@@ -463,6 +472,63 @@
   var submit = document.getElementById('submit');
   var API = (document.currentScript && document.currentScript.dataset.api) || '';
 
+  /* ------------------------------------------------- team access gate */
+  // __NEEDS_CODE__ is replaced by the server when it serves this page.
+  var NEEDS_CODE = __NEEDS_CODE__;
+  var intakeCode = '';
+  try { intakeCode = sessionStorage.getItem('smart1code') || ''; } catch (e) {}
+
+  function codeHeaders(h) {
+    h = h || {};
+    if (intakeCode) h['x-intake-code'] = intakeCode;
+    return h;
+  }
+
+  var gate = document.getElementById('gate');
+  var stepsBar = document.getElementById('steps');
+
+  function lockForm(locked) {
+    form.style.display = locked ? 'none' : '';
+    stepsBar.style.display = locked ? 'none' : '';
+    gate.style.display = locked ? '' : 'none';
+    reportHeight();
+  }
+
+  if (NEEDS_CODE) {
+    if (intakeCode) {
+      // A stored code might be stale; verify quietly and fall back to the gate.
+      fetch(API + '/api/intake/verify', { method: 'POST', headers: codeHeaders() })
+        .then(function (r) { if (!r.ok) { intakeCode = ''; lockForm(true); } })
+        .catch(function () {});
+      lockForm(false);
+    } else {
+      lockForm(true);
+    }
+    document.getElementById('gateGo').addEventListener('click', function () {
+      var v = document.getElementById('gateCode').value.trim();
+      if (!v) return;
+      fetch(API + '/api/intake/verify', { method: 'POST', headers: { 'x-intake-code': v } })
+        .then(function (r) {
+          if (r.ok) {
+            intakeCode = v;
+            try { sessionStorage.setItem('smart1code', v); } catch (e) {}
+            document.getElementById('gateErr').style.display = 'none';
+            lockForm(false);
+          } else {
+            document.getElementById('gateErr').style.display = '';
+            reportHeight();
+          }
+        })
+        .catch(function () {
+          document.getElementById('gateErr').textContent = 'Could not check the code. Try again.';
+          document.getElementById('gateErr').style.display = '';
+        });
+    });
+    document.getElementById('gateCode').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('gateGo').click(); }
+    });
+  }
+
   function esc(v) {
     return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -707,7 +773,7 @@
     brandCard.innerHTML = '<div class="brandcard"><span class="spinner"></span>Looking up your brand…</div>';
     reportHeight();
     fetch(API + '/api/brand/discover', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify({ domain: v, business: form.elements.business.value || '' })
     })
       .then(function (r) { return r.json(); })
@@ -765,7 +831,7 @@
     landingCard.innerHTML = '<div class="brandcard"><span class="spinner"></span>Reading your landing page…</div>';
     reportHeight();
     fetch(API + '/api/landing/analyze', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify({ url: normalizeUrl(v) })
     })
       .then(function (r) { return r.json(); })
@@ -805,7 +871,7 @@
       var client = form.elements.business.value || 'client';
       var campaign = form.elements.campaignName.value || 'campaign';
       fetch(API + '/api/assets/upload-signature', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
+        method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
         body: JSON.stringify({ client: client, campaign: campaign, kind: kindFor, filename: file.name })
       })
         .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, b: b }; }); })
@@ -920,19 +986,52 @@
     submit.textContent = 'Submitting…';
 
     fetch(API + '/api/requests', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify(data)
     })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
         if (!res.ok) throw new Error(res.body && res.body.error ? res.body.error : 'Submission failed');
+        var rid = res.body.requestId;
         document.getElementById('root').innerHTML =
           '<div class="done"><h2>Request received</h2>' +
-          '<p>Thanks, ' + esc(data.contact.split(' ')[0] || 'there') + '. We\'ll be in touch shortly.</p>' +
-          '<p>A confirmation is on its way to ' + esc(data.email) + '.</p>' +
-          '<div class="ref">' + esc(res.body.requestId) + '</div></div>';
-        parent.postMessage({ type: 'smart1:submitted', requestId: res.body.requestId }, '*');
+          '<p>Thanks, ' + esc(data.contact.split(' ')[0] || 'there') + '. A confirmation is on its way to ' + esc(data.email) + '.</p>' +
+          '<div class="ref">' + esc(rid) + '</div>' +
+          '<div id="buildwait" style="margin-top:26px">' +
+          '<p style="color:var(--ink-2)"><span class="spinner"></span> Building your ad previews now — this usually takes under a minute…</p>' +
+          '</div></div>';
+        parent.postMessage({ type: 'smart1:submitted', requestId: rid }, '*');
         reportHeight();
+
+        // Poll until the render lands, then swap the spinner for the link.
+        // Give up quietly after ~2 minutes: some submissions genuinely cannot
+        // render yet (no logo found or uploaded) and those get previews by
+        // email once assets are in.
+        var tries = 0;
+        var timer = setInterval(function () {
+          tries++;
+          fetch(API + '/api/requests/' + encodeURIComponent(rid) + '/status')
+            .then(function (r) { return r.json(); })
+            .then(function (st) {
+              if (st.ready && st.proofUrl) {
+                clearInterval(timer);
+                document.getElementById('buildwait').innerHTML =
+                  '<p style="color:var(--ok);font-weight:600">Your previews are ready.</p>' +
+                  '<a href="' + esc(st.proofUrl) + '" target="_blank" rel="noopener" ' +
+                  'style="display:inline-block;background:var(--accent);color:#fff;text-decoration:none;' +
+                  'padding:14px 30px;border-radius:8px;font-weight:600;font-size:16px">View your ads</a>' +
+                  '<p class="hint" style="margin-top:12px">You can approve them or request changes right on that page.</p>';
+                reportHeight();
+              } else if (tries > 40) {
+                clearInterval(timer);
+                document.getElementById('buildwait').innerHTML =
+                  '<p style="color:var(--ink-2)">Your previews are taking a little longer — we\'ll email them to ' +
+                  esc(data.email) + ' as soon as they\'re ready.</p>';
+                reportHeight();
+              }
+            })
+            .catch(function () { /* transient; keep polling */ });
+        }, 3000);
       })
       .catch(function (err) {
         submit.disabled = false;

@@ -14,6 +14,7 @@
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import type { Campaign } from './types';
 import { validateCampaign } from './validate';
 import { enqueue, getJob, listJobs, startWorkerLoop, recoverJobs } from './jobs';
@@ -22,11 +23,12 @@ import { buildCampaign, type Submission } from './intake';
 import { loadTemplates } from './registry';
 import { ProjectStore } from './projects';
 import { analyzeLandingPage } from './landing';
-import { checkAuth, denied, rateLimit, sessionCookie, configuredToken, sweepBuckets } from './auth';
+import { checkAuth, denied, rateLimit, sessionCookie, configuredToken, sweepBuckets, intakeCodeOk } from './auth';
 import { runDiagnostics } from './diagnostics';
 import { renderDiagnostics } from './diagnostics-page';
 import { scheduleSweep, sweep } from './retention';
 import { deliverProject, latestManifest } from './deliver';
+import { renderProof } from './proof';
 import { getPlatform } from './registry';
 import sharp from 'sharp';
 import { notify } from './notify';
@@ -190,7 +192,8 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /embed' || route === 'GET /embed.html') {
       const file = path.join(PUBLIC, 'embed.html');
       if (!fs.existsSync(file)) return json(res, 404, { error: 'Embed page not built' });
-      const html = fs.readFileSync(file, 'utf8');
+      const html = fs.readFileSync(file, 'utf8')
+        .replaceAll('__NEEDS_CODE__', process.env.INTAKE_CODE ? 'true' : 'false');
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'content-security-policy': `frame-ancestors ${FRAME_ANCESTORS}`,
@@ -208,6 +211,24 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Intake submissions from the embedded form.
+    // The intake surface honors the team access code when one is set. The
+    // check sits before rate limiting so a wrong code cannot burn the budget.
+    const intakeSurface =
+      route === 'POST /api/requests' ||
+      route === 'POST /api/brand/discover' ||
+      route === 'POST /api/landing/analyze' ||
+      route === 'POST /api/assets/upload-signature';
+    if (intakeSurface && !intakeCodeOk(req)) {
+      return json(res, 401, { error: 'A valid team access code is required.' }, corsHeaders(req.headers.origin));
+    }
+
+    if (route === 'POST /api/intake/verify') {
+      const cors = corsHeaders(req.headers.origin);
+      const limit = rateLimit(route, req);
+      if (!limit.allowed) return json(res, 429, { error: 'Too many attempts. Wait a while.' }, cors);
+      return json(res, intakeCodeOk(req) ? 200 : 401, { ok: intakeCodeOk(req) }, cors);
+    }
+
     if (route === 'POST /api/requests') {
       const cors = corsHeaders(req.headers.origin);
       const body = JSON.parse(await readBody(req, 200_000)) as Record<string, any>;
@@ -224,7 +245,11 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: `Missing required fields: ${missing.join(', ')}` }, cors);
       }
 
-      const requestId = `AD-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+      // Random, not timestamp-derived: the requestId doubles as the proof
+      // link capability, so it must not be enumerable. 8 chars of A-Z0-9 is
+      // ~40 bits — unguessable at any polite request rate.
+      const requestId = `AD-${new Date().getFullYear()}-` +
+        Array.from(crypto.randomBytes(8), (b) => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 31]).join('').slice(0, 8);
       const record = { requestId, receivedAt: new Date().toISOString(), ...body };
       const dir = path.join(OUT, 'requests');
       fs.mkdirSync(dir, { recursive: true });
@@ -312,7 +337,7 @@ const server = http.createServer(async (req, res) => {
                 {
                   subject: `New proof ready — ${p.client} / ${p.projectName}`,
                   body: `${p.client} submitted "${p.campaignName}" and it has been rendered automatically.\n\nReview in the build screen, or send the proof link on to the client.`,
-                  url: proofUrl ? `${PUBLIC_URL}${proofUrl}` : `${PUBLIC_URL}/build?request=${requestId}`,
+                  url: `${PUBLIC_URL}/proof/${requestId}`,
                 },
                 OUT,
               );
@@ -428,6 +453,55 @@ const server = http.createServer(async (req, res) => {
         cloudName,
       });
       return json(res, 200, signed, cors);
+    }
+
+    /* -------------------------------------------- public proof + status */
+    // The customer-facing side of the pipeline. Both are public by capability:
+    // the requestId in the URL is the ticket. Neither route touches /files/,
+    // which stays admin-only — the proof page inlines its images as data URIs
+    // so a client needs exactly one URL and no token.
+
+    // Polled by the confirmation screen after submission.
+    const statusMatch = url.pathname.match(/^\/api\/requests\/([\w-]+)\/status$/);
+    if (statusMatch && req.method === 'GET') {
+      const cors = corsHeaders(req.headers.origin);
+      const requestId = statusMatch[1];
+      const requestFile = path.join(OUT, 'requests', `${requestId}.json`);
+      if (!fs.existsSync(requestFile)) return json(res, 404, { error: 'Unknown request' }, cors);
+      const manifest = latestManifest(OUT, requestId);
+      return json(res, 200, {
+        received: true,
+        ready: Boolean(manifest && manifest.entries.length),
+        proofUrl: manifest ? `/proof/${requestId}` : null,
+      }, cors);
+    }
+
+    const proofMatch = url.pathname.match(/^\/proof\/([\w-]+)$/);
+    if (proofMatch && req.method === 'GET') {
+      const requestId = proofMatch[1];
+      const manifest = latestManifest(OUT, requestId);
+      if (!manifest || !manifest.entries.length) {
+        res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end('<!doctype html><meta charset="utf-8"><title>Not ready</title>' +
+          '<body style="font:16px/1.5 system-ui;color:#16222E;padding:40px;text-align:center">' +
+          '<h2>Your previews are still being prepared</h2>' +
+          '<p>This page will work as soon as rendering finishes — usually under a minute. Refresh to check.</p>');
+      }
+      const project = projects.byRequest(requestId);
+      let html = renderProof(manifest, {
+        fileBase: '',
+        actionBase: project ? `/api/proof/${project.projectId}` : undefined,
+      });
+      // Inline every creative as a data URI so the page depends on nothing else.
+      for (const e of manifest.entries) {
+        const srcAttr = e.localFile.split('/').slice(-3).join('/');
+        if (!fs.existsSync(e.localFile)) continue;
+        const mime = e.format === 'png' ? 'image/png' : 'image/jpeg';
+        const b64 = fs.readFileSync(e.localFile).toString('base64');
+        html = html.split(`src="${srcAttr}"`).join(`src="data:${mime};base64,${b64}"`);
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(html);
     }
 
     /* ------------------------------------------------------------- delivery */

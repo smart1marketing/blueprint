@@ -512,6 +512,21 @@ that worked:
 - **Match creative to the size, don't squeeze.** Already the architecture:
   every size has its own layout and its own copy budget.
 
+## Internal-only mode
+
+Set `INTAKE_CODE` and the request form gates itself behind a team access
+code — one shared code your staff types once per session. Every intake API
+call (submit, brand discovery, landing analysis, upload signing) requires it,
+checked timing-safe and before rate limiting. It is deliberately not the
+admin token: the code circulates around the office, so compromising it must
+cost only the ability to submit requests, never the build screen, projects,
+or delivered files. Leave it unset and the form is open, as before.
+
+Request IDs are random (`AD-2026-7FBRYSPA`), not timestamp-derived. The id
+doubles as the proof-link capability, so it must not be enumerable — and as a
+side effect, an id like `AD-2026-000000` is now impossible by construction,
+which makes stale-deploy confusion self-evident.
+
 ## Final delivery
 
 `POST /api/project/:id/deliver` — or the **Deliver final files** button that

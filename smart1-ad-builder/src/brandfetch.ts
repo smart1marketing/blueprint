@@ -144,6 +144,16 @@ export async function discoverBrand(
     const file =
       opts.mockFile ?? path.resolve(__dirname, 'examples', 'brandfetch-sample.json');
     payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // Sandbox test hook: the fixture's logo URLs point at real CDNs that a
+    // sealed test environment cannot reach, which silently forces every mock
+    // submission down the "no logo" path. This rewrites them to a local
+    // stand-in so the render path itself is testable end to end.
+    const localLogo = process.env.BRANDFETCH_MOCK_LOGO;
+    if (localLogo) {
+      for (const l of payload.logos ?? []) {
+        for (const f of l.formats ?? []) f.src = localLogo;
+      }
+    }
     source = 'mock';
   } else {
     if (!apiKey) {

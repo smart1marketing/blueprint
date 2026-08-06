@@ -55,6 +55,22 @@ export function tokenIsWeak(): boolean {
  * so a bookmarked link works; the handler then sets a cookie so the token
  * stops appearing in the address bar and referrer headers.
  */
+/**
+ * The team access code that gates the intake surface when the tool is
+ * internal-only. Deliberately separate from ADMIN_TOKEN: the code is typed by
+ * salespeople and shared around the office, so it must never unlock the build
+ * screen, project data, or delivered files — compromise of the code costs
+ * only the ability to submit requests.
+ *
+ * Unset means the intake is open (the original public-form behavior).
+ */
+export function intakeCodeOk(req: IncomingMessage): boolean {
+  const wanted = process.env.INTAKE_CODE ?? '';
+  if (!wanted) return true;
+  const got = String(req.headers['x-intake-code'] ?? '');
+  return safeEqual(got, wanted);
+}
+
 export function checkAuth(req: IncomingMessage, url: URL): AuthResult {
   const expected = configuredToken();
   if (!expected) {
@@ -102,6 +118,7 @@ export interface Budget { limit: number; windowMs: number }
  */
 export const BUDGETS: Record<string, Budget> = {
   'POST /api/requests': { limit: 12, windowMs: 3_600_000 },
+  'POST /api/intake/verify': { limit: 30, windowMs: 3_600_000 },
   'POST /api/assets/upload-signature': { limit: 40, windowMs: 3_600_000 },
   'POST /api/landing/analyze': { limit: 20, windowMs: 3_600_000 },
   'POST /api/brand/discover': { limit: 40, windowMs: 3_600_000 },
