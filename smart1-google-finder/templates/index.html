@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Smart 1 Google Account Command Center</title>
   <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     html { scroll-behavior: smooth; }
     .nav-anchor-bar {
@@ -36,6 +37,9 @@
   </style>
 </head>
 <body>
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container"></div>
+
   <main class="wrap">
     <section class="card">
       <div class="topline">
@@ -49,15 +53,15 @@
         </div>
       </div>
 
-      <!-- TOP NAVIGATION BAR WITH LINKS TO SEPARATE PAGES -->
+      <!-- TOP NAVIGATION BAR -->
       <nav class="nav-anchor-bar">
         <a href="/" class="active-page">🔍 Quick Search</a>
         <a href="#gtm-generator">⚡ GTM Event Generator</a>
         <a href="#ask-analytics">💬 Ask GA4</a>
         <a href="#ai-comparator">📊 AI Comparator</a>
-        <a href="#gsc-manager">🔍 Search Console Admin</a>
-        <a href="/reports" target="_blank">📁 Historical Reports (New Page) ↗</a>
-        <a href="/gtm-logs" target="_blank">📜 GTM Audit Logs (New Page) ↗</a>
+        <a href="#gsc-bulk">🌐 Bulk Search Console</a>
+        <a href="/reports" target="_blank">📁 Historical Reports ↗</a>
+        <a href="/gtm-logs" target="_blank">📜 GTM Audit Logs ↗</a>
         <a href="#manual-gmb">📍 GMB Checker</a>
         <a href="#connected-accounts">👥 Accounts</a>
       </nav>
@@ -66,10 +70,10 @@
       {% if accounts %}
       <div id="primary-search" class="primary-search-section" style="margin-top:20px;">
         <div class="filters">
-          <button class="filter active" data-platform="all">All Platforms</button>
-          <button class="filter" data-platform="analytics">Analytics & GTM</button>
-          <button class="filter" data-platform="gsc">Search Console</button>
-          <button class="filter" data-platform="gmb">Business Profiles</button>
+          <button class="filter active" data-platform="all">All Platforms <span id="cnt-all" class="badge-count"></span></button>
+          <button class="filter" data-platform="analytics">Analytics & GTM <span id="cnt-ga" class="badge-count"></span></button>
+          <button class="filter" data-platform="gsc">Search Console <span id="cnt-gsc" class="badge-count"></span></button>
+          <button class="filter" data-platform="gmb">Business Profiles <span id="cnt-gmb" class="badge-count"></span></button>
           <button id="refresh" class="refresh">Refresh Google data</button>
         </div>
         <div class="searchbox">
@@ -77,7 +81,7 @@
         </div>
         <div id="status" class="status">Auto-refreshing Google data...</div>
         
-        <!-- SEPARATE RESULTS BOXES -->
+        <!-- RESULT CATEGORY CONTAINERS -->
         <div id="results-container" class="results-container">
           <div id="box-analytics" class="result-category-box" style="display:none;">
             <h3 class="category-header">📊 Google Analytics & Tag Manager</h3>
@@ -105,7 +109,7 @@
 
       <hr style="margin: 28px 0 20px; border: 0; border-top: 1px solid #e1e7ef;">
 
-      <!-- AI GTM EVENT GENERATOR WIDGET -->
+      <!-- AI GTM EVENT GENERATOR -->
       <div id="gtm-generator" class="manual-lookup-card">
         <h3>⚡ AI Site Analysis & GTM Event Auto-Generator</h3>
         <p>Type a website or landing page URL to analyze elements and generate GTM tracking events:</p>
@@ -116,39 +120,32 @@
         <div id="gtm-gen-results" style="margin-top:12px;"></div>
       </div>
 
-      <!-- SEARCH CONSOLE SITE ADDITION & SITEMAP SUBMISSION -->
-      <div id="gsc-manager" class="manual-lookup-card" style="margin-top:20px;">
-        <h3>➕ Add Site Property & Submit Sitemap to Search Console</h3>
-        <p>Register a new site domain to any connected Google Account and submit its XML sitemap for instant indexing:</p>
+      <!-- BULK SEARCH CONSOLE MANAGER -->
+      <div id="gsc-bulk" class="manual-lookup-card" style="margin-top:20px;">
+        <h3>🌐 Bulk Search Console Property & Sitemap Deployer</h3>
+        <p>Batch add multiple domain properties or sitemaps to a selected Search Console account:</p>
         
         <div class="comp-grid">
           <div>
             <label>Target Google Account:</label>
-            <select id="gsc-manage-account">
+            <select id="gsc-bulk-account">
               <option value="">Select Connected Login...</option>
-              {% for email in accounts %}
-                <option value="{{ email }}">{{ email }}</option>
+              {% for acc in accounts %}
+                <option value="{{ acc.email }}">{{ acc.email }} {% if acc.status == 'REAUTH_REQUIRED' %}(⚠️ Re-auth required){% endif %}</option>
               {% endfor %}
             </select>
           </div>
           <div>
-            <label>Site URL / Domain Property:</label>
-            <input id="gsc-manage-site" placeholder="e.g. https://buckeyelakewinery.com/ or sc-domain:example.com">
-          </div>
-          <div>
-            <label>XML Sitemap URL (Optional):</label>
-            <input id="gsc-manage-sitemap" placeholder="e.g. https://buckeyelakewinery.com/sitemap.xml">
+            <label>Bulk Domains & Sitemaps (One per line: domain | sitemap):</label>
+            <textarea id="gsc-bulk-text" rows="3" placeholder="https://example1.com/ | https://example1.com/sitemap.xml&#10;https://example2.com/ | https://example2.com/sitemap.xml" style="width:100%; font-size:12px; padding:8px; border:1px solid #ccd6e5; border-radius:6px;"></textarea>
           </div>
         </div>
 
-        <div style="display:flex; gap:10px; margin-top:14px;">
-          <button id="btn-add-gsc-site" class="btn" style="background:#1a2e58!important;">Add Property to Search Console</button>
-          <button id="btn-submit-gsc-sitemap" class="btn" style="background:#137333!important;">Submit Sitemap Only</button>
-        </div>
-        <div id="gsc-manage-results" style="margin-top:12px;"></div>
+        <button id="btn-run-gsc-bulk" class="btn" style="margin-top:10px; background:#1a2e58!important;">Execute Bulk Deployment</button>
+        <div id="gsc-bulk-results" style="margin-top:10px;"></div>
       </div>
 
-      <!-- GA4 NATURAL LANGUAGE "ASK ANALYTICS" WIDGET -->
+      <!-- GA4 NATURAL LANGUAGE "ASK ANALYTICS" -->
       <div id="ask-analytics" class="manual-lookup-card" style="margin-top:20px;">
         <h3>💬 Ask Analytics a Question Directly</h3>
         <p>Type any plain-English question to pull immediate metric breakdowns from GA4:</p>
@@ -159,10 +156,10 @@
         <div id="ask-results" style="margin-top:10px;"></div>
       </div>
 
-      <!-- GA4 AI COMPARISON ENGINE WIDGET -->
+      <!-- GA4 AI COMPARISON ENGINE WITH VISUAL CHARTS -->
       <div id="ai-comparator" class="ai-comparator-card" style="margin-top:20px;">
-        <h3>GA4 AI Performance Comparator</h3>
-        <p>Compare date periods for any connected GA4 property and get instant automated AI insights.</p>
+        <h3>GA4 AI Performance Comparator & Visual Charts</h3>
+        <p>Compare date periods for any connected GA4 property and get automated AI insights and visual trend charts.</p>
         
         <div class="comp-grid">
           <div>
@@ -218,6 +215,15 @@
           </div>
 
           <div>
+            <label>Report Persona Preset:</label>
+            <select id="comp-preset">
+              <option value="executive" selected>📊 Executive Summary</option>
+              <option value="ecommerce">🛒 E-Commerce Audit</option>
+              <option value="local">📍 Local Business Review</option>
+            </select>
+          </div>
+
+          <div>
             <label>Report Sentiment Mode:</label>
             <select id="comp-tone">
               <option value="positive" selected>🟢 Positive / Client Wins Mode</option>
@@ -253,11 +259,11 @@
       <div id="connected-accounts" class="accounts" style="margin-top:28px;">
         <div class="accounts-title">Connected Google Accounts</div>
         {% if accounts %}
-          {% for email in accounts %}
-          <div class="account-chip" data-email="{{ email }}">
-            <span class="check">✓</span>
-            <span>{{ email }}</span>
-            <button class="disconnect" data-email="{{ email }}" title="Disconnect">×</button>
+          {% for acc in accounts %}
+          <div class="account-chip" data-email="{{ acc.email }}">
+            <span class="check">{% if acc.status == 'ACTIVE' %}✓{% else %}⚠️{% endif %}</span>
+            <span>{{ acc.email }}</span>
+            <button class="disconnect" data-email="{{ acc.email }}" title="Disconnect">×</button>
           </div>
           {% endfor %}
         {% else %}
