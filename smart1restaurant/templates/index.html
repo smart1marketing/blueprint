@@ -109,7 +109,7 @@
     <section class="card" id="formCard">
       <div class="form-top">
         <div>
-          <span class="step-count" id="stepCount">Step 1 of 5</span>
+          <span class="step-count" id="stepCount">Step 1 of 4</span>
           <strong id="stepName">Your restaurant</strong>
         </div>
         <span class="save-note">About 3 minutes</span>
@@ -143,8 +143,9 @@
               <small class="field-help">This anchors the AI market estimate.</small>
             </label>
           </div>
-          <label>Website <span class="optional">Optional</span>
-            <input name="website" type="url" autocomplete="url" placeholder="https://examplekitchen.com">
+          <label>Website or Facebook page <span class="required">Required</span>
+            <input name="website" required autocomplete="url" placeholder="yourrestaurant.com or facebook.com/yourrestaurant">
+            <small class="field-help">Our AI reads your site or page to tailor the plan to your menu, prices, and vibe. No website? Paste your Facebook, Instagram, or Google listing.</small>
           </label>
           <fieldset>
             <legend>How far will guests realistically travel?</legend>
@@ -363,8 +364,20 @@ function showStep(){
   document.getElementById('formCard').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+function normalizeWebsite(){
+  const w=form.querySelector('input[name="website"]');
+  if(!w)return true;
+  let v=(w.value||'').trim();
+  if(!v){errorBox.textContent='Please add your website, Facebook, Instagram, or Google listing so our AI can tailor the plan.';w.reportValidity();return false;}
+  if(!/^https?:\/\//i.test(v))v='https://'+v.replace(/^\/+/,'');
+  // must look like a domain: a dot, a couple letters after it, no spaces
+  if(!/^https?:\/\/[^\s.]+\.[^\s.]{2,}/i.test(v)){errorBox.textContent="That doesn't look like a web address. Try something like yourrestaurant.com or facebook.com/yourrestaurant.";w.focus();return false;}
+  w.value=v;
+  return true;
+}
 function validStep(){
   syncAll();
+  if(current===0&&!normalizeWebsite())return false;
   const fields=[...steps[current].querySelectorAll('input,select,textarea')];
   for(const f of fields){
     if(!f.checkValidity()){
