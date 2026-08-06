@@ -43,6 +43,27 @@ function loginScreen(mount, message) {
       errBox.innerHTML = '';
       try {
         const { session } = await api('/auth/login', { method: 'POST', body });
+
+        // The password was right — but did the browser actually keep the
+        // cookie? In a cross-site frame, or with third-party cookies
+        // blocked, it silently discards it and every later call 401s.
+        try {
+          await api('/auth/me');
+        } catch (check) {
+          if (check.needsLogin) {
+            errBox.innerHTML = `
+              <div class="notice bad">
+                <b>The password was accepted, but your browser wouldn't keep you signed in.</b>
+                That normally means the studio is running inside a frame on another site,
+                or third-party cookies are switched off.
+                <div class="actions">
+                  <a class="btn sm" href="${location.origin}${location.pathname}" target="_blank" rel="noopener">Open the studio in its own tab</a>
+                </div>
+              </div>`;
+            return;
+          }
+          throw check;
+        }
         resolve(session);
       } catch (err) {
         errBox.innerHTML = `<div class="notice bad">${esc(err.message)}</div>`;

@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { config, missingKeys } from './config.js';
+import { config, missingKeys, APP_VERSION } from './config.js';
 import { api } from './routes/api.js';
 import { store, log } from './services/store.js';
 import { ffmpegAvailable } from './services/audio.js';
@@ -40,7 +40,7 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(config.port, async () => {
-  console.log(`Smart 1 Radio Studio listening on :${config.port}`);
+  console.log(`Smart 1 Radio Studio v${APP_VERSION} listening on :${config.port}`);
 
   // In-memory jobs die with the process. Flag anything they left mid-flight
   // so the studio offers a retry instead of spinning forever.

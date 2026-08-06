@@ -7,6 +7,17 @@ const bool = (key, fallback = false) => {
   return v === '1' || v === 'true' || v === 'yes';
 };
 
+// Bump with every meaningful change so Diagnostics can prove what is running.
+export const APP_VERSION = '1.4.1';
+export const APP_FEATURES = [
+  'light brand theme',
+  'language picker (English, Spanish, +31)',
+  'accent dropdown (3 common, +27)',
+  'music beds: library, compose, upload',
+  'ElevenLabs error translation',
+  'status badge'
+];
+
 export const config = {
   port: Number(env('PORT', '3000')),
   publicUrl: env('PUBLIC_URL', '').replace(/\/$/, ''),

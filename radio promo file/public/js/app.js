@@ -1447,6 +1447,20 @@ function render() {
     const catalog = await api('/catalog');
     state.catalog = catalog;
   } catch (err) {
+    if (err.needsLogin) {
+      // Signed in a moment ago, refused now: the cookie was not stored.
+      stage.innerHTML = `
+        <div class="panel" style="max-width:520px;margin:60px auto">
+          <div class="eyebrow">Session</div>
+          <h2>Your browser didn't keep you signed in</h2>
+          <p class="small muted">The password was accepted, but the session cookie was discarded. This happens when the studio runs inside a frame on another site, or when third-party cookies are blocked.</p>
+          <div class="actions">
+            <a class="btn" href="${location.origin}${location.pathname}" target="_blank" rel="noopener">Open the studio in its own tab</a>
+            <button class="btn ghost" onclick="location.reload()">Try again</button>
+          </div>
+        </div>`;
+      return;
+    }
     stage.innerHTML = `<div class="panel"><div class="notice bad">The studio can't reach its own API: ${esc(err.message)}</div>
       <p class="small muted">Check <a href="/diagnostics.html">Diagnostics</a> for what's not connected.</p></div>`;
     return;

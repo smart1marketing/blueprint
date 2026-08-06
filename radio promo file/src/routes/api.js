@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { config, missingKeys } from '../config.js';
+import { config, missingKeys, APP_VERSION, APP_FEATURES } from '../config.js';
 import { TONES, VOICE_CHARACTERISTICS, LANGUAGES_PRIMARY, LANGUAGES_MORE, toneById } from '../catalog.js';
 import { store, log, id } from '../services/store.js';
 import { startJob, getJob } from '../services/jobs.js';
@@ -161,6 +161,7 @@ api.get('/status', wrap(async (_req, res) => {
   const total = results.length;
   const passing = results.filter(Boolean).length;
   const body = {
+    version: APP_VERSION,
     ok: passing === total,
     passing,
     total,
@@ -924,6 +925,8 @@ api.get('/diagnostics', wrap(async (_req, res) => {
     checks,
     missingKeys: missingKeys(),
     runtime: {
+      appVersion: APP_VERSION,
+      buildIncludes: APP_FEATURES.join(' · '),
       node: process.version,
       uptimeSeconds: Math.round(process.uptime()),
       projectsOnFile: store.all().length,
@@ -933,6 +936,8 @@ api.get('/diagnostics', wrap(async (_req, res) => {
       voiceModel: config.elevenlabs.model,
       loudnessTarget: `${config.audio.targetLufs} LUFS`,
       publicUrl: config.publicUrl || '(not set — review links will be relative)',
+      cookieSameSite: config.auth.sameSite,
+      embedOrigin: config.embedOrigin || '(not set — the studio cannot be framed by another site)',
       dataDir: config.dataDir
     }
   });
