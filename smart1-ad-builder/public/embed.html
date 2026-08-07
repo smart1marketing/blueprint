@@ -1083,15 +1083,9 @@
               }
               if (st.state === 'failed') {
                 document.getElementById('buildwait').innerHTML =
-                  '<p style="color:var(--ink-2)">Something needs attention on our side — our team has been ' +
-                  'notified automatically and will follow up with your previews.</p>';
-                reportHeight();
-                return;
-              }
-              if (st.state === 'waiting-assets') {
-                document.getElementById('buildwait').innerHTML =
-                  '<p style="color:var(--ink-2)">We have everything except a logo we can use, so our team will ' +
-                  'prepare your previews personally and follow up shortly.</p>';
+                  '<p style="color:var(--ink-2)">Your previews are taking longer than usual. ' +
+                  'They\'ll keep building — you can leave this page and open your link anytime:</p>' +
+                  '<div class="ref" style="margin-top:10px">' + esc(API + '/proof/' + rid) + '</div>';
                 reportHeight();
                 return;
               }

@@ -512,6 +512,22 @@ that worked:
 - **Match creative to the size, don't squeeze.** Already the architecture:
   every size has its own layout and its own copy budget.
 
+## No logo is no longer a dead end
+
+A missing logo used to flag the whole request un-renderable and route it to a
+"our team will follow up" message. Most small businesses have no logo file to
+hand, and discovery does not always return a usable one, so this stranded
+real submissions.
+
+Now, when no image logo resolves — upload failed, discovery returned nothing
+usable, or nothing was provided — the business name is set as a clean
+typographic **wordmark** (`src/wordmark.ts`) in the brand's headline font on a
+transparent PNG, and the build continues normally. "Northside Dental" set in
+Poppins reads as a brand lockup; every layout renders; the customer gets ads
+instead of a hand-off. Uploading a real logo later replaces it. The
+confirmation screen no longer has any "we'll be in touch" terminal state — it
+always proceeds to previews.
+
 ## Why a real submission could vanish as `AD-2026-000000`
 
 The intake handler has an anti-spam honeypot: a hidden field a human never

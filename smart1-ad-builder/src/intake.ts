@@ -27,6 +27,7 @@ import { materializeAssets, resolveAsset, prepareLogo, validateAsset } from './a
 import { contrastRatio, hexLuminance } from './raster';
 import { fontIsAvailable } from './fonts';
 import { validateCampaign, type Finding } from './validate';
+import { makeWordmark } from './wordmark';
 import { getTemplate } from './registry';
 import { generateCopy, type CopyBrief } from './copywriter';
 import type { LandingAnalysis } from './projects';
@@ -78,7 +79,7 @@ export interface BuildResult {
   campaign: Campaign;
   notes: string[];
   findings: Finding[];
-  assetSources: Record<string, 'upload' | 'brandfetch' | 'placeholder' | 'none'>;
+  assetSources: Record<string, 'upload' | 'brandfetch' | 'wordmark' | 'placeholder' | 'none'>;
   renderable: boolean;
 }
 
@@ -430,8 +431,22 @@ export async function buildCampaign(
       /* stats are advisory only */
     }
   } else {
-    assetSources.logo = 'none';
-    notes.push('No usable logo. Every creative will fail QA until one is supplied.');
+    // No image logo resolved — from upload or discovery. Rather than dead-end
+    // the whole request, set the business name as a typographic wordmark and
+    // keep building. It is a real, presentable lockup, and it means a customer
+    // without a logo file still gets ads instead of a "we'll be in touch".
+    try {
+      logoFile = await makeWordmark(brand.name, brand, { cacheDir });
+      brand.logos.primary = logoFile;
+      assetSources.logo = 'wordmark';
+      notes.push(
+        'No logo image was available, so the business name is set as a text wordmark. ' +
+        'Uploading a logo later will sharpen the brand presence.',
+      );
+    } catch (e: any) {
+      assetSources.logo = 'none';
+      notes.push(`No usable logo and the text wordmark could not be generated (${e?.message ?? e}).`);
+    }
   }
 
   /* -------------------------------------------------------------- hero */
