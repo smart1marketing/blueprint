@@ -405,9 +405,25 @@ function startBannerJob(projectId, toneId) {
 
     const copy = await ai.bannerCopy({
       analysis: project.analysis, brand: project.brand, customer: project.customer, toneId
-    }).catch(() => ({ headline: tone.line, subline: project.brand?.name || '', cta: 'Learn more' }));
+    }).catch(() => ({ cta: tone.line, offer: project.brand?.name || '', headline: tone.line }));
 
-    const art = await ai.bannerArt({ brand: project.brand, toneId, headline: copy.headline });
+    // Get the logo into the account first so the banner can overlay it
+    // natively instead of fetching it from the client's website.
+    let logoAsset = project.logoAsset || null;
+    if (!logoAsset && project.brand?.logo) {
+      const folder0 = cdn.folderFor(project.customer, project.createdAt);
+      const up = await cdn.uploadRemote(project.brand.logo, { folder: folder0, publicId: 'client-logo', tags: ['logo'] });
+      if (up) {
+        logoAsset = { url: up.secure_url, publicId: up.public_id };
+        store.update(projectId, { logoAsset });
+      } else {
+        log.warn('banner', "Couldn't copy the client logo into Cloudinary — the banner will be built without it.");
+      }
+    }
+
+    const art = await ai.bannerArt({
+      brand: project.brand, toneId, headline: copy.cta || copy.headline, analysis: project.analysis
+    });
     const folder = cdn.folderFor(project.customer, project.createdAt);
     const uploaded = await cdn.uploadBuffer(Buffer.from(art.b64, 'base64'), {
       folder: `${folder}/banners`, publicId: `banner-art-${toneId}`, resourceType: 'image',
@@ -415,7 +431,14 @@ function startBannerJob(projectId, toneId) {
     });
 
     const accent = (project.brand?.colors?.[0]?.hex || '#FFB020').replace('#', '');
-    const shared = { logoUrl: project.brand?.logo, headline: copy.headline, subline: copy.subline, cta: copy.cta, accent };
+    const shared = {
+      logoPublicId: logoAsset?.publicId || null,
+      logoUrl: logoAsset ? null : project.brand?.logo,
+      cta: copy.cta || copy.headline,
+      offer: copy.offer || copy.subline,
+      landingUrl: project.customer.landingUrl || project.customer.homeUrl || '',
+      accent
+    };
 
     // Build it, then prove it renders. The commonest failure is the logo:
     // Cloudinary blocks fetch overlays unless the account allows them, and a
@@ -429,15 +452,15 @@ function startBannerJob(projectId, toneId) {
     let note = null;
     let check = await cdn.verifyDerived(sizes['300x250']);
 
-    if (!check.ok && shared.logoUrl) {
+    if (!check.ok && (shared.logoPublicId || shared.logoUrl)) {
       log.warn('banner', `With logo: ${check.reason}. Retrying without it.`);
-      sizes = build({ ...shared, logoUrl: null });
+      sizes = build({ ...shared, logoUrl: null, logoPublicId: null });
       const second = await cdn.verifyDerived(sizes['300x250']);
       if (second.ok) {
-        note = "The logo could not be placed on the banner — Cloudinary is refusing to fetch it. Enable fetched-URL overlays in your Cloudinary security settings, or upload the logo instead of linking it.";
+        note = 'The logo could not be placed on the banner, so it was built without it. The rest of the banner is fine.';
       } else {
         log.error('banner', `Without logo too: ${second.reason}`);
-        sizes = build({ logoUrl: null, headline: copy.headline, accent });
+        sizes = build({ logoUrl: null, logoPublicId: null, cta: copy.cta || copy.headline, accent });
         const third = await cdn.verifyDerived(sizes['300x250']);
         note = third.ok
           ? 'Only the headline could be placed on the banner. Check the Cloudinary log for the failing layer.'
@@ -1016,6 +1039,38 @@ api.post('/diagnostics/ghl-test', wrap(async (req, res) => {
     body: JSON.stringify({ source: 'Smart 1 Radio Studio', test: true, sentAt: new Date().toISOString() })
   });
   ok(res, { status: r.status, body: (await r.text()).slice(0, 400) });
+}));
+
+/**
+ * Compose a banner against Cloudinary's built-in `sample` image and report
+ * exactly what breaks. Costs nothing and needs no project — the fastest way
+ * to find out whether it is the text layer, the logo layer, or the account.
+ */
+api.post('/diagnostics/banner-test', wrap(async (_req, res) => {
+  const steps = [];
+  const run = async (name, opts) => {
+    const url = cdn.bannerUrl('sample', { width: 300, height: 250, ...opts });
+    const check = await cdn.verifyDerived(url);
+    steps.push({ name, ok: check.ok, reason: check.reason || null, url });
+    return check.ok;
+  };
+
+  await run('Resize and scrim only', {});
+  await run('Plus headline text', { headline: 'Stay warm' });
+  await run('Plus subline and CTA', { headline: 'Stay warm', subline: '$89 tune-up', cta: 'Book now' });
+
+  // Only meaningful if a logo has actually been filed in the account.
+  const withLogo = store.all().map((p) => p.logoAsset?.publicId).filter(Boolean)[0];
+  if (withLogo) await run('Plus a client logo overlay', { headline: 'Stay warm', logoPublicId: withLogo });
+  else steps.push({ name: 'Plus a client logo overlay', ok: null, reason: 'No client logo on file yet — run a project first.', url: null });
+
+  const firstFail = steps.find((x) => x.ok === false);
+  ok(res, {
+    steps,
+    verdict: firstFail
+      ? `First failure: ${firstFail.name} — ${firstFail.reason}`
+      : 'Every layer composed. Banner rendering is healthy.'
+  });
 }));
 
 api.post('/diagnostics/speech-test', (req, res) => {

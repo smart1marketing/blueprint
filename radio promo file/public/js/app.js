@@ -1189,6 +1189,14 @@ function renderBooth() {
   document.getElementById('extend')?.addEventListener('click', () => extendSpot(s.id));
   document.getElementById('rerender')?.addEventListener('click', () => rerenderSpot(s.id));
 
+  document.getElementById('rebuildBanner')?.addEventListener('click', async () => {
+    const holder = document.getElementById('bannerBox');
+    const { jobId } = await api(`/projects/${state.projectId}/banners/${s.toneId}/retry`, { method: 'POST' });
+    await withLoader(holder, 'banner', jobId);
+    await refreshProject();
+    render();
+  });
+
   if (!banner || ['running', 'stalled'].includes(banner.status)) pollBanner(s.toneId);
   if (!s.audioUrl && !stalled) pollAudio(s.id);
 }
@@ -1227,13 +1235,18 @@ function bannerMarkup(banner) {
   if (!banner || banner.status === 'running') return '<div class="loader" id="bannerLoader"></div>';
   if (banner.status === 'stalled') return `<div class="notice warn">The banner was interrupted by a restart. <button class="btn ghost sm" id="retryBanner">Build it again</button></div>`;
   if (!banner.sizes) return '<div class="notice warn">The banner didn\'t come back. You can approve the audio and rebuild the banner later.</div>';
-  const noteHtml = banner.note ? `<div class="notice warn" style="margin-top:10px">${esc(banner.note)}</div>` : '';
+  const noteHtml = banner.note
+    ? `<div class="notice warn" style="margin-top:10px">${esc(banner.note)}
+         <div class="actions"><button class="btn ghost sm" id="rebuildBanner">Build it again</button></div>
+       </div>`
+    : '';
   return `
     <div class="rowcard">
       <img class="thumb" style="width:300px" src="${esc(banner.sizes['300x250'])}" alt="Companion banner, 300 by 250">
       <div>
-        <h3>${esc(banner.headline || '')}</h3>
-        <p class="small muted">${esc(banner.subline || '')} · <b>${esc(banner.cta || '')}</b></p>
+        <h3>${esc(banner.cta || banner.headline || '')}</h3>
+        <p class="small muted">${esc(banner.offer || banner.subline || '')}</p>
+        <p class="small muted">Logo top · call to action centre · ${esc(state.project.customer.landingUrl || state.project.customer.homeUrl || 'website')} along the bottom</p>
         <div class="tags">
           <a class="tag" href="${esc(banner.sizes['300x250'])}" target="_blank" rel="noopener">300×250</a>
           <a class="tag" href="${esc(banner.sizes['640x640'])}" target="_blank" rel="noopener">640×640</a>

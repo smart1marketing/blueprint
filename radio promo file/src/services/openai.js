@@ -184,30 +184,55 @@ Return JSON:
   );
 }
 
-/** Headline + art direction for the streaming companion banner. */
+/** The words on the banner: a call to action, and one line supporting it. */
 export async function bannerCopy({ analysis, brand, customer, toneId }) {
   const tone = toneById(toneId);
   const lang = languageLabel(customer?.language || 'en');
   return chatJSON(
-    `You write companion banner copy for streaming audio ads, in ${lang}. The banner is small and glanceable: a listener sees it on a phone lock screen for a few seconds. Reply as JSON only.`,
+    `You write companion banner copy for streaming audio ads, in ${lang}. The banner is small and glanceable — a listener sees it on a phone lock screen for a few seconds while the ad plays. The centre of the banner is a CALL TO ACTION: an instruction, starting with a verb, telling them what to do. Beneath it sits one short supporting line carrying the offer or the deadline. Reply as JSON only.`,
     `Tone: ${tone.label} — ${tone.direction}
 Business: ${brand?.name || customer.company || customer.customerName}
 Offer: ${analysis?.offer || customer.promotion || ''}
-Call to action: ${analysis?.callToAction || ''}
+Spoken call to action: ${analysis?.callToAction || ''}
 
 Return JSON:
-{"headline":"4 words maximum","subline":"6 words maximum","cta":"2-3 words, a button label"}`,
+{
+  "cta": "the instruction, 2-5 words, starts with a verb, no full stop",
+  "offer": "one supporting line, 3-6 words — the offer, price or deadline",
+  "headline": "same as cta, for compatibility"
+}
+Keep both short. The call to action must fit on two lines at most on a 300 by 250 banner.`,
     { maxTokens: 300 }
   );
 }
 
 /** Generate the banner background art with the image model. */
-export async function bannerArt({ brand, toneId, headline }) {
+export async function bannerArt({ brand, toneId, headline, analysis }) {
   if (!config.openai.key) throw new Error('OpenAI key is not set.');
   const tone = toneById(toneId);
   const palette = (brand?.colors || []).slice(0, 3).map((c) => c.hex).join(', ') || 'deep navy, warm orange';
 
-  const prompt = `A clean abstract background graphic for a streaming-audio companion banner. Mood: ${tone.bannerMood}. Color palette: ${palette}. Composition: strong empty area on the left third for a logo and headline to be placed later. No text, no letters, no words, no numbers, no logos, no watermarks, no people's faces. Flat modern advertising art direction, high contrast, print-clean edges.`;
+  const subject = [
+    analysis?.summary ? `The business: ${analysis.summary}` : '',
+    analysis?.audience ? `The listener: ${analysis.audience}` : '',
+    brand?.industry ? `Industry: ${brand.industry}` : ''
+  ].filter(Boolean).join(' ');
+
+  const prompt = `A background graphic for a streaming-audio companion banner, 
+evoking the subject of the radio commercial it accompanies. ${subject}
+Mood, matching the tone of the script: ${tone.bannerMood}.
+Colour palette: ${palette}.
+
+COMPOSITION IS CRITICAL — type and a logo are placed on top afterwards:
+- Keep the top fifth calm and uncluttered; a logo sits there.
+- Keep the central band calm and uncluttered; large type sits there.
+- Keep the bottom strip calm and uncluttered; a URL bar sits there.
+- Put any visual interest, texture or subject matter in the corners and along the left and right edges.
+- Mid-to-dark overall so white text reads clearly on it. Avoid bright or busy areas in the centre.
+
+Absolutely no text, letters, words, numbers, logos, watermarks, signage or 
+readable symbols anywhere in the image. No human faces. Flat modern 
+advertising art direction, clean edges, no borders or frames.`;
 
   const res = await fetch(`${config.openai.base}/images/generations`, {
     method: 'POST',

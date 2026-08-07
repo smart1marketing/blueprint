@@ -26,6 +26,7 @@
       <button class="btn ghost" id="testOpp">Test opportunity webhook</button>
       <button class="btn ghost" id="testApp">Test approval webhook</button>
       <button class="btn ghost" id="testSpeech">Test the pronunciation pass</button>
+      <button class="btn ghost" id="testBanner">Test banner compositing</button>
     </div>
     <div id="checks" style="margin-top:18px"></div>
   </div>
@@ -123,6 +124,27 @@ document.getElementById('testSpeech').addEventListener('click', async () => {
     const { preview } = await api('/diagnostics/speech-test', { method: 'POST', body: { text } });
     alert(preview.spoken + '\n\n' + preview.changes.map(c => `${c.from}  ->  ${c.to}  (${c.why})`).join('\n'));
   } catch (err) { alert(err.message); }
+});
+
+document.getElementById('testBanner').addEventListener('click', async () => {
+  const box = document.getElementById('checks');
+  box.innerHTML = '<p class="mono small muted">Composing a test banner layer by layer…</p>';
+  busy(true, 'Compositing');
+  try {
+    const { steps, verdict } = await api('/diagnostics/banner-test', { method: 'POST', body: {} });
+    box.innerHTML = `
+      <div class="notice ${verdict.startsWith('Every') ? '' : 'bad'}">${esc(verdict)}</div>
+      <table class="data" style="margin-top:14px">
+        <tr><th>Layer</th><th>Result</th><th>Detail</th></tr>
+        ${steps.map(st => `<tr>
+          <td><b>${esc(st.name)}</b></td>
+          <td><span class="tag ${st.ok === true ? 'good' : st.ok === false ? 'hot' : ''}">${st.ok === true ? 'OK' : st.ok === false ? 'Failed' : 'Skipped'}</span></td>
+          <td class="small">${st.reason ? esc(st.reason) : st.url ? `<a href="${esc(st.url)}" target="_blank" rel="noopener">view</a>` : ''}</td>
+        </tr>`).join('')}
+      </table>`;
+  } catch (err) {
+    box.innerHTML = `<div class="notice bad">${esc(err.message)}</div>`;
+  } finally { busy(false); loadLogs(); }
 });
 
 document.getElementById('run').addEventListener('click', runChecks);

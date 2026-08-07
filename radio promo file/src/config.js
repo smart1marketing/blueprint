@@ -8,7 +8,7 @@ const bool = (key, fallback = false) => {
 };
 
 // Bump with every meaningful change so Diagnostics can prove what is running.
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 export const APP_FEATURES = [
   'light brand theme',
   'language picker (English, Spanish, +31)',
@@ -18,7 +18,8 @@ export const APP_FEATURES = [
   'status badge',
   'pacing recalibrated + learned per voice',
   'extend a short spot with website and phone',
-  'banner render verification with fallback'
+  'banner render verification with fallback',
+  'banner layout: logo top, CTA centre, URL bottom'
 ];
 
 export const config = {
