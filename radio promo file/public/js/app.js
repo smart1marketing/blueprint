@@ -183,11 +183,12 @@ const toneLabel = (id) => state.catalog.tones.find((t) => t.id === id)?.label ||
 /** Words-to-clock meter shown under every editable script. */
 function meter(script, target) {
   const words = String(script).split(/\s+/).filter(Boolean).length;
-  const secs = Math.round((words / 2.6) * 10) / 10;
+  const rate = state.project?.measuredRate || 3.1;
+  const secs = Math.round((words / rate) * 10) / 10;
   const pct = Math.min(140, (secs / target) * 100);
-  const state_ = secs > target + 0.4 ? 'over' : secs < target - 2.5 ? 'under' : 'ok';
+  const state_ = secs > target + 0.4 ? 'over' : secs < target - 1.2 ? 'under' : 'ok';
   const note = state_ === 'over' ? `${(secs - target).toFixed(1)}s over`
-    : state_ === 'under' ? `${(target - secs).toFixed(1)}s of air left` : 'on the clock';
+    : state_ === 'under' ? `${(target - secs).toFixed(1)}s short — add words` : 'on the clock';
   return `<div class="meter ${state_}">
     <div class="bar"><span style="width:${Math.min(100, pct)}%"></span><i style="left:${Math.min(100, (100 / 1.4))}%"></i></div>
     <div class="readout mono">${words} words · ~${secs.toFixed(1)}s of :${target} · ${note}</div>
@@ -216,6 +217,7 @@ function renderSetup() {
           ${field('projectName', 'Project name', { required: true, placeholder: 'Fall Service Push' })}
           ${field('homeUrl', 'Home page', { required: true, type: 'url', value: c.homeUrl, placeholder: 'https://example.com' })}
         </div>
+        ${field('phone', 'Phone number', { value: c.phone, placeholder: '614-536-0768', help: 'Spoken in the spot when the copy needs filling out. Read digit by digit so it lands.' })}
         ${field('landingUrl', 'Landing page for this campaign', { type: 'url', value: c.landingUrl, placeholder: 'https://example.com/fall-offer', help: 'Companion banners are clickable — this is where a tap lands.' })}
         ${field('promotion', 'Promotion details', { textarea: true, placeholder: 'The offer, the dates, anything that has to be said word for word, anything to stay away from.' })}
         ${field('disclaimer', 'Required disclaimer', { textarea: true, value: c.disclaimer, placeholder: 'Offer ends August 31. See dealer for details. APR subject to credit approval.', help: 'Read verbatim in every spot. It eats into the word budget, so the scripts are written shorter to make room.' })}
@@ -1153,6 +1155,7 @@ function renderBooth() {
         <b>${grade.status === 'good' ? 'Length' : grade.status === 'long' ? 'Runs over' : 'Runs short'}:</b> ${esc(grade.label)}
         ${grade.status === 'long' ? ' Most ad servers reject a spot that overruns its slot.' : ''}
         ${grade.status === 'long' ? `<div class="actions"><button class="btn sm" id="tighten">Cut ${grade.trimWords} word${grade.trimWords === 1 ? '' : 's'} and re-record</button></div>` : ''}
+        ${grade.status === 'short' ? `<div class="actions"><button class="btn sm" id="extend">Add ${grade.addWords} words and re-record</button></div>` : ''}
       </div>` : ''}
 
       ${stalled ? `<div class="notice warn" style="margin-top:12px">
@@ -1183,6 +1186,7 @@ function renderBooth() {
   document.getElementById('approveSpot').addEventListener('click', () => publishSpot(s.id));
   document.getElementById('retryVoice').addEventListener('click', () => goto(4));
   document.getElementById('tighten')?.addEventListener('click', () => tightenSpot(s.id));
+  document.getElementById('extend')?.addEventListener('click', () => extendSpot(s.id));
   document.getElementById('rerender')?.addEventListener('click', () => rerenderSpot(s.id));
 
   if (!banner || ['running', 'stalled'].includes(banner.status)) pollBanner(s.toneId);
@@ -1195,6 +1199,16 @@ async function tightenSpot(spotId) {
     const { jobId } = await api(`/projects/${state.projectId}/commercials/${spotId}/tighten`, { method: 'POST', body: {} });
     const result = await withLoader(box, 'tighten', jobId);
     toast(result.whatWentAndWhy || 'Tightened.');
+    await rerenderSpot(spotId);
+  } catch (err) { toast(err.message, true); }
+}
+
+async function extendSpot(spotId) {
+  const box = document.getElementById('audioBox');
+  try {
+    const { jobId } = await api(`/projects/${state.projectId}/commercials/${spotId}/extend`, { method: 'POST', body: {} });
+    const result = await withLoader(box, 'extend', jobId);
+    toast(result.whatWasAdded || 'Lengthened.');
     await rerenderSpot(spotId);
   } catch (err) { toast(err.message, true); }
 }
@@ -1213,6 +1227,7 @@ function bannerMarkup(banner) {
   if (!banner || banner.status === 'running') return '<div class="loader" id="bannerLoader"></div>';
   if (banner.status === 'stalled') return `<div class="notice warn">The banner was interrupted by a restart. <button class="btn ghost sm" id="retryBanner">Build it again</button></div>`;
   if (!banner.sizes) return '<div class="notice warn">The banner didn\'t come back. You can approve the audio and rebuild the banner later.</div>';
+  const noteHtml = banner.note ? `<div class="notice warn" style="margin-top:10px">${esc(banner.note)}</div>` : '';
   return `
     <div class="rowcard">
       <img class="thumb" style="width:300px" src="${esc(banner.sizes['300x250'])}" alt="Companion banner, 300 by 250">
@@ -1224,7 +1239,7 @@ function bannerMarkup(banner) {
           <a class="tag" href="${esc(banner.sizes['640x640'])}" target="_blank" rel="noopener">640×640</a>
         </div>
       </div>
-    </div>`;
+    </div>${noteHtml}`;
 }
 
 async function pollBanner(toneId) {

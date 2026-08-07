@@ -1,6 +1,6 @@
 {
   "name": "smart1-radio-studio",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "Smart 1 Marketing Radio Studio - AI radio commercial builder (scripts, voices, audio, companion banners).",
   "type": "module",
   "main": "src/server.js",

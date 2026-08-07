@@ -167,27 +167,53 @@ export function normalizeForSpeech(text, pronunciations = [], language = 'en') {
 
 /* ---------- timing ---------- */
 
-/** Roughly 2.6 spoken words per second at a natural commercial read. */
-export const WORDS_PER_SECOND = 2.6;
+/**
+ * Synthetic voices read considerably faster than a human scratch estimate.
+ * 2.6 words/sec was far too slow and left long tails of silence, so the
+ * default is now 3.1 and every finished render feeds a measured rate back
+ * in, which is what later estimates actually use.
+ */
+export const WORDS_PER_SECOND = Number(process.env.WORDS_PER_SECOND || 3.1);
 
 export const countWords = (s = '') => String(s).split(/\s+/).filter(Boolean).length;
-export const estimateSeconds = (s = '') => Math.round((countWords(s) / WORDS_PER_SECOND) * 10) / 10;
 
-/** How far off the clock a finished render is, and whether that's a problem. */
-export function gradeDuration(seconds, target) {
+export const estimateSeconds = (s = '', rate = WORDS_PER_SECOND) =>
+  Math.round((countWords(s) / (rate || WORDS_PER_SECOND)) * 10) / 10;
+
+/** Words that will fit a slot at the given pace, leaving a beat at each end. */
+export const wordsForSeconds = (seconds, rate = WORDS_PER_SECOND) =>
+  Math.round((seconds - 0.8) * (rate || WORDS_PER_SECOND));
+
+/** Actual pace of a finished take, used to sharpen the next estimate. */
+export function measuredRate(script, seconds) {
+  if (!seconds || seconds < 3) return null;
+  const rate = countWords(script) / seconds;
+  return rate > 1.5 && rate < 6 ? Math.round(rate * 100) / 100 : null;
+}
+
+/**
+ * How far off the clock a finished render is. A spot that runs short is now
+ * treated as a real fault rather than something to pad with silence: more
+ * than 1.2s of tail and the copy needs lengthening.
+ */
+export function gradeDuration(seconds, target, rate = WORDS_PER_SECOND) {
   if (!seconds) return { status: 'unknown', label: 'Length not measured' };
+  const pace = rate || WORDS_PER_SECOND;
   const over = seconds - target;
+
   if (over > 0.4) {
-    const words = Math.max(1, Math.round(over * WORDS_PER_SECOND));
+    const words = Math.max(1, Math.round(over * pace));
     return {
       status: 'long', over: Math.round(over * 10) / 10, trimWords: words,
       label: `${seconds.toFixed(1)}s — ${over.toFixed(1)}s over. Roughly ${words} word${words === 1 ? '' : 's'} too many.`
     };
   }
-  if (seconds < target - 2.5) {
+  if (seconds < target - 1.2) {
+    const gap = target - seconds;
+    const words = Math.max(2, Math.round(gap * pace));
     return {
-      status: 'short', under: Math.round((target - seconds) * 10) / 10,
-      label: `${seconds.toFixed(1)}s — ${(target - seconds).toFixed(1)}s of dead air at the end.`
+      status: 'short', under: Math.round(gap * 10) / 10, addWords: words,
+      label: `${seconds.toFixed(1)}s — ${gap.toFixed(1)}s short. Roughly ${words} more word${words === 1 ? '' : 's'} would fill it.`
     };
   }
   return { status: 'good', label: `${seconds.toFixed(1)}s — lands on the clock.` };

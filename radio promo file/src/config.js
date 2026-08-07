@@ -8,14 +8,17 @@ const bool = (key, fallback = false) => {
 };
 
 // Bump with every meaningful change so Diagnostics can prove what is running.
-export const APP_VERSION = '1.4.1';
+export const APP_VERSION = '1.5.0';
 export const APP_FEATURES = [
   'light brand theme',
   'language picker (English, Spanish, +31)',
   'accent dropdown (3 common, +27)',
   'music beds: library, compose, upload',
   'ElevenLabs error translation',
-  'status badge'
+  'status badge',
+  'pacing recalibrated + learned per voice',
+  'extend a short spot with website and phone',
+  'banner render verification with fallback'
 ];
 
 export const config = {

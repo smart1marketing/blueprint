@@ -122,6 +122,7 @@ const CAPTIONS = {
   'compose-bed': ['Writing the bed…', 'Finding the tempo…', 'Keeping the midrange clear…', 'Laying down the loop…'],
   'bed-prompt': ['Picking a genre…', 'Matching music to listener…'],
   tighten: ['Cutting for time…', 'Losing the adjectives…', 'Keeping the offer…'],
+  extend: ['Filling the slot…', 'Adding the website…', 'Working in the phone number…'],
   default: ['Working…', 'One moment…']
 };
 

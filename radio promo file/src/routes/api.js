@@ -291,7 +291,8 @@ api.post('/projects', wrap(async (req, res) => {
       landingUrl: (c.landingUrl || '').trim(),
       promotion: (c.promotion || '').trim(),
       disclaimer: (c.disclaimer || '').trim(),
-      language: (c.language || 'en').trim()
+      language: (c.language || 'en').trim(),
+      phone: (c.phone || '').trim()
     },
     brand: req.body.brand || null,
     pronunciations: req.body.pronunciations || [],
@@ -416,15 +417,46 @@ function startBannerJob(projectId, toneId) {
     const accent = (project.brand?.colors?.[0]?.hex || '#FFB020').replace('#', '');
     const shared = { logoUrl: project.brand?.logo, headline: copy.headline, subline: copy.subline, cta: copy.cta, accent };
 
+    // Build it, then prove it renders. The commonest failure is the logo:
+    // Cloudinary blocks fetch overlays unless the account allows them, and a
+    // single bad layer fails the whole image rather than degrading.
+    const build = (opts) => ({
+      '300x250': cdn.bannerUrl(uploaded.public_id, { width: 300, height: 250, ...opts }),
+      '640x640': cdn.bannerUrl(uploaded.public_id, { width: 640, height: 640, ...opts })
+    });
+
+    let sizes = build(shared);
+    let note = null;
+    let check = await cdn.verifyDerived(sizes['300x250']);
+
+    if (!check.ok && shared.logoUrl) {
+      log.warn('banner', `With logo: ${check.reason}. Retrying without it.`);
+      sizes = build({ ...shared, logoUrl: null });
+      const second = await cdn.verifyDerived(sizes['300x250']);
+      if (second.ok) {
+        note = "The logo could not be placed on the banner — Cloudinary is refusing to fetch it. Enable fetched-URL overlays in your Cloudinary security settings, or upload the logo instead of linking it.";
+      } else {
+        log.error('banner', `Without logo too: ${second.reason}`);
+        sizes = build({ logoUrl: null, headline: copy.headline, accent });
+        const third = await cdn.verifyDerived(sizes['300x250']);
+        note = third.ok
+          ? 'Only the headline could be placed on the banner. Check the Cloudinary log for the failing layer.'
+          : `The banner artwork rendered but the overlays failed: ${second.reason}`;
+        if (!third.ok) sizes = { '300x250': uploaded.secure_url, '640x640': uploaded.secure_url };
+      }
+    } else if (!check.ok) {
+      log.error('banner', check.reason);
+      note = `Banner overlays failed: ${check.reason}`;
+      sizes = { '300x250': uploaded.secure_url, '640x640': uploaded.secure_url };
+    }
+
     const banner = {
       toneId, toneLabel: tone.label, status: 'ready', ...copy,
       artPublicId: uploaded.public_id, artUrl: uploaded.secure_url,
       // Companion banners are clickable — this is where a tap lands.
       clickThroughUrl: project.customer.landingUrl || project.customer.homeUrl || '',
-      sizes: {
-        '300x250': cdn.bannerUrl(uploaded.public_id, { width: 300, height: 250, ...shared }),
-        '640x640': cdn.bannerUrl(uploaded.public_id, { width: 640, height: 640, ...shared })
-      }
+      note,
+      sizes
     };
     banner.url = banner.sizes['300x250'];
     store.mutate(projectId, (p) => { p.banners[toneId] = banner; });
@@ -590,6 +622,36 @@ api.post('/projects/:projectId/commercials/:spotId/tighten', wrap(async (req, re
   ok(res, { jobId: job.jobId });
 }));
 
+/** The read came back short — lengthen it with the website and phone. */
+api.post('/projects/:projectId/commercials/:spotId/extend', wrap(async (req, res) => {
+  const project = requireProject(req, res);
+  if (!project) return;
+  const spot = project.commercials.find((c) => c.id === req.params.spotId);
+  if (!spot) return fail(res, 404, 'That spot is not in this project.');
+  const addWords = Number(req.body.addWords) || spot.durationGrade?.addWords || 8;
+
+  const job = startJob('extend', async () => {
+    const p = store.get(project.projectId);
+    const result = await ai.extendScript({
+      script: spot.script, seconds: spot.seconds, addWords,
+      toneId: spot.toneId, analysis: p.analysis, customer: p.customer
+    });
+    store.mutate(p.projectId, (proj) => {
+      const t = proj.commercials.find((c) => c.id === spot.id);
+      t.script = result.script;
+      t.wordCount = speech.countWords(result.script);
+      t.estimatedSeconds = speech.estimateSeconds(result.script, proj.measuredRate);
+      t.audioUrl = null; t.audioStatus = 'needs-rerender'; t.finalSeconds = null; t.durationGrade = null;
+    });
+    saveDraft(p.projectId, spot.pairId, spot.toneId,
+      store.get(p.projectId).commercials.filter((c) => c.pairId === spot.pairId),
+      `lengthened: ${result.whatWasAdded || ''}`);
+    return result;
+  }, { projectId: project.projectId, spotId: spot.id });
+
+  ok(res, { jobId: job.jobId });
+}));
+
 /** How the words will actually be read out loud. */
 api.post('/projects/:projectId/commercials/:spotId/speech-preview', (req, res) => {
   const project = requireProject(req, res);
@@ -689,7 +751,9 @@ function startRender(projectId, spotId, voice) {
     });
 
     const measured = produced.rawSeconds ?? uploaded.duration ?? null;
-    const grade = speech.gradeDuration(measured, s.seconds);
+    // Learn this voice's actual pace so the next estimate is closer.
+    const rate = speech.measuredRate(spoken, measured) || p.measuredRate || null;
+    const grade = speech.gradeDuration(measured, s.seconds, rate);
 
     store.mutate(p.projectId, (proj) => {
       const t = proj.commercials.find((c) => c.id === spotId);
@@ -704,6 +768,7 @@ function startRender(projectId, spotId, voice) {
       t.postProduced = produced.postProduced;
       t.bedName = p.musicBed?.name || null;
       t.audioStatus = 'ready';
+      if (rate) proj.measuredRate = rate;
     });
 
     return { spotId, audioUrl: uploaded.secure_url, durationGrade: grade, speechChanges: changes };

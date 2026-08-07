@@ -137,6 +137,6 @@ export const VOICE_CHARACTERISTICS = [
 ];
 
 export const DURATIONS = [
-  { seconds: 15, wordTarget: '35–42 words' },
-  { seconds: 30, wordTarget: '70–85 words' }
+  { seconds: 15, wordTarget: '40–46 words' },
+  { seconds: 30, wordTarget: '85–95 words' }
 ];

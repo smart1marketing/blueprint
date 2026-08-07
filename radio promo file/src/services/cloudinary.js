@@ -136,6 +136,22 @@ export function bannerUrl(artPublicId, { width, height, logoUrl, headline, subli
 }
 
 /** Licensed music beds the agency has uploaded to their bed folder. */
+/**
+ * Cloudinary only builds a derived image when it is first requested, so a
+ * bad transformation shows up as a broken <img>, not an upload error. Ask
+ * for it once here and read the reason out of the response header.
+ */
+export async function verifyDerived(url) {
+  try {
+    const res = await fetch(url, { method: 'GET', headers: { Range: 'bytes=0-0' } });
+    if (res.ok || res.status === 206) return { ok: true };
+    const reason = res.headers.get('x-cld-error') || `HTTP ${res.status}`;
+    return { ok: false, reason };
+  } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+}
+
 export async function listBeds() {
   const cl = ready();
   const res = await cl.api.resources({

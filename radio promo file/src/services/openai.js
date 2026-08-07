@@ -134,7 +134,7 @@ export async function writeScripts({ analysis, brand, customer, toneId, revision
     : '';
 
   return chatJSON(
-    `You write streaming-radio commercials for Smart 1 Marketing. Radio is heard, not read: write for the ear.${nonEnglish ? ` WRITE THE SCRIPTS ENTIRELY IN ${lang.toUpperCase()}. Write as a native ${lang} copywriter would — idiomatic, not translated. Keep the brand name, any web address and any required disclaimer exactly as supplied, even if they are English. Word-count targets are counted in ${lang} words.` : ''} Rules you never break — the brand name is said at least twice in a :30 and at least once in a :15; the call to action is the last thing heard; you never invent an offer, price, discount, guarantee or statistic that was not supplied; you never write sound effects the client did not ask for; a :15 runs 35-42 words and a :30 runs 70-85 words at a natural read pace. Reply as JSON only.`,
+    `You write streaming-radio commercials for Smart 1 Marketing. Radio is heard, not read: write for the ear.${nonEnglish ? ` WRITE THE SCRIPTS ENTIRELY IN ${lang.toUpperCase()}. Write as a native ${lang} copywriter would — idiomatic, not translated. Keep the brand name, any web address and any required disclaimer exactly as supplied, even if they are English. Word-count targets are counted in ${lang} words.` : ''} Rules you never break — the brand name is said at least twice in a :30 and at least once in a :15; the call to action is the last thing heard; you never invent an offer, price, discount, guarantee or statistic that was not supplied; you never write sound effects the client did not ask for; a :15 runs 40-46 words and a :30 runs 85-95 words — synthetic voices read fast, and copy under those counts leaves dead air at the end of the slot, so write to the TOP of the range rather than the bottom. Always say the website. If the copy still feels short, add the phone number, then a further proof point — never leave the spot under length. Reply as JSON only.`,
     `TONE: ${tone.label} — ${tone.direction}
 
 BRIEF
@@ -147,6 +147,8 @@ Call to action: ${analysis?.callToAction || ''}
 Must say verbatim: ${(analysis?.mustSay || []).join(' | ') || 'nothing specific'}
 Do not say: ${(analysis?.avoid || []).join(' | ') || 'nothing specific'}
 Client's own promotion notes: ${customer.promotion || 'none'}
+Website — say this out loud in every spot: ${customer.landingUrl || customer.homeUrl || 'none supplied'}
+Phone number — use it to fill time if the copy runs short: ${customer.phone || 'none supplied'}
 ${disclaimer ? `\nREQUIRED DISCLAIMER — reproduce word for word as the last thing before the call to action, in BOTH lengths. It counts toward the word budget, so write the rest shorter to make room:\n"${disclaimer}"\n` : ''}${revisionBlock}
 
 Return JSON:
@@ -278,5 +280,37 @@ Return JSON:
   "alternates": ["two other one-line directions worth trying"]
 }`,
     { maxTokens: 450 }
+  );
+}
+
+/**
+ * The read came back under the slot. Lengthen it without padding: the
+ * website, the phone number and real proof points first, waffle never.
+ */
+export async function extendScript({ script, seconds, addWords, toneId, analysis, customer }) {
+  const tone = toneById(toneId);
+  const lang = languageLabel(customer?.language || 'en');
+  const disclaimer = String(customer?.disclaimer || '').trim();
+  const current = (script || '').split(/\s+/).filter(Boolean).length;
+  const target = current + addWords;
+
+  return chatJSON(
+    `You are a radio copy editor working in ${lang}. You lengthen copy that came in under its slot. You add substance, never filler: the website said aloud, the phone number, a concrete proof point, a second reason to act. You never repeat a sentence, never add empty adjectives, and never invent an offer, price or claim that was not supplied. Reply as JSON only.`,
+    `This :${seconds} read came back ${Math.round(addWords / 3.1 * 10) / 10} seconds short, leaving dead air.
+
+TONE: ${tone?.label || ''} — keep it.
+Website, say it aloud: ${customer?.landingUrl || customer?.homeUrl || 'none supplied'}
+Phone number, use it if needed: ${customer?.phone || 'none supplied'}
+Proof points available: ${(analysis?.differentiators || []).join(' | ') || 'none'}
+Call to action, must stay last: ${analysis?.callToAction || ''}
+${disclaimer ? `This disclaimer must stay word for word: "${disclaimer}"` : ''}
+
+CURRENT SCRIPT (${current} words)
+${script}
+
+Rewrite it at roughly ${target} words. Same meaning and tone, more substance. Priority for the extra words: 1) the website spoken clearly, 2) the phone number, 3) one more concrete proof point.
+
+Return JSON: {"script":"the lengthened read, spoken words only","wordCount":0,"whatWasAdded":"one sentence"}`,
+    { maxTokens: 800 }
   );
 }

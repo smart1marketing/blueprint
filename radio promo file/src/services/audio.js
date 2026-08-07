@@ -78,9 +78,15 @@ export async function postProduce(voBuffer, { targetSeconds, bedUrl, bedDb = con
     }
 
     rawSeconds = await measure(voFile);
-    const ranLong = rawSeconds && rawSeconds > targetSeconds + 0.4;
-    // Never trim a read that ran long — that clips a word. Flag it instead.
-    const slot = ranLong ? Math.ceil(rawSeconds * 10) / 10 : targetSeconds;
+    // Never trim a read that ran long — that clips a word. And never pad a
+    // short one out to the full slot: 12 seconds of silence is worse than a
+    // short spot. Cap the tail at a beat and let the copy be lengthened.
+    const MAX_TAIL = 1.0;
+    let slot = targetSeconds;
+    if (rawSeconds) {
+      if (rawSeconds > targetSeconds + 0.4) slot = Math.ceil(rawSeconds * 10) / 10;
+      else if (rawSeconds + MAX_TAIL < targetSeconds) slot = Math.round((rawSeconds + MAX_TAIL) * 10) / 10;
+    }
 
     const outFile = tmp('out.mp3');
     cleanup.push(outFile);
