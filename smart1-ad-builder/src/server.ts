@@ -29,6 +29,8 @@ import { renderDiagnostics } from './diagnostics-page';
 import { scheduleSweep, sweep } from './retention';
 import { deliverProject, latestManifest } from './deliver';
 import { renderProof } from './proof';
+import { suggestCopy, critiqueCopy } from './copy-approval';
+import { searchPixabay, generateHero, imageKeywords } from './imagery';
 import { getPlatform } from './registry';
 import sharp from 'sharp';
 import { notify } from './notify';
@@ -150,7 +152,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith('/api/project') ||
     url.pathname.startsWith('/api/build/') ||
     url.pathname.startsWith('/api/diagnostics') ||
-    url.pathname.startsWith('/files/') ||
+    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/')) ||
     route === 'POST /api/render' ||
     url.pathname.startsWith('/api/render/');
 
@@ -228,6 +230,9 @@ const server = http.createServer(async (req, res) => {
       route === 'POST /api/requests' ||
       route === 'POST /api/brand/discover' ||
       route === 'POST /api/landing/analyze' ||
+      route === 'POST /api/copy/suggest' ||
+      route === 'POST /api/images/search' ||
+      route === 'POST /api/images/generate' ||
       route === 'POST /api/assets/upload-signature';
     if (intakeSurface && !intakeCodeOk(req)) {
       return json(res, 401, { error: 'A valid team access code is required.' }, corsHeaders(req.headers.origin));
@@ -296,7 +301,12 @@ const server = http.createServer(async (req, res) => {
         fs.mkdirSync(path.join(OUT, 'campaigns'), { recursive: true });
         fs.writeFileSync(
           path.join(OUT, 'campaigns', `${requestId}.json`),
-          JSON.stringify({ campaign: result.campaign, notes: result.notes, assetSources: result.assetSources }, null, 2),
+          JSON.stringify({
+            campaign: result.campaign,
+            platforms: (body.platforms ?? ['google']).filter((p: string) => p === 'google' || p === 'amazon'),
+            notes: result.notes,
+            assetSources: result.assetSources,
+          }, null, 2),
         );
         build = { renderable: result.renderable, notes: result.notes };
 
@@ -705,6 +715,79 @@ const server = http.createServer(async (req, res) => {
 
     /* ------------------------------------------------------------ approvals */
     // Posted by the proof screen. Public on purpose: the customer opening a
+    // In-place rebuild. The heart of "revisions happen in the same window":
+    // apply edits (per-concept or per-size copy, CTA, colours) to the stored
+    // campaign, re-render, and refresh the proof. No new request, no "a revised
+    // proof is on the way" — the same proof URL now shows the updated ads.
+    const rebuildMatch = url.pathname.match(/^\/api\/proof\/([\w.-]+)\/rebuild$/);
+    if (rebuildMatch && req.method === 'POST') {
+      const project = projects.get(rebuildMatch[1]);
+      if (!project) return json(res, 404, { error: 'No such project' });
+      const campFile = path.join(OUT, 'campaigns', `${project.requestId}.json`);
+      if (!fs.existsSync(campFile)) return json(res, 404, { error: 'No campaign to rebuild' });
+
+      const body = JSON.parse(await readBody(req, 200_000)) as {
+        conceptId?: string;
+        /** Copy applied to the whole concept (default) or one size. */
+        copy?: { headline?: string; support?: string; cta?: string; offer?: string };
+        size?: string;
+        /** Palette edits applied to the brand. */
+        colors?: { accent?: string; ctaText?: string; headline?: string };
+      };
+
+      const doc = JSON.parse(fs.readFileSync(campFile, 'utf8'));
+      const campaign = doc.campaign;
+
+      // --- apply colour edits to the brand palette ---
+      if (body.colors) {
+        if (body.colors.accent) campaign.brand.colors.accent = body.colors.accent;
+        // ctaText / headline are carried as brand extensions the composer reads.
+        if (body.colors.ctaText) campaign.brand.colors.ctaText = body.colors.ctaText;
+        if (body.colors.headline) campaign.brand.colors.headlineInk = body.colors.headline;
+      }
+
+      // --- apply copy edits ---
+      if (body.copy && body.conceptId) {
+        const concept = campaign.concepts.find((c: any) => c.conceptId === body.conceptId);
+        if (concept) {
+          const target = body.size
+            ? (concept.copy[body.size] = concept.copy[body.size] || {})
+            : (concept.copy.default = concept.copy.default || {});
+          for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
+            if (body.copy[k] !== undefined) target[k] = body.copy[k];
+          }
+        }
+      }
+
+      fs.writeFileSync(campFile, JSON.stringify(doc, null, 2));
+
+      const platforms: string[] = (doc.platforms as string[])
+        ?? (campaign.platforms as string[])
+        ?? ['google', 'amazon'];
+      const job = enqueue({ campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
+      project.status = 'in-build';
+      project.notes.push(`[${new Date().toISOString()}] Rebuild requested (job ${job.id})` +
+        (body.conceptId ? ` for concept ${body.conceptId}${body.size ? '/' + body.size : ''}` : ''));
+      projects.save(project);
+
+      // Wait for the rebuild so the caller can refresh onto fresh creatives.
+      const started = Date.now();
+      await new Promise<void>((resolve) => {
+        const t = setInterval(() => {
+          const j = getJob(job.id);
+          if (!j || j.status === 'complete' || j.status === 'failed' || Date.now() - started > 120_000) {
+            clearInterval(t);
+            if (j?.status === 'complete' && j.results) {
+              const proofUrl = j.reports?.find((r) => r.includes('/proof_'));
+              projects.addBatch(project.projectId, j.results, { reportUrl: proofUrl });
+            }
+            resolve();
+          }
+        }, 1500);
+      });
+      return json(res, 200, { rebuilt: true, proofUrl: `/proof/${project.requestId}` });
+    }
+
     // proof link is not an authenticated user. The project id in the URL is
     // the capability, so treat it like a signed link, not a secret.
     const decision = url.pathname.match(/^\/api\/proof\/([\w.-]+)\/(approve|revision)$/);
@@ -767,6 +850,67 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* ------------------------------------------------- landing page reader */
+    // Pixabay background options for the campaign. Returns candidates served
+    // from a public cache dir; nothing is applied until the person picks one.
+    if (route === 'POST /api/images/search') {
+      const cors = corsHeaders(req.headers.origin);
+      const limit = rateLimit(route, req);
+      if (!limit.allowed) return json(res, 429, { error: 'Slow down a moment.' }, cors);
+      if (!process.env.PIXABAY_API) {
+        return json(res, 200, { candidates: [], reason: 'Image search is not configured (PIXABAY_API missing).' }, cors);
+      }
+      const body = JSON.parse(await readBody(req, 50_000)) as any;
+      try {
+        const cacheDir = path.join(OUT, 'imagery', slug(body.requestId ?? "adhoc"));
+        const cands = await searchPixabay(
+          { business: body.business ?? '', promoting: body.promoting ?? '', objective: body.objective, landing: body.landingAnalysis, keywords: body.keywords },
+          { cacheDir, count: 2 },
+        );
+        // expose each under /files with a public url the browser can load
+        const withUrls = cands.map((c) => ({ ...c, url: `/files/${path.relative(OUT, c.file)}` , file: undefined }));
+        return json(res, 200, { candidates: withUrls, query: imageKeywords({ business: body.business ?? '', promoting: body.promoting ?? '', landing: body.landingAnalysis, keywords: body.keywords }) }, cors);
+      } catch (e: any) {
+        return json(res, 200, { candidates: [], reason: e?.message ?? 'Image search failed' }, cors);
+      }
+    }
+
+    // AI-generated hero from the campaign / landing page. One candidate.
+    if (route === 'POST /api/images/generate') {
+      const cors = corsHeaders(req.headers.origin);
+      const limit = rateLimit(route, req);
+      if (!limit.allowed) return json(res, 429, { error: 'Slow down a moment.' }, cors);
+      if (!process.env.OPENAI_API_KEY) {
+        return json(res, 200, { candidate: null, reason: 'Image generation is not configured (OPENAI_API_KEY missing).' }, cors);
+      }
+      const body = JSON.parse(await readBody(req, 50_000)) as any;
+      try {
+        const cacheDir = path.join(OUT, 'imagery', slug(body.requestId ?? "adhoc"));
+        const cand = await generateHero(
+          { business: body.business ?? '', promoting: body.promoting ?? '', objective: body.objective, landing: body.landingAnalysis },
+          { cacheDir },
+        );
+        return json(res, 200, { candidate: { ...cand, url: `/files/${path.relative(OUT, cand.file)}`, file: undefined } }, cors);
+      } catch (e: any) {
+        return json(res, 200, { candidate: null, reason: e?.message ?? 'Image generation failed' }, cors);
+      }
+    }
+
+    if (route === 'POST /api/copy/suggest') {
+      const cors = corsHeaders(req.headers.origin);
+      const limit = rateLimit(route, req);
+      if (!limit.allowed) return json(res, 429, { error: 'Slow down a moment and try again.' }, cors);
+      const body = JSON.parse(await readBody(req, 50_000)) as any;
+      if (!body.business || !body.promoting) {
+        return json(res, 400, { error: 'business and promoting are required' }, cors);
+      }
+      const suggestion = await suggestCopy({
+        business: body.business, promoting: body.promoting, benefit: body.benefit,
+        offer: body.offer, audience: body.audience, geography: body.geography,
+        objective: body.objective, cta: body.cta, landing: body.landingAnalysis,
+      });
+      return json(res, 200, suggestion, cors);
+    }
+
     if (route === 'POST /api/landing/analyze') {
       const cors = corsHeaders(req.headers.origin);
       const body = JSON.parse(await readBody(req, 20_000)) as { url?: string; projectId?: string };

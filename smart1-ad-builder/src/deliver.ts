@@ -72,6 +72,7 @@ function human(bytes: number): string {
 function readme(
   project: Project,
   concept: string,
+  clientSlug: string,
   shipped: { entry: ManifestEntry; overridden: boolean; finalFile: string }[],
   skipped: { size: string; reason: string }[],
 ): string {
@@ -85,8 +86,10 @@ function readme(
   for (const s of shipped) {
     const e = s.entry;
     lines.push(
-      `${path.basename(s.finalFile)}` +
-      `  ·  ${e.platform}  ·  ${e.deliveredDimensions}px  ·  ${human(fs.statSync(s.finalFile).size)}` +
+      `${clientSlug}_${e.deliveredDimensions}${path.extname(s.finalFile)}` +
+      `  ·  ${(e.platforms ?? [e.platform]).join(' + ')}  ·  ${e.deliveredDimensions}px` +
+      (e.deliveredDimensions !== e.size ? ` (${e.size} at 2x)` : '') +
+      `  ·  ${human(fs.statSync(s.finalFile).size)}` +
       (s.overridden ? '  ·  MANUALLY EDITED replacement supplied by Smart 1' : ''),
     );
   }
@@ -155,16 +158,27 @@ export async function deliverProject(
   const zipFile = path.join(deliveriesDir, zipName);
 
   const root = `${clientSlug}-${slug(project.campaignName)}`;
-  const zipEntries: { name: string; data: Buffer }[] = shipped.map((s) => {
+  // A deduplicated creative is filed under every platform it serves, so an ops
+  // person uploading to Amazon finds all Amazon sizes in the amazon/ folder
+  // even though the file was rendered once. The on-disk NAME reflects the
+  // actual delivered pixels, not the size key: Amazon's 320x50 ships at
+  // 640x100 (2x), so it must not be labelled 320x50.
+  const zipEntries: { name: string; data: Buffer }[] = [];
+  for (const s of shipped) {
     const ext = path.extname(s.finalFile) || `.${s.entry.format}`;
-    return {
-      name: `${root}/${s.entry.platform}/${clientSlug}_${s.entry.size}${ext}`,
-      data: fs.readFileSync(s.finalFile),
-    };
-  });
+    const data = fs.readFileSync(s.finalFile);
+    const labelSize = s.entry.deliveredDimensions || s.entry.size; // real pixels
+    const targets = s.entry.platforms && s.entry.platforms.length ? s.entry.platforms : [s.entry.platform];
+    for (const plat of targets) {
+      zipEntries.push({
+        name: `${root}/${plat}/${clientSlug}_${labelSize}${ext}`,
+        data,
+      });
+    }
+  }
   zipEntries.push({
     name: `${root}/README.txt`,
-    data: Buffer.from(readme(project, concept, shipped, skipped), 'utf8'),
+    data: Buffer.from(readme(project, concept, clientSlug, shipped, skipped), 'utf8'),
   });
   fs.writeFileSync(zipFile, buildZip(zipEntries));
 

@@ -13,6 +13,8 @@ export interface ManifestEntry {
   conceptName: string;
   layoutFamily: string;
   platform: string;
+  /** All platforms this identical creative satisfies (dedup). */
+  platforms?: string[];
   size: SizeKey;
   deliveredDimensions: string;
   format: string;
@@ -107,6 +109,7 @@ export function buildManifest(args: {
       conceptName: concept?.name ?? r.conceptId,
       layoutFamily: concept?.layoutFamily ?? '',
       platform: r.platform,
+      platforms: r.platforms ?? [r.platform],
       size: r.size,
       deliveredDimensions: `${r.width}x${r.height}`,
       format: r.format,

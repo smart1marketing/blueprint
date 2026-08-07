@@ -222,6 +222,7 @@
     <div class="seg" data-goto="1"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">2</span></span><span class="t">The Campaign</span></div></div>
     <div class="seg" data-goto="2"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">3</span></span><span class="t">Logo &amp; Images</span></div></div>
     <div class="seg" data-goto="3"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">4</span></span><span class="t">Where Ads Run</span></div></div>
+    <div class="seg" data-goto="4"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">5</span></span><span class="t">Review Message</span></div></div>
   </div>
 
   <div id="banner"></div>
@@ -406,6 +407,10 @@
           <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" multiple>
         </div>
         <ul class="files" id="imageFiles"></ul>
+        <div class="hint" style="margin-top:8px">
+          We'll automatically optimize images to meet the 150&nbsp;KB ad limit. Need to crop or edit one first?
+          Use our <a href="https://smart1marketing.com/image-optimizer" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">image optimizer</a>.
+        </div>
       </div>
 
       <label class="check" style="max-width:none" id="stockRow">
@@ -440,8 +445,37 @@
       </div>
 
       <p class="hint" style="margin-top:6px">
-        You'll get a confirmation by email, and we'll follow up on anything we still need.
+        Next we'll suggest your ad wording for you to approve before anything is built.
       </p>
+    </section>
+
+    <!-- ============================ STEP 5: copy approval ============================ -->
+    <section class="step" data-step="4">
+      <h2 class="steptitle">Review your message</h2>
+      <p class="stepsub">We drafted this from your answers. Edit anything, then approve — nothing is built until you do.</p>
+
+      <div id="copyLoading" style="padding:24px 0;color:var(--ink-2)"><span class="spinner"></span> Writing your ad copy…</div>
+
+      <div id="copyReview" style="display:none">
+        <div class="field" data-field="approvedHeadline">
+          <label class="req" for="approvedHeadline">Headline</label>
+          <input type="text" id="approvedHeadline" maxlength="60">
+          <div class="hint">The big line. 3–7 words works best.</div>
+        </div>
+        <div class="field" data-field="approvedSupport">
+          <label for="approvedSupport">Supporting line</label>
+          <input type="text" id="approvedSupport" maxlength="90">
+          <div class="hint">One short sentence that adds a second point.</div>
+        </div>
+        <div class="field" data-field="approvedCta">
+          <label class="req" for="approvedCta">Button text</label>
+          <input type="text" id="approvedCta" maxlength="24">
+        </div>
+
+        <div id="copyWarnings" style="display:none;background:#FCF0D8;color:#7A4E00;border-radius:8px;padding:12px 14px;font-size:13.5px;margin-bottom:14px"></div>
+
+        <button type="button" class="muted-btn" id="regenCopy" style="font-size:13.5px">Suggest different wording</button>
+      </div>
     </section>
 
     <!-- step navigation -->
@@ -450,7 +484,7 @@
       <div class="spacer"></div>
       <span id="stepOf" class="hint" style="margin:0 4px 0 0"></span>
       <button type="button" id="next">Next</button>
-      <button type="submit" id="submit" style="display:none">Submit request</button>
+      <button type="submit" id="submit" style="display:none">Approve &amp; build my ads</button>
     </div>
   </form>
 </div>
@@ -594,7 +628,8 @@
     { required: ['business', 'website', 'contact', 'email'] },
     { required: ['campaignName', 'projectName', 'landingPage', 'promoting', 'objective', 'cta', 'benefit'] },
     { required: [] },
-    { required: ['platforms'] }
+    { required: ['platforms'] },
+    { required: ['approvedHeadline', 'approvedCta'] }
   ];
   var current = 0;
   var reached = 0;
@@ -660,9 +695,74 @@
     stepOf.textContent = 'Step ' + (i + 1) + ' of ' + STEPS.length;
 
     banner.innerHTML = '';
+    if (i === 4) loadCopySuggestion();
     document.getElementById('root').scrollIntoView({ behavior: 'smooth', block: 'start' });
     reportHeight();
   }
+
+  /* ---------------------------------------- copy approval (step 5) */
+  var copyLoaded = false;
+  function renderCopyWarnings(warnings) {
+    var box = document.getElementById('copyWarnings');
+    if (warnings && warnings.length) {
+      box.style.display = '';
+      box.innerHTML = '<b>A couple of things to check:</b><ul style="margin:6px 0 0;padding-left:18px">' +
+        warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>';
+    } else {
+      box.style.display = 'none';
+    }
+    reportHeight();
+  }
+  function fillCopy(sug) {
+    document.getElementById('approvedHeadline').value = sug.headline || '';
+    document.getElementById('approvedSupport').value = sug.support || '';
+    document.getElementById('approvedCta').value = sug.cta || (form.elements.cta.value !== 'Smart 1 should recommend' ? form.elements.cta.value : 'Learn More');
+    renderCopyWarnings(sug.warnings);
+    document.getElementById('copyLoading').style.display = 'none';
+    document.getElementById('copyReview').style.display = '';
+    reportHeight();
+  }
+  function loadCopySuggestion(force) {
+    if (copyLoaded && !force) return;
+    document.getElementById('copyLoading').style.display = '';
+    document.getElementById('copyReview').style.display = 'none';
+    reportHeight();
+    fetch(API + '/api/copy/suggest', {
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
+      body: JSON.stringify({
+        business: val('business'), promoting: val('promoting'), benefit: val('benefit'),
+        offer: form.elements.offer.value.trim(), audience: form.elements.audience.value.trim(),
+        geography: form.elements.geography.value.trim(), objective: val('objective'),
+        cta: val('cta'), landingAnalysis: suggestions || undefined
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (sug) { copyLoaded = true; fillCopy(sug); })
+      .catch(function () {
+        // Never block the build on a copy service hiccup — fall back to the
+        // form answers and let the person edit.
+        copyLoaded = true;
+        fillCopy({ headline: val('benefit') || val('promoting'), support: form.elements.offer.value.trim(), cta: val('cta'), warnings: [] });
+      });
+  }
+  // Re-run the client-side critique as they edit, so warnings stay honest.
+  ['approvedHeadline', 'approvedSupport', 'approvedCta'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function () {
+      // lightweight local echo of the server critique for the truncation/label cases
+      var h = document.getElementById('approvedHeadline').value.trim();
+      var s = document.getElementById('approvedSupport').value.trim();
+      var w = [];
+      if (h && h.split(/\s+/).length < 2) w.push('The headline is a single word — it may read as a fragment.');
+      if (/(str|stre|adv|inc)$/i.test(h)) w.push('The headline looks truncated.');
+      if (s && /(str|stre|adv|inc)$/i.test(s)) w.push('The supporting line looks truncated.');
+      renderCopyWarnings(w);
+    });
+  });
+  document.getElementById('regenCopy').addEventListener('click', function () {
+    this.disabled = true; var b = this;
+    loadCopySuggestion(true);
+    setTimeout(function () { b.disabled = false; }, 1500);
+  });
 
   nextBtn.addEventListener('click', function () {
     if (validateStep(current)) showStep(current + 1);
@@ -962,6 +1062,13 @@
     data.notes = form.elements.notes.value.trim();
     data.stockOk = document.getElementById('stockOk').checked;
     if (suggestions) data.landingAnalysis = suggestions;
+    // Human-approved copy is authoritative — the build uses it verbatim rather
+    // than re-suggesting, so what they approved is what renders.
+    data.approvedCopy = {
+      headline: document.getElementById('approvedHeadline').value.trim(),
+      support: document.getElementById('approvedSupport').value.trim(),
+      cta: document.getElementById('approvedCta').value.trim()
+    };
 
     if (manual.style.display !== 'none') {
       data.brandManual = true;

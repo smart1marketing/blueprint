@@ -119,6 +119,9 @@ export interface Budget { limit: number; windowMs: number }
 export const BUDGETS: Record<string, Budget> = {
   'POST /api/requests': { limit: 12, windowMs: 3_600_000 },
   'POST /api/intake/verify': { limit: 30, windowMs: 3_600_000 },
+  'POST /api/copy/suggest': { limit: 40, windowMs: 3_600_000 },
+  'POST /api/images/search': { limit: 40, windowMs: 3_600_000 },
+  'POST /api/images/generate': { limit: 20, windowMs: 3_600_000 },
   'POST /api/assets/upload-signature': { limit: 40, windowMs: 3_600_000 },
   'POST /api/landing/analyze': { limit: 20, windowMs: 3_600_000 },
   'POST /api/brand/discover': { limit: 40, windowMs: 3_600_000 },

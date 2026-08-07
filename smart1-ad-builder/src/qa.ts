@@ -29,6 +29,9 @@ export interface QaInput {
   /** Background-only render at delivery scale, for contrast sampling. */
   backgroundPng: Buffer;
   scale: number;
+  /** Present when the concept uses a full-bleed background image, so contrast
+   *  is measured against the light text the composer actually used. */
+  backgroundImage?: string;
 }
 
 const TEXT_ROLES = ['headline', 'support', 'offer', 'trust'] as const;
@@ -230,7 +233,16 @@ export async function runQa(input: QaInput): Promise<QaFinding[]> {
     const box = composed.rects[role];
     const spec = layout[role];
     if (!box || !spec) continue;
-    const fg = hexLuminance(resolveColor(spec.color, brand, '#111111'));
+    // Use the colour actually rendered, not the template default. Over a
+    // background image the composer forces light text, so measuring the
+    // template's dark ink here would report a false low-contrast failure.
+    let textColor = resolveColor(spec.color, brand, '#111111');
+    if ((input as any).backgroundImage && role !== 'offer') {
+      textColor = resolveColor('light', brand, '#ffffff');
+    } else if (role === 'headline' && (brand.colors as any).headlineInk) {
+      textColor = resolveColor('headlineInk', brand);
+    }
+    const fg = hexLuminance(textColor);
     const bg = await regionLuminance(backgroundPng, {
       left: box.x * scale,
       top: box.y * scale,

@@ -73,6 +73,14 @@ export interface HeroSet {
 }
 
 export interface CreativeConcept {
+  /** Optional full-bleed background photo (path). When set, the composer
+   *  paints it across the whole canvas under a legibility overlay instead of
+   *  using the flat brand background. Used by the image-background option on
+   *  Concept C. */
+  backgroundImage?: string;
+  /** Strength of the dark overlay over a background image, 0..1. Auto-set from
+   *  the image's brightness when not specified. */
+  backgroundOverlay?: number;
   conceptId: string;
   name: string;
   /** Which template family renders this concept, e.g. 'T01'. */
@@ -234,6 +242,10 @@ export interface QaFinding {
 
 export interface RenderResult {
   platform: string;
+  /** Every platform this identical creative satisfies. A 300x250 is byte-for-
+   *  byte the same for Google and Amazon, so it is rendered once and tagged
+   *  for both rather than duplicated. */
+  platforms?: string[];
   size: SizeKey;
   conceptId: string;
   file: string;

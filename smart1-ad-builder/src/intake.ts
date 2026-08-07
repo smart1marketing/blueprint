@@ -28,6 +28,7 @@ import { contrastRatio, hexLuminance } from './raster';
 import { fontIsAvailable } from './fonts';
 import { validateCampaign, type Finding } from './validate';
 import { makeWordmark } from './wordmark';
+import { fitImageToBudget } from './image-budget';
 import { getTemplate } from './registry';
 import { generateCopy, type CopyBrief } from './copywriter';
 import type { LandingAnalysis } from './projects';
@@ -50,6 +51,9 @@ export interface Submission {
   notes?: string;
   /** Cached landing-page read, when the form already ran it. */
   landingAnalysis?: LandingAnalysis;
+  /** Copy the customer approved on the intake form's review step. When
+   *  present it is authoritative — the build uses it rather than re-writing. */
+  approvedCopy?: { headline?: string; support?: string; cta?: string };
   platforms?: string[];
   stockOk?: boolean;
   /** Present when discovery ran in the browser and the customer confirmed it. */
@@ -252,12 +256,18 @@ function shortCta(cta: string): string {
 export function copyFromSubmission(sub: Submission): CreativeConcept['copy'] {
   const benefit = (sub.benefit ?? '').trim();
   const promoting = (sub.promoting ?? '').trim();
-  const cta = sub.cta && !/recommend/i.test(sub.cta) ? sub.cta : CTA_FALLBACK;
   const offer = (sub.offer ?? '').trim();
 
   const words = (s: string, n: number) => s.split(/\s+/).filter(Boolean).slice(0, n).join(' ');
-  const headline = benefit || words(promoting, 6) || sub.business;
-  const support = promoting && promoting !== headline ? words(promoting, 12) : '';
+
+  // Approved copy from the review step wins over everything. This is the whole
+  // point of the gate: what the human signed off on is what renders.
+  const ap = sub.approvedCopy;
+  const cta = (ap?.cta && ap.cta.trim()) || (sub.cta && !/recommend/i.test(sub.cta) ? sub.cta : CTA_FALLBACK);
+  const headline = (ap?.headline && ap.headline.trim()) || benefit || words(promoting, 6) || sub.business;
+  const support = (ap?.support !== undefined)
+    ? ap.support.trim()
+    : (promoting && promoting !== headline ? words(promoting, 12) : '');
 
   const shortOffer = words(offer, 3);
 
@@ -463,7 +473,12 @@ export async function buildCampaign(
         notes.push(`"${up.name ?? ref}" was not usable: ${check.reason}`);
         continue;
       }
-      hero = await deriveOrientations(file, path.join(cacheDir, 'hero'));
+      // Guarantee the source hero is under the 150 KB ceiling before it ever
+      // enters the render pipeline. A customer's 5 MB phone photo is squeezed,
+      // not rejected.
+      const fitted = await fitImageToBudget(file, path.join(cacheDir, 'hero-source.jpg'));
+      if (fitted.note) notes.push(`Uploaded photo: ${fitted.note}`);
+      hero = await deriveOrientations(fitted.file, path.join(cacheDir, 'hero'));
       assetSources.hero = 'upload';
       break;
     } catch (e: any) {
@@ -496,7 +511,10 @@ export async function buildCampaign(
   let offerConceptCopy: CreativeConcept['copy'] | null = null;
   let copySource: 'openai' | 'fallback' = 'fallback';
 
-  if (opts.aiCopy !== false) {
+  // If the customer approved copy on the review step, that is final — do not
+  // let the AI writer second-guess it. It still runs when there is no approved
+  // copy (e.g. an API caller that skipped the form).
+  if (opts.aiCopy !== false && !sub.approvedCopy) {
     const brief: CopyBrief = {
       business: sub.business,
       promoting: sub.promoting,

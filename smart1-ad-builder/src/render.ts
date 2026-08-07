@@ -70,6 +70,8 @@ export async function renderOne(opts: RenderOneOptions): Promise<RenderResult> {
     hero: concept.hero,
     scale,
     noBakedCta: rule.noBakedCta,
+    backgroundImage: concept.backgroundImage,
+    backgroundOverlay: concept.backgroundOverlay,
     assetRoot,
   });
 
@@ -83,6 +85,8 @@ export async function renderOne(opts: RenderOneOptions): Promise<RenderResult> {
     scale,
     includeText: false,
     noBakedCta: rule.noBakedCta,
+    backgroundImage: concept.backgroundImage,
+    backgroundOverlay: concept.backgroundOverlay,
     assetRoot,
   });
   const backgroundPng = await sharp(Buffer.from(bgPass.svg)).png().toBuffer();
@@ -102,6 +106,7 @@ export async function renderOne(opts: RenderOneOptions): Promise<RenderResult> {
     raster,
     backgroundPng,
     scale,
+    backgroundImage: concept.backgroundImage,
   });
 
   const dir = path.join(outDir, platform, concept.conceptId);
@@ -152,10 +157,12 @@ export async function renderPreview(opts: {
   const composed = await compose({
     layout, brand, copy, hero: concept.hero, scale,
     noBakedCta: rule.noBakedCta, assetRoot,
+    backgroundImage: concept.backgroundImage, backgroundOverlay: concept.backgroundOverlay,
   });
   const bgPass = await compose({
     layout, brand, copy, hero: concept.hero, scale,
     includeText: false, noBakedCta: rule.noBakedCta, assetRoot,
+    backgroundImage: concept.backgroundImage, backgroundOverlay: concept.backgroundOverlay,
   });
   const backgroundPng = await sharp(Buffer.from(bgPass.svg)).png().toBuffer();
 
@@ -164,7 +171,7 @@ export async function renderPreview(opts: {
   const png = await sharp(Buffer.from(composed.svg)).png().toBuffer();
   const raster = { buffer: png, format: 'png' as const, bytes: png.length, overweight: false, attempts: 1 };
 
-  const qa = await runQa({ layout, brand, copy, rule, composed, raster, backgroundPng, scale });
+  const qa = await runQa({ layout, brand, copy, rule, composed, raster, backgroundPng, scale, backgroundImage: concept.backgroundImage });
 
   return {
     png,
