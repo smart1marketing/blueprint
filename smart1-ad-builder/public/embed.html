@@ -176,6 +176,15 @@
   .warn { background: #FCF0D8; color: #7A4E00; border-radius: 8px; padding: 11px 13px; font-size: 13.5px; margin-top: 12px; }
   .warn ul { margin: 6px 0 0; padding-left: 18px; }
   .muted-btn { background: transparent; color: var(--accent); border: 1.5px solid var(--line); padding: 10px 15px; font-size: 14.5px; }
+  .bg-choices { display: flex; gap: 10px; flex-wrap: wrap; }
+  .bg-opt { display: flex; flex-direction: column; align-items: center; gap: 8px; background: #fff; border: 2px solid var(--line); border-radius: 10px; padding: 12px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; flex: 1; min-width: 96px; }
+  .bg-opt.on { border-color: var(--accent); }
+  .bg-swatch { width: 100%; height: 46px; border-radius: 6px; }
+  .bg-swatch.solid { background: linear-gradient(135deg, #1F3A5F, #4A6E9B); }
+  .bg-swatch.photo { background: linear-gradient(135deg, #6b8e5a, #c9a86a); }
+  .bg-swatch.ai { background: linear-gradient(135deg, #7b4bc0, #c04b9b); }
+  .bg-thumb { display:inline-block; width: 120px; height: 68px; border-radius: 8px; border: 2px solid var(--line); object-fit: cover; cursor: pointer; margin: 4px; }
+  .bg-thumb.on { border-color: var(--accent); }
   .muted-btn:hover { background: var(--panel); }
   .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(0,0,0,.15);
     border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -3px; margin-right: 6px; }
@@ -475,6 +484,26 @@
         <div id="copyWarnings" style="display:none;background:#FCF0D8;color:#7A4E00;border-radius:8px;padding:12px 14px;font-size:13.5px;margin-bottom:14px"></div>
 
         <button type="button" class="muted-btn" id="regenCopy" style="font-size:13.5px">Suggest different wording</button>
+
+        <div style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px">
+          <label style="font-weight:600;display:block;margin-bottom:4px">Background for your offer ad</label>
+          <p class="hint" style="margin:0 0 12px">One of your concepts can use a photo background. Pick a direction — we'll keep the text readable automatically.</p>
+          <div id="bgChoices" class="bg-choices">
+            <button type="button" class="bg-opt on" data-bg="solid">
+              <span class="bg-swatch solid"></span>
+              <span>Solid brand colour</span>
+            </button>
+            <button type="button" class="bg-opt" data-bg="pixabay">
+              <span class="bg-swatch photo"></span>
+              <span>Suggested photos</span>
+            </button>
+            <button type="button" class="bg-opt" data-bg="ai">
+              <span class="bg-swatch ai"></span>
+              <span>AI-generated from your page</span>
+            </button>
+          </div>
+          <div id="bgResults" style="display:none;margin-top:12px"></div>
+        </div>
       </div>
     </section>
 
@@ -763,6 +792,57 @@
     loadCopySuggestion(true);
     setTimeout(function () { b.disabled = false; }, 1500);
   });
+
+  /* -------------------------------------- background chooser (offer concept) */
+  var bgChoice = { mode: 'solid', url: null };
+  function selectBgMode(mode, btn) {
+    var opts = document.querySelectorAll('.bg-opt');
+    for (var i = 0; i < opts.length; i++) opts[i].classList.toggle('on', opts[i] === btn);
+    bgChoice = { mode: mode, url: null };
+    var results = document.getElementById('bgResults');
+    if (mode === 'solid') { results.style.display = 'none'; results.innerHTML = ''; return; }
+    results.style.display = '';
+    results.innerHTML = '<span class="hint"><span class="spinner"></span> ' +
+      (mode === 'ai' ? 'Generating an image from your landing page…' : 'Finding photos that fit your campaign…') + '</span>';
+
+    var endpoint = mode === 'ai' ? '/api/images/generate' : '/api/images/search';
+    fetch(API + endpoint, {
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
+      body: JSON.stringify({
+        business: val('business'), promoting: val('promoting'),
+        objective: val('objective'), landingAnalysis: suggestions || undefined
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var cands = mode === 'ai' ? (data.candidate ? [data.candidate] : []) : (data.candidates || []);
+        if (!cands.length) {
+          results.innerHTML = '<span class="hint">' + esc(data.reason || 'No images available right now. Your ad will use a solid background.') + '</span>';
+          bgChoice = { mode: 'solid', url: null };
+          return;
+        }
+        results.innerHTML = '<p class="hint" style="margin:0 0 6px">Tap one to use it:</p>';
+        cands.forEach(function (c) {
+          var img = document.createElement('img');
+          img.src = API + c.url; img.className = 'bg-thumb'; img.alt = 'Background option';
+          img.addEventListener('click', function () {
+            var thumbs = results.querySelectorAll('.bg-thumb');
+            for (var t = 0; t < thumbs.length; t++) thumbs[t].classList.remove('on');
+            img.classList.add('on');
+            bgChoice = { mode: mode, url: c.url };
+          });
+          results.appendChild(img);
+        });
+      })
+      .catch(function () {
+        results.innerHTML = '<span class="hint">Could not load images. Your ad will use a solid background.</span>';
+        bgChoice = { mode: 'solid', url: null };
+      });
+  }
+  var bgOpts = document.querySelectorAll('.bg-opt');
+  for (var bi = 0; bi < bgOpts.length; bi++) {
+    bgOpts[bi].addEventListener('click', function () { selectBgMode(this.dataset.bg, this); });
+  }
 
   nextBtn.addEventListener('click', function () {
     if (validateStep(current)) showStep(current + 1);
@@ -1069,6 +1149,10 @@
       support: document.getElementById('approvedSupport').value.trim(),
       cta: document.getElementById('approvedCta').value.trim()
     };
+    // Background direction chosen for the offer concept.
+    if (bgChoice && bgChoice.mode !== 'solid' && bgChoice.url) {
+      data.backgroundChoice = { mode: bgChoice.mode, url: bgChoice.url };
+    }
 
     if (manual.style.display !== 'none') {
       data.brandManual = true;

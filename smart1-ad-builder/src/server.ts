@@ -31,6 +31,9 @@ import { deliverProject, latestManifest } from './deliver';
 import { renderProof } from './proof';
 import { suggestCopy, critiqueCopy } from './copy-approval';
 import { searchPixabay, generateHero, imageKeywords } from './imagery';
+import { reworkLogo } from './logo-tools';
+import { resolveAsset } from './assets';
+import { fitImageToBudget } from './image-budget';
 import { getPlatform } from './registry';
 import sharp from 'sharp';
 import { notify } from './notify';
@@ -297,6 +300,7 @@ const server = http.createServer(async (req, res) => {
         const result = await buildCampaign({ requestId, ...body } as Submission, {
           assetRoot: ROOT,
           cacheDir: path.join(OUT, 'cache', requestId),
+          outputDir: OUT,
         });
         fs.mkdirSync(path.join(OUT, 'campaigns'), { recursive: true });
         fs.writeFileSync(
@@ -582,9 +586,44 @@ const server = http.createServer(async (req, res) => {
           '<p>This page will work as soon as rendering finishes — usually under a minute. Refresh to check.</p>');
       }
       const project = projects.byRequest(requestId);
+      // Pull current copy + palette from the stored campaign so the proof's
+      // live editor starts from what is actually on the ads.
+      const initialCopy: Record<string, { headline?: string; support?: string; cta?: string }> = {};
+      const perSizeCopy: Record<string, { headline?: string; support?: string; cta?: string }> = {};
+      let initialColors: { accent?: string; ctaText?: string; headline?: string } = {};
+      let proofMeta: { business?: string; promoting?: string; objective?: string } = {};
+      try {
+        const campFile = path.join(OUT, 'campaigns', `${requestId}.json`);
+        if (fs.existsSync(campFile)) {
+          const doc = JSON.parse(fs.readFileSync(campFile, 'utf8'));
+          for (const c of doc.campaign?.concepts ?? []) {
+            const d = c.copy?.default ?? {};
+            initialCopy[c.conceptId] = { headline: d.headline, support: d.support, cta: d.cta };
+            // Per-size copy for the inline "edit this size" editor: the
+            // effective copy for a size is default overlaid with any per-size
+            // override, matching how the renderer resolves it.
+            for (const key of Object.keys(c.copy ?? {})) {
+              if (key === 'default') continue;
+              perSizeCopy[`${c.conceptId}/${key}`] = { ...d, ...c.copy[key] };
+            }
+          }
+          const col = doc.campaign?.brand?.colors ?? {};
+          initialColors = { accent: col.accent, ctaText: col.ctaText ?? col.dark, headline: col.headlineInk ?? col.dark };
+          proofMeta = {
+            business: doc.campaign?.brand?.name,
+            promoting: doc.campaign?.promoting ?? doc.campaign?.landing?.summary,
+            objective: doc.campaign?.objective,
+          };
+        }
+      } catch { /* editor simply starts blank if the campaign can't be read */ }
+
       let html = renderProof(manifest, {
         fileBase: '',
         actionBase: project ? `/api/proof/${project.projectId}` : undefined,
+        initialCopy,
+        initialColors,
+        perSizeCopy,
+        meta: proofMeta,
       });
       // Inline every creative as a data URI so the page depends on nothing else.
       for (const e of manifest.entries) {
@@ -728,15 +767,78 @@ const server = http.createServer(async (req, res) => {
 
       const body = JSON.parse(await readBody(req, 200_000)) as {
         conceptId?: string;
-        /** Copy applied to the whole concept (default) or one size. */
         copy?: { headline?: string; support?: string; cta?: string; offer?: string };
         size?: string;
-        /** Palette edits applied to the brand. */
         colors?: { accent?: string; ctaText?: string; headline?: string };
+        /** Logo change: a new uploaded logo (url/publicId) or an AI-rework of
+         *  the current one. Applied to the whole brand (all sizes). */
+        logo?: { url?: string; publicId?: string; aiRework?: boolean; reversed?: boolean };
+        /** Background change for a concept. `mode:'solid'` clears any image;
+         *  a `url` applies a chosen Pixabay/AI/uploaded image; `overlay` tunes
+         *  the legibility scrim (0..1). Defaults to the offer concept. */
+        background?: { conceptId?: string; mode?: 'solid' | 'image'; url?: string; overlay?: number };
       };
 
       const doc = JSON.parse(fs.readFileSync(campFile, 'utf8'));
       const campaign = doc.campaign;
+
+      // --- apply logo edit ---
+      if (body.logo) {
+        const cacheDir = path.join(OUT, 'cache', project.requestId, 'relogo-' + Date.now().toString(36));
+        try {
+          let src: string | undefined;
+          if (body.logo.url || body.logo.publicId) {
+            const ref = body.logo.publicId ? `cloudinary:${body.logo.publicId}` : body.logo.url!;
+            src = await resolveAsset(ref, { cacheDir, label: 'logo' });
+          } else if (body.logo.aiRework && campaign.brand.logos?.primary) {
+            src = campaign.brand.logos.primary;
+          }
+          if (src) {
+            // Always enforce transparency; optionally make a reversed version.
+            const reworked = await reworkLogo(src, cacheDir, { reversed: body.logo.reversed });
+            const fitted = await fitImageToBudget(reworked.primary, path.join(cacheDir, 'logo-final.png'), { keepAlpha: true });
+            campaign.brand.logos.primary = fitted.file;
+            if (reworked.reverse) {
+              const rev = await fitImageToBudget(reworked.reverse, path.join(cacheDir, 'logo-rev-final.png'), { keepAlpha: true });
+              campaign.brand.logos.reverse = rev.file;
+            }
+          }
+        } catch (e: any) {
+          return json(res, 400, { error: `Logo change failed: ${e?.message ?? e}` });
+        }
+      }
+
+      // --- apply background change ---
+      // Change or remove a concept's full-bleed background photo after the
+      // fact. Defaults to the offer concept, the one designed to carry a photo.
+      if (body.background) {
+        const targetId = body.background.conceptId
+          ?? (campaign.concepts.find((c: any) => c.conceptId === 'C') ? 'C' : campaign.concepts[0]?.conceptId);
+        const concept = campaign.concepts.find((c: any) => c.conceptId === targetId);
+        if (concept) {
+          if (body.background.mode === 'solid' || (!body.background.url && body.background.mode !== 'image')) {
+            // Clear back to the flat brand background.
+            delete concept.backgroundImage;
+            delete concept.backgroundOverlay;
+          } else if (body.background.url) {
+            try {
+              const cacheDir = path.join(OUT, 'cache', project.requestId, 'rebg-' + Date.now().toString(36));
+              const rel = body.background.url.replace(/^\/files\//, '');
+              const candidate = path.join(OUT, rel);
+              const src = fs.existsSync(candidate)
+                ? candidate
+                : await resolveAsset(body.background.url, { cacheDir, label: 'background' });
+              const fitted = await fitImageToBudget(src, path.join(cacheDir, 'bg.jpg'));
+              concept.backgroundImage = fitted.file;
+              if (typeof body.background.overlay === 'number') {
+                concept.backgroundOverlay = body.background.overlay;
+              }
+            } catch (e: any) {
+              return json(res, 400, { error: `Background change failed: ${e?.message ?? e}` });
+            }
+          }
+        }
+      }
 
       // --- apply colour edits to the brand palette ---
       if (body.colors) {
@@ -750,11 +852,27 @@ const server = http.createServer(async (req, res) => {
       if (body.copy && body.conceptId) {
         const concept = campaign.concepts.find((c: any) => c.conceptId === body.conceptId);
         if (concept) {
-          const target = body.size
-            ? (concept.copy[body.size] = concept.copy[body.size] || {})
-            : (concept.copy.default = concept.copy.default || {});
-          for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
-            if (body.copy[k] !== undefined) target[k] = body.copy[k];
+          if (body.size) {
+            // Targeted edit: change just this one size.
+            const target = (concept.copy[body.size] = concept.copy[body.size] || {});
+            for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
+              if (body.copy[k] !== undefined) target[k] = body.copy[k];
+            }
+          } else {
+            // Default edit: change the concept default AND clear any stale
+            // per-size overrides for the edited fields. Without this, a size
+            // that got its own shortened headline at build time would keep it
+            // and ignore the edit — the bug where 728x90 and 970x250 stayed on
+            // the old copy after a rebuild.
+            const def = (concept.copy.default = concept.copy.default || {});
+            const editedFields: string[] = [];
+            for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
+              if (body.copy[k] !== undefined) { def[k] = body.copy[k]; editedFields.push(k); }
+            }
+            for (const key of Object.keys(concept.copy)) {
+              if (key === 'default') continue;
+              for (const f of editedFields) delete concept.copy[key][f];
+            }
           }
         }
       }

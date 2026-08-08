@@ -31,6 +31,13 @@ export interface ProofOptions {
   fileBase?: string;
   /** Base for the decision endpoint, e.g. '/api/proof/<projectId>'. */
   actionBase?: string;
+  /** Current copy + palette per concept, to pre-fill the live editor. */
+  initialCopy?: Record<string, { headline?: string; support?: string; cta?: string }>;
+  initialColors?: { accent?: string; ctaText?: string; headline?: string };
+  /** Campaign context for on-proof image search (business, promoting, etc.). */
+  meta?: { business?: string; promoting?: string; objective?: string };
+  /** Effective copy per concept/size ("C/728x90" -> {...}) for inline editing. */
+  perSizeCopy?: Record<string, { headline?: string; support?: string; cta?: string }>;
 }
 
 const esc = (v: unknown) =>
@@ -101,11 +108,12 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
             ? `<ul class="issues">${e.qaIssues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
             : '';
           return `
-        <figure class="ad" data-size="${esc(e.size)}">
+        <figure class="ad" data-size="${esc(e.size)}" data-concept="${esc(c.id)}">
           <figcaption>
             <span class="size">${esc(e.size)}</span>
             <span class="spec">${esc(e.deliveredDimensions)} · ${esc(e.format)} · ${kb(e.bytes)} · ${e.wordCount} words</span>
             <span class="dot ${esc(e.qaStatus)}" title="${esc(e.qaStatus)}"></span>
+            <button type="button" class="edit-size" data-size="${esc(e.size)}" data-concept="${esc(c.id)}" title="Edit just this size">Edit this size</button>
           </figcaption>
           <div class="frame" style="width:${w}px">
             <img src="${esc(src(e))}" width="${w}" height="${h}" alt="${esc(e.size)} advertisement" loading="lazy">
@@ -312,6 +320,31 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
   }
   textarea:focus { outline: 2px solid var(--signal); outline-offset: -1px; }
   .acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .editor { background: #F7F9FC; border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .editor .erow { margin-bottom: 12px; }
+  .editor .erow:last-child { margin-bottom: 0; }
+  .editor label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .editor input[type=text] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; font-size: 15px; color: var(--ink); box-sizing: border-box; }
+  .editor .cols { display: flex; gap: 16px; }
+  .editor .cols > div { flex: 0 0 auto; }
+  .editor input[type=color] { width: 54px; height: 36px; border: 1px solid var(--line); border-radius: 7px; padding: 2px; cursor: pointer; background: #fff; }
+  .logo-acts { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .mini { background: #fff; border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; }
+  .mini:hover { border-color: var(--signal); }
+  .mini.on { background: var(--signal); color: #fff; border-color: var(--signal); }
+  .mini-check { font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+  .edit-size { margin-left: auto; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--signal); cursor: pointer; }
+  .edit-size:hover { border-color: var(--signal); }
+  .size-editor { position: fixed; inset: 0; background: rgba(16,34,46,.5); display: none; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+  .size-editor.on { display: flex; }
+  .size-editor .box { background: #fff; border-radius: 12px; padding: 22px; width: 100%; max-width: 440px; box-shadow: 0 12px 40px rgba(16,34,46,.3); }
+  .size-editor h3 { margin: 0 0 4px; font-size: 16px; }
+  .size-editor p.sub { margin: 0 0 16px; color: var(--ink-2); font-size: 13px; }
+  .size-editor label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .size-editor input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; font-size: 15px; box-sizing: border-box; }
+  .size-editor .row { display: flex; gap: 10px; margin-top: 18px; }
+  .size-editor .row button { flex: 1; padding: 11px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; border: 1px solid var(--line); background: #fff; }
+  .size-editor .row button.primary { background: var(--signal); color: #fff; border-color: var(--signal); }
   .act {
     font: inherit; font-weight: 600; font-size: 14.5px; border-radius: 7px;
     padding: 11px 20px; cursor: pointer; border: 1px solid var(--rule); background: var(--card);
@@ -371,19 +404,90 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
 
   <div class="decide">
     <h2>Your decision</h2>
-    <p>Approve to move into production at every size, or tell us what to change.</p>
-    <textarea id="changes" placeholder="For example: use the exterior photo instead, and make the offer bigger on the tall sizes."></textarea>
+    <p>Approve to move into production, or edit below and rebuild — your changes are applied to every size and the proof updates right here.</p>
+
+    <div class="editor">
+      <div class="erow">
+        <label>Headline</label>
+        <input type="text" id="ed-headline" maxlength="60" placeholder="Headline">
+      </div>
+      <div class="erow">
+        <label>Supporting line</label>
+        <input type="text" id="ed-support" maxlength="90" placeholder="Supporting line">
+      </div>
+      <div class="erow">
+        <label>Button text</label>
+        <input type="text" id="ed-cta" maxlength="24" placeholder="Button text">
+      </div>
+      <div class="erow cols">
+        <div>
+          <label>Button colour</label>
+          <input type="color" id="ed-accent" value="#F2B705">
+        </div>
+        <div>
+          <label>Button text colour</label>
+          <input type="color" id="ed-ctatext" value="#12202E">
+        </div>
+        <div>
+          <label>Headline colour</label>
+          <input type="color" id="ed-headink" value="#12202E">
+        </div>
+      </div>
+      <div class="erow">
+        <label>Logo</label>
+        <div class="logo-acts">
+          <button type="button" class="mini" id="logo-clean" title="Remove any background box and tidy the logo, keeping your mark exactly as is">Clean up logo (remove background)</button>
+          <label class="mini-check"><input type="checkbox" id="logo-reverse"> also make a white version for dark ads</label>
+        </div>
+        <p class="hint" style="margin:6px 0 0">Cleaning keeps your exact logo — it only removes a background box and trims dead space. Applies to every size on rebuild.</p>
+      </div>
+      <div class="erow">
+        <label>Background (offer concept)</label>
+        <div class="logo-acts">
+          <button type="button" class="mini bg-mode on" data-bgmode="solid">Solid colour</button>
+          <button type="button" class="mini bg-mode" data-bgmode="pixabay">Suggested photos</button>
+          <button type="button" class="mini bg-mode" data-bgmode="ai">AI from your page</button>
+        </div>
+        <div id="ed-bgResults" style="display:none;margin-top:10px"></div>
+        <p class="hint" style="margin:6px 0 0">Photos are kept readable automatically with an overlay. Applies on rebuild.</p>
+      </div>
+      <p class="hint" id="ed-status"></p>
+    </div>
+
+    <textarea id="changes" placeholder="Anything else? For example: use a warmer background photo, or make the offer bigger on the tall sizes."></textarea>
     <div class="acts">
       <button class="act primary" id="approve">Approve concept <span id="pickLabel">A</span></button>
-      <button class="act" id="request">Request changes</button>
+      <button class="act" id="rebuild">Apply changes &amp; rebuild</button>
+      <button class="act" id="request">Send notes to the team</button>
     </div>
   </div>
 
   <footer>Sizes and file weights meet current Google Display and Amazon DSP requirements. Colours may vary slightly between screens.</footer>
 </div>
 
+<div class="size-editor" id="sizeEditor">
+  <div class="box">
+    <h3>Edit <span id="se-size">300x250</span> only</h3>
+    <p class="sub">Change the copy for just this one size. Every other size stays as it is.</p>
+    <label>Headline</label>
+    <input type="text" id="se-headline" maxlength="60">
+    <label>Supporting line</label>
+    <input type="text" id="se-support" maxlength="90">
+    <label>Button text</label>
+    <input type="text" id="se-cta" maxlength="24">
+    <div class="row">
+      <button id="se-cancel">Cancel</button>
+      <button class="primary" id="se-apply">Apply to this size</button>
+    </div>
+  </div>
+</div>
+
 <script>
 window.PROOF_ENDPOINT = ${opts.actionBase ? JSON.stringify(opts.actionBase) : 'null'};
+window.PROOF_COPY = ${JSON.stringify(opts.initialCopy ?? {})};
+window.PROOF_COLORS = ${JSON.stringify(opts.initialColors ?? {})};
+window.PROOF_META = ${JSON.stringify(opts.meta ?? {})};
+window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
 (function () {
   'use strict';
   var body = document.body;
@@ -422,6 +526,21 @@ window.PROOF_ENDPOINT = ${opts.actionBase ? JSON.stringify(opts.actionBase) : 'n
       panels[j].classList.toggle('on', panels[j].dataset.panel === id);
     }
     label.textContent = id;
+    prefillEditor(id);
+  }
+
+  // Load the current copy for the chosen concept into the editor so edits
+  // start from what is actually on the ads, not a blank box.
+  function prefillEditor(id) {
+    var c = (window.PROOF_COPY && window.PROOF_COPY[id]) || {};
+    var byId = function (x) { return document.getElementById(x); };
+    if (byId('ed-headline')) byId('ed-headline').value = c.headline || '';
+    if (byId('ed-support')) byId('ed-support').value = c.support || '';
+    if (byId('ed-cta')) byId('ed-cta').value = c.cta || '';
+    var col = window.PROOF_COLORS || {};
+    if (col.accent && byId('ed-accent')) byId('ed-accent').value = col.accent;
+    if (col.ctaText && byId('ed-ctatext')) byId('ed-ctatext').value = col.ctaText;
+    if (col.headline && byId('ed-headink')) byId('ed-headink').value = col.headline;
   }
 
   var radios = document.querySelectorAll('input[name=concept]');
@@ -455,6 +574,166 @@ window.PROOF_ENDPOINT = ${opts.actionBase ? JSON.stringify(opts.actionBase) : 'n
 
   document.getElementById('approve').addEventListener('click', function () { decision('approve'); });
   document.getElementById('request').addEventListener('click', function () { decision('revision'); });
+
+  // Logo clean-up toggle
+  var logoClean = document.getElementById('logo-clean');
+  var wantLogoClean = false;
+  if (logoClean) {
+    logoClean.addEventListener('click', function () {
+      wantLogoClean = !wantLogoClean;
+      logoClean.classList.toggle('on', wantLogoClean);
+    });
+  }
+
+  // Background mode + image selection
+  var bgSel = { mode: 'solid', url: null };
+  function apiBase() {
+    // The rebuild endpoint is /api/proof/<pid>; image endpoints are /api/images/*
+    return (window.PROOF_ENDPOINT || '').replace(/\\/proof\\/[^/]+$/, '');
+  }
+  var bgModeBtns = document.querySelectorAll('.bg-mode');
+  for (var m = 0; m < bgModeBtns.length; m++) {
+    bgModeBtns[m].addEventListener('click', function () {
+      for (var i = 0; i < bgModeBtns.length; i++) bgModeBtns[i].classList.toggle('on', bgModeBtns[i] === this);
+      var mode = this.dataset.bgmode;
+      bgSel = { mode: mode, url: null };
+      var box = document.getElementById('ed-bgResults');
+      if (mode === 'solid') { box.style.display = 'none'; box.innerHTML = ''; return; }
+      box.style.display = '';
+      box.innerHTML = '<span class="hint">Finding images…</span>';
+      var meta = window.PROOF_META || {};
+      var endpoint = mode === 'ai' ? '/api/images/generate' : '/api/images/search';
+      fetch(apiBase() + endpoint, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ business: meta.business, promoting: meta.promoting, objective: meta.objective })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var cands = mode === 'ai' ? (data.candidate ? [data.candidate] : []) : (data.candidates || []);
+          if (!cands.length) {
+            box.innerHTML = '<span class="hint">' + (data.reason || 'No images available.') + '</span>';
+            bgSel = { mode: 'solid', url: null };
+            return;
+          }
+          box.innerHTML = '';
+          cands.forEach(function (c) {
+            var img = document.createElement('img');
+            img.src = c.url; img.className = 'bg-thumb'; img.alt = 'Background option';
+            img.style.cssText = 'width:120px;height:68px;border-radius:8px;border:2px solid #dfe6ee;object-fit:cover;cursor:pointer;margin:4px';
+            img.addEventListener('click', function () {
+              var all = box.querySelectorAll('img');
+              for (var t = 0; t < all.length; t++) all[t].style.borderColor = '#dfe6ee';
+              img.style.borderColor = '#1f5fc0';
+              bgSel = { mode: 'image', url: c.url };
+            });
+            box.appendChild(img);
+          });
+        })
+        .catch(function () { box.innerHTML = '<span class="hint">Could not load images.</span>'; });
+    });
+  }
+
+  // Live rebuild: apply the editor's copy + colours to the chosen concept,
+  // re-render every size on the server, and reload onto the fresh proof. This
+  // is the "changes reconfigure the ads right here" behaviour.
+  var rebuildBtn = document.getElementById('rebuild');
+  if (rebuildBtn) {
+    rebuildBtn.addEventListener('click', function () {
+      if (!window.PROOF_ENDPOINT) return;
+      var id = (document.querySelector('input[name=concept]:checked') || {}).value;
+      var status = document.getElementById('ed-status');
+      rebuildBtn.disabled = true;
+      var orig = rebuildBtn.textContent;
+      rebuildBtn.textContent = 'Rebuilding all sizes…';
+      status.textContent = 'Applying your changes and re-rendering every size. This takes a few seconds.';
+
+      var payload = {
+        conceptId: id,
+        copy: {
+          headline: document.getElementById('ed-headline').value.trim(),
+          support: document.getElementById('ed-support').value.trim(),
+          cta: document.getElementById('ed-cta').value.trim()
+        },
+        colors: {
+          accent: document.getElementById('ed-accent').value,
+          ctaText: document.getElementById('ed-ctatext').value,
+          headline: document.getElementById('ed-headink').value
+        }
+      };
+      if (wantLogoClean) {
+        payload.logo = { aiRework: true, reversed: document.getElementById('logo-reverse').checked };
+      }
+      if (bgSel.mode === 'solid') {
+        payload.background = { mode: 'solid' };
+      } else if (bgSel.url) {
+        payload.background = { mode: 'image', url: bgSel.url };
+      }
+      fetch(window.PROOF_ENDPOINT + '/rebuild', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          status.textContent = 'Done — reloading your updated ads…';
+          // Cache-bust so the browser fetches the fresh creatives.
+          location.href = (res.proofUrl || location.pathname) + '?u=' + Date.now();
+        })
+        .catch(function () {
+          rebuildBtn.disabled = false;
+          rebuildBtn.textContent = orig;
+          status.textContent = 'That did not go through. Please try again, or send notes to the team.';
+        });
+    });
+  }
+
+  prefillEditor((document.querySelector('input[name=concept]:checked') || {}).value || 'A');
+
+  /* -------------------------------------- per-banner "edit this size" */
+  var sizeModal = document.getElementById('sizeEditor');
+  var seCtx = { concept: null, size: null };
+  function openSizeEditor(concept, size) {
+    seCtx = { concept: concept, size: size };
+    document.getElementById('se-size').textContent = size;
+    // Prefer the size-specific copy; fall back to the concept default.
+    var key = concept + '/' + size;
+    var c = (window.PROOF_PERSIZE && window.PROOF_PERSIZE[key])
+      || (window.PROOF_COPY && window.PROOF_COPY[concept]) || {};
+    document.getElementById('se-headline').value = c.headline || '';
+    document.getElementById('se-support').value = c.support || '';
+    document.getElementById('se-cta').value = c.cta || '';
+    sizeModal.classList.add('on');
+  }
+  var editButtons = document.querySelectorAll('.edit-size');
+  for (var eb = 0; eb < editButtons.length; eb++) {
+    editButtons[eb].addEventListener('click', function () {
+      openSizeEditor(this.dataset.concept, this.dataset.size);
+    });
+  }
+  document.getElementById('se-cancel').addEventListener('click', function () {
+    sizeModal.classList.remove('on');
+  });
+  sizeModal.addEventListener('click', function (e) {
+    if (e.target === sizeModal) sizeModal.classList.remove('on');
+  });
+  document.getElementById('se-apply').addEventListener('click', function () {
+    if (!window.PROOF_ENDPOINT) return;
+    var btn = this; btn.disabled = true; btn.textContent = 'Rebuilding this size…';
+    fetch(window.PROOF_ENDPOINT + '/rebuild', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        conceptId: seCtx.concept,
+        size: seCtx.size,
+        copy: {
+          headline: document.getElementById('se-headline').value.trim(),
+          support: document.getElementById('se-support').value.trim(),
+          cta: document.getElementById('se-cta').value.trim()
+        }
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { location.href = (res.proofUrl || location.pathname) + '?u=' + Date.now(); })
+      .catch(function () { btn.disabled = false; btn.textContent = 'Apply to this size'; });
+  });
 })();
 </script>
 </body>

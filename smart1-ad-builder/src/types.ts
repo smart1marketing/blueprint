@@ -185,6 +185,9 @@ export interface SizeLayout {
    * supplied at 828x250 with a 640x250 safe area.
    */
   safeBox?: Box;
+  /** Platform UI exclusion zones (e.g. Meta 9:16 top 14% / bottom 35%).
+   *  Content must stay clear of these; QA flags violations. */
+  safeZone?: { top?: number; bottom?: number; left?: number; right?: number; note?: string };
   background: ColorRef;
   panels?: PanelSpec[];
   logo?: Box & { align?: HAlign; valign?: VAlign };

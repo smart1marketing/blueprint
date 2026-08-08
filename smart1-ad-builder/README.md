@@ -1,3 +1,33 @@
+# Smart 1 Ad Builder
+
+## Recent capability additions
+
+**Proof-page live editor.** The proof is now interactive: edit headline,
+supporting line, button text, button/text/headline colours, and clean up the
+logo, then "Apply changes & rebuild" re-renders every size in place and reloads
+onto the fresh ads. A default-copy edit also clears any stale per-size copy
+overrides, so all sizes pick up the change (fixing the case where 728x90 and
+970x250 kept old copy).
+
+**Logo tools.** Cleaning a logo removes a flat background box, trims dead
+space, and (optionally) makes a reversed white version — always preserving the
+exact mark, never redrawing it. Transparency is enforced on every logo.
+
+**Imagery.** Pixabay search and AI generation, both guaranteed under 150 KB.
+The offer concept can use a full-bleed photo background chosen on the review
+step (solid / suggested photos / AI-generated), painted under a legibility
+overlay with forced light text; contrast QA validates the real rendered text.
+
+**Sizes & safe zones.** Added 250x250, 160x600 everywhere, and the Meta set
+(1080x1080, 1200x628, 1080x1350, 1080x1920) with centred logo/CTA. The 9:16
+formats respect Meta's top-14% / bottom-35% platform-UI exclusion zones, with a
+QA check that flags violations.
+
+**150 KB enforcement** funnels every image — upload, Pixabay, AI — through one
+choke point that compresses to fit rather than rejecting.
+
+---
+
 # smart1-ad-builder — rendering core
 
 This is the piece the rest of the system hangs off: the deterministic renderer

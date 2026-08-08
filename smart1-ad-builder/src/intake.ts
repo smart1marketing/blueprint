@@ -54,6 +54,9 @@ export interface Submission {
   /** Copy the customer approved on the intake form's review step. When
    *  present it is authoritative — the build uses it rather than re-writing. */
   approvedCopy?: { headline?: string; support?: string; cta?: string };
+  /** Background direction chosen for the offer concept: a Pixabay or AI image
+   *  the person selected on the review step. */
+  backgroundChoice?: { mode: 'pixabay' | 'ai'; url: string };
   platforms?: string[];
   stockOk?: boolean;
   /** Present when discovery ran in the browser and the customer confirmed it. */
@@ -77,6 +80,9 @@ export interface BuildOptions {
   allowPlaceholders?: boolean;
   /** Write copy with the model rather than the deterministic fallback. Default true. */
   aiCopy?: boolean;
+  /** Root of the output tree, so chosen background images (served from
+   *  /files/imagery/...) can be resolved to disk. */
+  outputDir?: string;
 }
 
 export interface BuildResult {
@@ -588,12 +594,33 @@ export async function buildCampaign(
     };
 
     const aiCopy = offerConceptCopy;
+
+    // If the customer picked a photo/AI background on the review step, resolve
+    // it to a local file (already under 150 KB from the imagery endpoints) and
+    // attach it. The composer paints it full-bleed with a legibility overlay.
+    let offerBg: string | undefined;
+    if (sub.backgroundChoice?.url) {
+      try {
+        // The url is like /files/imagery/<slug>/<file>; map to a disk path.
+        const rel = sub.backgroundChoice.url.replace(/^\/files\//, '');
+        const candidate = path.join(opts.outputDir ?? 'out', rel);
+        if (fs.existsSync(candidate)) {
+          const fitted = await fitImageToBudget(candidate, path.join(cacheDir, 'offer-bg.jpg'));
+          offerBg = fitted.file;
+          notes.push(`Offer concept uses your chosen ${sub.backgroundChoice.mode} background.`);
+        }
+      } catch (e: any) {
+        notes.push(`Chosen background could not be applied (${e?.message ?? e}); using a solid colour.`);
+      }
+    }
+
     concepts.push({
       conceptId: 'C',
       name: 'Offer',
       layoutFamily: 'T04',
       useReverseLogo: true,
       hero: {},
+      backgroundImage: offerBg,
       copy: aiCopy ? {
         ...aiCopy,
         default: {

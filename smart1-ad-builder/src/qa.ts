@@ -61,6 +61,26 @@ export async function runQa(input: QaInput): Promise<QaFinding[]> {
   const fail = (check: string, detail: string, fix?: QaFinding['fix']) =>
     findings.push({ check, status: 'fail', detail, fix });
 
+  /* ---------------------------------------------------------- safe zones */
+  // Meta story/reel formats reserve the top 14% and bottom 35% for platform
+  // UI. Any element overlapping those zones gets covered by native controls.
+  if (layout.safeZone) {
+    const sz = layout.safeZone;
+    const topLimit = sz.top ?? 0;
+    const bottomLimit = layout.canvas.h - (sz.bottom ?? 0);
+    const intruders: string[] = [];
+    for (const role of ['logo', 'headline', 'support', 'offer', 'cta'] as const) {
+      const box = composed.rects[role];
+      if (!box) continue;
+      if (box.y < topLimit || box.y + box.h > bottomLimit) intruders.push(role);
+    }
+    if (intruders.length) {
+      warn('safe-zone', `${intruders.join(', ')} extend into the platform UI exclusion zone.`);
+    } else {
+      pass('safe-zone', 'all elements sit within the platform-safe core');
+    }
+  }
+
   /* ---------------------------------------------------------- dimensions */
   const expW = rule.w * rule.deliverScale;
   const expH = rule.h * rule.deliverScale;
