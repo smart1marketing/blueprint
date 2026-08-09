@@ -1,24 +1,30 @@
-# Creative Lookup (Smart 1 Marketing)
+# Creative Lookup + Live Products (Smart 1 Marketing)
 
-Prebuilt React app served as static files (Render runs `serve -s build`).
+Prebuilt static app served by `serve -s build`.
 
-## What this version does
-- Excludes products: Search Engine Marketing (PPC), Website SEO/Listings, Email Blast
-- Most-recent-first; current year (2026) + future shown open
-- Prior years (2025, 2024, 2023...) in lazy accordions that load on open
-- Results grouped into **IO-number folders**, 5 across; click a folder for detail
-- Creative previews: real image when available, else a PDF / Google Drive /
-  Dropbox / generic-file (?) SVG placeholder based on the link
-- Smart 1 brand colors (green + charcoal)
+## Two tabs (top-right menu)
+1. **Creatives** — IO folders (5-across), current year open, prior years in
+   lazy accordions, PDF/Drive/Dropbox/file placeholders, SEM+SEO+Email Blast
+   excluded.
+2. **Live Products** — every product with Knack status = Live, grouped by IO
+   with monthly + contract budget, and top-line totals.
 
-## Data
-`build/data/campaigns.json` — 7,854 creatives, 495 clients, 1,616 IO folders.
-First chars must read: {"recordCount":7854,"clientCount":495,"ioCount":1616,...
+## Seeded data (build/data/)
+- `campaigns.json` — 7,854 creatives / 495 clients / 1,616 IOs
+- `live_products.json` — 395 live products / 129 clients / 145 IOs
+  - Monthly budget total: $378,035
+  - Contract value total: $2,127,314
+  First chars must read: {"liveCount":395,...
 
-## Adjust brand colors
-Colors are CSS variables. If the green/charcoal are off, they're compiled into
-`build/static/css/main.*.css` — search for `--s1-green` and replace the hex.
-(Or tell me the exact hex codes and I'll rebuild.)
+## Refreshing Live Products (seed now, refresh later)
+The seed is already in the repo. To pull fresh Live data from Knack:
+
+    REACT_APP_KNACK_API_KEY=xxx REACT_APP_KNACK_APP_ID=yyy npm run refresh-live
+    git add build/data/live_products.json && git commit -m "refresh live" && git push
+
+This runs server-side (locally or a GitHub Action) — it can't run from the
+browser because Knack blocks cross-origin calls and the API key must stay
+private. Ask me to add a nightly GitHub Action if you want it automated.
 
 ## Deploy
 Push to main; Render serves the prebuilt folder. No build step, no OOM.
