@@ -3,15 +3,12 @@ services:
     name: knack-creative-lookup
     env: node
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm run serve
     
-    envVars:
-      - key: REACT_APP_KNACK_API_KEY
-        scope: build
-        sync: false
-      - key: NODE_ENV
-        value: production
+    # NO BUILD STEP - just serve pre-built files!
+    buildCommand: npm install serve
+    startCommand: serve -s build -l 3000
+    
+    # No environment variables needed for serving
     
     # Auto-deploy on push to main
     autoDeploy: true
