@@ -155,7 +155,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith('/api/project') ||
     url.pathname.startsWith('/api/build/') ||
     url.pathname.startsWith('/api/diagnostics') ||
-    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/')) ||
+    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/') && !url.pathname.startsWith('/files/gallery/')) ||
     route === 'POST /api/render' ||
     url.pathname.startsWith('/api/render/');
 
@@ -360,68 +360,42 @@ const server = http.createServer(async (req, res) => {
           // instance: one 300x250 rendered alone lands in seconds, while the
           // same render competing with a 20-size batch for one starved CPU is
           // exactly how a customer watches a skeleton for 17 minutes.
+          // STAGED FLOW: render the 250x250 in three template families and
+          // stop. The person picks a template (with edits) before the rest
+          // builds — no point rendering 20 sizes of a look they may reject.
           const pRef = project;
           (async () => {
             const t0 = Date.now();
-            try {
-              console.log(`[firstlook] ${requestId} rendering 300x250…`);
-              const first = await renderPreview({
-                brand: result.campaign.brand,
-                concept: result.campaign.concepts[0],
-                platform: platforms[0] ?? 'google',
-                size: '300x250',
-                assetRoot: ROOT,
-              });
-              const dir = path.join(OUT, 'firstlook');
-              fs.mkdirSync(dir, { recursive: true });
-              fs.writeFileSync(path.join(dir, `${requestId}.png`), first.png);
-              console.log(`[firstlook] ${requestId} written in ${Date.now() - t0}ms (${first.png.length} bytes)`);
-            } catch (e: any) {
-              console.warn(`[firstlook] ${requestId}: ${e?.message ?? e}`);
+            const FAMILIES = ['T01', 'T02', 'T03'];
+            const dir = path.join(OUT, 'tplprev', requestId);
+            fs.mkdirSync(dir, { recursive: true });
+            for (const fam of FAMILIES) {
+              try {
+                const prev = await renderPreview({
+                  brand: result.campaign.brand,
+                  concept: { ...result.campaign.concepts[0], layoutFamily: fam },
+                  platform: platforms[0] ?? 'google',
+                  size: '250x250',
+                  assetRoot: ROOT,
+                });
+                fs.writeFileSync(path.join(dir, `${fam}.png`), prev.png);
+                console.log(`[tplprev] ${requestId} ${fam} done at ${Date.now() - t0}ms`);
+              } catch (e: any) {
+                console.warn(`[tplprev] ${requestId} ${fam}: ${e?.message ?? e}`);
+              }
             }
-            const job = enqueue({ campaign: result.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
-            console.log(`[intake] ${requestId} queued batch job ${job.id} for ${platforms.join('+')}`);
-            pRef.autoJobId = job.id;
             projects.save(pRef);
 
-          // Poll rather than modify the job runner's contract — this keeps
-          // notifications a bystander to rendering, not a dependency of it.
-          const pid = project.projectId;
-          const started = Date.now();
-          const poll = setInterval(async () => {
-            const j = getJob(job.id);
-            if (!j || (j.status !== 'complete' && j.status !== 'failed')) {
-              if (Date.now() - started > 5 * 60_000) clearInterval(poll); // give up quietly after 5 minutes
-              return;
-            }
-            clearInterval(poll);
-            const p = projects.get(pid);
-            if (!p) return;
-
-            if (j.status === 'complete' && j.results) {
-              const proofUrl = j.reports?.find((r) => r.includes('/proof_'));
-              projects.addBatch(pid, j.results, { reportUrl: proofUrl });
-              await notify(
-                {
-                  subject: `New proof ready — ${p.client} / ${p.projectName}`,
-                  body: `${p.client} submitted "${p.campaignName}" and it has been rendered automatically.\n\nReview in the build screen, or send the proof link on to the client.`,
-                  url: `${PUBLIC_URL}/proof/${requestId}`,
-                },
-                OUT,
-              );
-            } else {
-              p.notes.push(`[${new Date().toISOString()}] Automatic render failed: ${j.error ?? 'unknown error'}`);
-              projects.save(p);
-              await notify(
-                {
-                  subject: `Render failed — ${p.client} / ${p.projectName}`,
-                  body: `Automatic rendering failed: ${j.error ?? 'unknown error'}\n\nThe request is saved and can be opened in the build screen.`,
-                  url: `${PUBLIC_URL}/build?request=${requestId}`,
-                },
-                OUT,
-              );
-            }
-          }, 2000);
+          // Staff heads-up: previews are ready and the customer is choosing a
+          // template. The full-build notification fires from the choose route.
+          await notify(
+            {
+              subject: `New request — ${project.client} / ${project.projectName}`,
+              body: `"${project.campaignName}" was submitted. Template previews are rendered and the customer is choosing a direction; remaining sizes build when they pick.`,
+              url: `${PUBLIC_URL}/build?request=${requestId}`,
+            },
+            OUT,
+          );
           })().catch((e: any) => console.error(`[intake] ${requestId} background render failed: ${e?.message ?? e}`));
         } else {
           // Not renderable — usually missing a logo. Still worth a heads-up so
@@ -543,8 +517,14 @@ const server = http.createServer(async (req, res) => {
       const job = project?.autoJobId ? getJob(project.autoJobId) : null;
       // 'rendering' while a job is queued or running; 'failed' if it died;
       // 'waiting-assets' when nothing was renderable (usually: no logo yet).
+      const prevDir = path.join(OUT, 'tplprev', requestId);
+      const previews = fs.existsSync(prevDir)
+        ? fs.readdirSync(prevDir).filter((f) => f.endsWith('.png'))
+            .map((f) => ({ template: f.replace('.png', ''), url: `/tplprev/${requestId}/${f}` }))
+        : [];
       const state = ready ? 'ready'
         : job ? (job.status === 'failed' ? 'failed' : 'rendering')
+        : previews.length ? 'choose-template'
         : 'waiting-assets';
       let firstLookFile = path.join(OUT, 'firstlook', `${requestId}.png`);
       if (!fs.existsSync(firstLookFile) && manifest) {
@@ -562,8 +542,17 @@ const server = http.createServer(async (req, res) => {
         state,
         progress: job ? job.progress : null,
         firstLook: fs.existsSync(firstLookFile) ? `/firstlook/${requestId}.png` : null,
+        templatePreviews: previews,
         proofUrl: ready ? `/proof/${requestId}` : null,
       }, cors);
+    }
+
+    const tpMatch = url.pathname.match(/^\/tplprev\/([\w-]+)\/(T\d+)\.png$/);
+    if (tpMatch && req.method === 'GET') {
+      const f = path.join(OUT, 'tplprev', tpMatch[1], `${tpMatch[2]}.png`);
+      if (!fs.existsSync(f)) return json(res, 404, { error: 'Not ready' });
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(f));
     }
 
     const flMatch = url.pathname.match(/^\/firstlook\/([\w-]+)\.png$/);
@@ -769,6 +758,8 @@ const server = http.createServer(async (req, res) => {
         conceptId?: string;
         copy?: { headline?: string; support?: string; cta?: string; offer?: string };
         size?: string;
+        /** Flip to the white (reversed) logo for one size — dark backgrounds. */
+        reverseLogo?: boolean;
         colors?: { accent?: string; ctaText?: string; headline?: string };
         /** Logo change: a new uploaded logo (url/publicId) or an AI-rework of
          *  the current one. Applied to the whole brand (all sizes). */
@@ -830,6 +821,11 @@ const server = http.createServer(async (req, res) => {
                 : await resolveAsset(body.background.url, { cacheDir, label: 'background' });
               const fitted = await fitImageToBudget(src, path.join(cacheDir, 'bg.jpg'));
               concept.backgroundImage = fitted.file;
+              try {
+                const gal = path.join(OUT, 'gallery', slug(campaign.campaignName ?? project.projectId));
+                fs.mkdirSync(gal, { recursive: true });
+                fs.copyFileSync(fitted.file, path.join(gal, `bg-${Date.now().toString(36)}.jpg`));
+              } catch { /* gallery is best-effort */ }
               if (typeof body.background.overlay === 'number') {
                 concept.backgroundOverlay = body.background.overlay;
               }
@@ -857,6 +853,10 @@ const server = http.createServer(async (req, res) => {
             const target = (concept.copy[body.size] = concept.copy[body.size] || {});
             for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
               if (body.copy[k] !== undefined) target[k] = body.copy[k];
+            }
+            if (typeof body.reverseLogo === 'boolean') {
+              // The composer reads this flag from the size's copy set.
+              (target as any).__useReverseLogo = body.reverseLogo;
             }
           } else {
             // Default edit: change the concept default AND clear any stale
@@ -888,22 +888,25 @@ const server = http.createServer(async (req, res) => {
         (body.conceptId ? ` for concept ${body.conceptId}${body.size ? '/' + body.size : ''}` : ''));
       projects.save(project);
 
-      // Wait for the rebuild so the caller can refresh onto fresh creatives.
-      const started = Date.now();
-      await new Promise<void>((resolve) => {
+      // Return immediately; render in the background. The proof polls the
+      // status endpoint and reloads when ready — holding this HTTP request
+      // open through a multi-minute render blocks the UI and trips proxies.
+      project.autoJobId = job.id;
+      projects.save(project);
+      void (async () => {
+        const started = Date.now();
         const t = setInterval(() => {
           const j = getJob(job.id);
-          if (!j || j.status === 'complete' || j.status === 'failed' || Date.now() - started > 120_000) {
+          if (!j || j.status === 'complete' || j.status === 'failed' || Date.now() - started > 300_000) {
             clearInterval(t);
             if (j?.status === 'complete' && j.results) {
               const proofUrl = j.reports?.find((r) => r.includes('/proof_'));
               projects.addBatch(project.projectId, j.results, { reportUrl: proofUrl });
             }
-            resolve();
           }
         }, 1500);
-      });
-      return json(res, 200, { rebuilt: true, proofUrl: `/proof/${project.requestId}` });
+      })();
+      return json(res, 200, { rebuilt: true, building: true, requestId: project.requestId, proofUrl: `/proof/${project.requestId}` });
     }
 
     // proof link is not an authenticated user. The project id in the URL is
@@ -970,6 +973,16 @@ const server = http.createServer(async (req, res) => {
     /* ------------------------------------------------- landing page reader */
     // Pixabay background options for the campaign. Returns candidates served
     // from a public cache dir; nothing is applied until the person picks one.
+    const galMatch = url.pathname.match(/^\/api\/gallery\/([\w-]+)$/);
+    if (galMatch && req.method === 'GET') {
+      const cors = corsHeaders(req.headers.origin);
+      const dir = path.join(OUT, 'gallery', galMatch[1]);
+      const items = fs.existsSync(dir)
+        ? fs.readdirSync(dir).filter((f) => /\.(jpe?g|png)$/.test(f)).map((f) => ({ url: `/files/gallery/${galMatch[1]}/${f}` }))
+        : [];
+      return json(res, 200, { items }, cors);
+    }
+
     if (route === 'POST /api/images/search') {
       const cors = corsHeaders(req.headers.origin);
       const limit = rateLimit(route, req);
@@ -1011,6 +1024,48 @@ const server = http.createServer(async (req, res) => {
       } catch (e: any) {
         return json(res, 200, { candidate: null, reason: e?.message ?? 'Image generation failed' }, cors);
       }
+    }
+
+    // Template chosen on the confirmation screen (optionally with edits).
+    // Apply to every concept, THEN build the remaining sizes in the background.
+    const chooseMatch = url.pathname.match(/^\/api\/requests\/([\w-]+)\/choose-template$/);
+    if (chooseMatch && req.method === 'POST') {
+      const cors = corsHeaders(req.headers.origin);
+      if (!intakeCodeOk(req)) return json(res, 401, { error: 'A valid team access code is required.' }, cors);
+      const requestId = chooseMatch[1];
+      const campFile = path.join(OUT, 'campaigns', `${requestId}.json`);
+      if (!fs.existsSync(campFile)) return json(res, 404, { error: 'Unknown request' }, cors);
+      const body = JSON.parse(await readBody(req, 100_000)) as {
+        layoutFamily?: string;
+        copy?: { headline?: string; support?: string; cta?: string };
+        colors?: { accent?: string; ctaText?: string; headline?: string };
+      };
+      const fam = ['T01', 'T02', 'T03'].includes(body.layoutFamily ?? '') ? body.layoutFamily! : 'T01';
+      const doc = JSON.parse(fs.readFileSync(campFile, 'utf8'));
+      for (const c of doc.campaign.concepts) c.layoutFamily = fam;
+      if (body.colors) {
+        if (body.colors.accent) doc.campaign.brand.colors.accent = body.colors.accent;
+        if (body.colors.ctaText) doc.campaign.brand.colors.ctaText = body.colors.ctaText;
+        if (body.colors.headline) doc.campaign.brand.colors.headlineInk = body.colors.headline;
+      }
+      if (body.copy) {
+        for (const c of doc.campaign.concepts) {
+          c.copy.default = { ...c.copy.default };
+          for (const k of ['headline', 'support', 'cta'] as const) {
+            if (body.copy[k]) {
+              c.copy.default[k] = body.copy[k];
+              for (const key of Object.keys(c.copy)) if (key !== 'default') delete c.copy[key][k];
+            }
+          }
+        }
+      }
+      fs.writeFileSync(campFile, JSON.stringify(doc, null, 2));
+      const project = projects.byRequest(requestId);
+      const platforms: string[] = doc.platforms ?? ['google'];
+      const job = enqueue({ campaign: doc.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
+      if (project) { project.autoJobId = job.id; project.status = 'in-build'; projects.save(project); }
+      console.log(`[choose] ${requestId} template ${fam}, building remaining sizes as job ${job.id}`);
+      return json(res, 200, { building: true, template: fam }, cors);
     }
 
     if (route === 'POST /api/copy/suggest') {

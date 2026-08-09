@@ -563,6 +563,7 @@ export async function buildCampaign(
     }
   }
 
+  let offerBg: string | undefined;
   const concepts: CreativeConcept[] = [
     {
       conceptId: 'A',
@@ -598,7 +599,6 @@ export async function buildCampaign(
     // If the customer picked a photo/AI background on the review step, resolve
     // it to a local file (already under 150 KB from the imagery endpoints) and
     // attach it. The composer paints it full-bleed with a legibility overlay.
-    let offerBg: string | undefined;
     if (sub.backgroundChoice?.url) {
       try {
         // The url is like /files/imagery/<slug>/<file>; map to a disk path.
@@ -607,7 +607,13 @@ export async function buildCampaign(
         if (fs.existsSync(candidate)) {
           const fitted = await fitImageToBudget(candidate, path.join(cacheDir, 'offer-bg.jpg'));
           offerBg = fitted.file;
-          notes.push(`Offer concept uses your chosen ${sub.backgroundChoice.mode} background.`);
+          notes.push(`Your chosen ${sub.backgroundChoice.mode} background is applied to every concept.`);
+          try {
+            const gal = path.join(opts.outputDir ?? 'out', 'gallery',
+              (sub.campaignName ?? 'campaign').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+            fs.mkdirSync(gal, { recursive: true });
+            fs.copyFileSync(fitted.file, path.join(gal, `bg-${Date.now().toString(36)}.jpg`));
+          } catch { /* best-effort */ }
         }
       } catch (e: any) {
         notes.push(`Chosen background could not be applied (${e?.message ?? e}); using a solid colour.`);
@@ -650,6 +656,12 @@ export async function buildCampaign(
     });
   } else {
     notes.push('No offer was supplied, so only the benefit-led concept was produced.');
+  }
+
+  // A chosen background belongs to the whole look, not one concept: apply it
+  // to every concept so no template option shows a grey placeholder instead.
+  if (typeof offerBg !== 'undefined' && offerBg) {
+    for (const c of concepts) c.backgroundImage = offerBg;
   }
 
   const campaign: Campaign = {

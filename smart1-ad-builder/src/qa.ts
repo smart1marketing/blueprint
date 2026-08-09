@@ -17,6 +17,7 @@ import type {
 } from './types';
 import type { ComposeOutput } from './svg';
 import { resolveColor } from './svg';
+import sharp from 'sharp';
 import { contrastRatio, hexLuminance, regionLuminance, type RasterResult } from './raster';
 
 export interface QaInput {
@@ -35,6 +36,31 @@ export interface QaInput {
 }
 
 const TEXT_ROLES = ['headline', 'support', 'offer', 'trust'] as const;
+
+/**
+ * Mean luminance of a logo's visible (non-transparent) pixels. This is what
+ * the eye compares against the backdrop — transparent padding must not count,
+ * or a white mark on a transparent canvas would average out to "grey" and
+ * sneak past the check.
+ */
+async function logoInkLuminance(file: string): Promise<number | null> {
+  try {
+    const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let sum = 0;
+    let weight = 0;
+    for (let i = 0; i < data.length; i += info.channels) {
+      const a = data[i + 3] / 255;
+      if (a < 0.1) continue;
+      // Rec. 709 luma on linearised-ish sRGB is close enough for a warning check.
+      const lum = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+      sum += lum * a;
+      weight += a;
+    }
+    return weight > 0 ? sum / weight : null;
+  } catch {
+    return null;
+  }
+}
 
 function safeRegion(layout: SizeLayout): Box {
   if (layout.safeBox) return layout.safeBox;
@@ -78,6 +104,34 @@ export async function runQa(input: QaInput): Promise<QaFinding[]> {
       warn('safe-zone', `${intruders.join(', ')} extend into the platform UI exclusion zone.`);
     } else {
       pass('safe-zone', 'all elements sit within the platform-safe core');
+    }
+  }
+
+  /* ------------------------------------------------------- logo contrast */
+  // A white logo on a white panel is invisible, and the text-contrast check
+  // never sees it because logos are images, not glyphs. Measure the logo's
+  // own ink against what actually sits behind it in the render.
+  const logoBox = composed.rects.logo;
+  if (logoBox && input.brand.logos?.primary) {
+    const useReverse = (copy as any).__useReverseLogo === true;
+    const logoFile = useReverse && input.brand.logos.reverse ? input.brand.logos.reverse : input.brand.logos.primary;
+    const ink = await logoInkLuminance(logoFile);
+    if (ink !== null) {
+      const behind = await regionLuminance(backgroundPng, {
+        left: Math.max(0, Math.round(logoBox.x * scale)),
+        top: Math.max(0, Math.round(logoBox.y * scale)),
+        width: Math.max(1, Math.round(logoBox.w * scale)),
+        height: Math.max(1, Math.round(logoBox.h * scale)),
+      });
+      const ratio = contrastRatio(ink, behind);
+      if (ratio < 1.7) {
+        // Suggest the opposite of what's there: a light logo needs the
+        // darker/full-colour version and vice versa.
+        const suggestion = ink > 0.5 ? 'full-colour (darker)' : 'white';
+        warn('logo-contrast', `the logo is nearly invisible against its background (${ratio.toFixed(1)}:1). Try the ${suggestion} logo on this size.`);
+      } else {
+        pass('logo-contrast', `logo reads clearly against its background (${ratio.toFixed(1)}:1)`);
+      }
     }
   }
 

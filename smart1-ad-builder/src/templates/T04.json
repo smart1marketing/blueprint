@@ -671,6 +671,228 @@
         "bottom": 672,
         "note": "Meta 9:16: top 14% / bottom 35% reserved for platform UI"
       }
+    },
+    "336x280": {
+      "canvas": {
+        "w": 336,
+        "h": 280
+      },
+      "safe": 18,
+      "background": "light",
+      "logo": {
+        "x": 18,
+        "y": 18,
+        "w": 104,
+        "h": 28
+      },
+      "hero": {
+        "x": 176,
+        "y": 0,
+        "w": 160,
+        "h": 280,
+        "orientation": "vertical",
+        "focal": "center"
+      },
+      "headline": {
+        "x": 18,
+        "y": 58,
+        "w": 140,
+        "h": 88,
+        "size": [
+          17,
+          27
+        ],
+        "maxLines": 3,
+        "lineHeight": 1.12,
+        "weight": "bold",
+        "color": "dark"
+      },
+      "support": {
+        "x": 18,
+        "y": 152,
+        "w": 140,
+        "h": 46,
+        "size": [
+          11,
+          14
+        ],
+        "maxLines": 3,
+        "lineHeight": 1.25,
+        "color": "dark"
+      },
+      "offer": {
+        "x": 18,
+        "y": 202,
+        "w": 140,
+        "h": 16,
+        "size": [
+          11,
+          13
+        ],
+        "maxLines": 1,
+        "weight": "bold",
+        "color": "primary",
+        "uppercase": true,
+        "letterSpacing": 0.3
+      },
+      "cta": {
+        "x": 18,
+        "y": 226,
+        "w": 140,
+        "h": 36,
+        "size": [
+          11.5,
+          15
+        ],
+        "maxLines": 1,
+        "align": "center",
+        "bg": "accent",
+        "color": "dark",
+        "radius": 4,
+        "weight": "bold",
+        "letterSpacing": 0.4
+      }
+    },
+    "970x250": {
+      "canvas": {
+        "w": 970,
+        "h": 250
+      },
+      "safe": 24,
+      "background": "dark",
+      "hero": {
+        "x": 0,
+        "y": 0,
+        "w": 970,
+        "h": 250,
+        "orientation": "landscape",
+        "focal": "right",
+        "scrim": {
+          "from": 0.82,
+          "to": 0,
+          "direction": "right"
+        }
+      },
+      "logo": {
+        "x": 48,
+        "y": 24,
+        "w": 150,
+        "h": 36
+      },
+      "headline": {
+        "x": 48,
+        "y": 66,
+        "w": 420,
+        "h": 62,
+        "size": [
+          26,
+          38
+        ],
+        "maxLines": 2,
+        "lineHeight": 1.1,
+        "weight": "bold",
+        "color": "light"
+      },
+      "support": {
+        "x": 48,
+        "y": 134,
+        "w": 420,
+        "h": 44,
+        "size": [
+          18,
+          22
+        ],
+        "maxLines": 2,
+        "lineHeight": 1.2,
+        "color": "light"
+      },
+      "trust": {
+        "x": 252,
+        "y": 186,
+        "w": 250,
+        "h": 28,
+        "size": [
+          15,
+          18
+        ],
+        "maxLines": 1,
+        "valign": "middle",
+        "color": "light"
+      },
+      "cta": {
+        "x": 48,
+        "y": 180,
+        "w": 190,
+        "h": 40,
+        "size": [
+          14,
+          18
+        ],
+        "maxLines": 1,
+        "align": "center",
+        "bg": "accent",
+        "color": "dark",
+        "radius": 4,
+        "weight": "bold",
+        "letterSpacing": 0.4
+      }
+    },
+    "414x125": {
+      "canvas": {
+        "w": 414,
+        "h": 125
+      },
+      "safe": 8,
+      "safeBox": {
+        "x": 47,
+        "y": 6,
+        "w": 320,
+        "h": 113
+      },
+      "background": "light",
+      "hero": {
+        "x": 47,
+        "y": 10,
+        "w": 100,
+        "h": 105,
+        "orientation": "square",
+        "focal": "center"
+      },
+      "headline": {
+        "x": 160,
+        "y": 26,
+        "w": 140,
+        "h": 40,
+        "size": [
+          15,
+          20
+        ],
+        "maxLines": 2,
+        "lineHeight": 1.15,
+        "weight": "bold",
+        "color": "dark"
+      },
+      "support": {
+        "x": 160,
+        "y": 72,
+        "w": 140,
+        "h": 32,
+        "size": [
+          11,
+          13
+        ],
+        "maxLines": 2,
+        "lineHeight": 1.25,
+        "color": "dark"
+      },
+      "logo": {
+        "x": 312,
+        "y": 48,
+        "w": 52,
+        "h": 30,
+        "align": "right",
+        "valign": "middle"
+      }
     }
   }
 }

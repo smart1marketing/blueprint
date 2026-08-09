@@ -1206,6 +1206,22 @@
           '<p>Thanks, ' + esc(data.contact.split(' ')[0] || 'there') + '. A confirmation is on its way to ' + esc(data.email) + '.</p>' +
           '<div class="ref">' + esc(rid) + '</div>' +
           '<div id="buildwait" style="margin-top:26px">' +
+          '<div id="tplbox" style="display:none">' +
+          '<p style="font-weight:600;color:var(--ink);margin:0 0 4px">Pick the look you like best.</p>' +
+          '<p class="hint" style="margin:0 0 14px">This is your 250\u00d7250. The remaining sizes build in your chosen style \u2014 you can still edit everything after.</p>' +
+          '<div id="tplopts" style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center"></div>' +
+          '<div id="tpledit" style="margin:18px auto 0;max-width:520px;text-align:left;background:#F7F9FC;border:1px solid var(--line);border-radius:10px;padding:16px">' +
+          '<p style="font-weight:600;margin:0 0 10px;font-size:14px">Want tweaks before we build the rest? Edit here \u2014 they apply to whichever style you pick.</p>' +
+          '<label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Headline</label>' +
+          '<input type="text" id="tpl-headline" maxlength="60" style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
+          '<label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Supporting line</label>' +
+          '<input type="text" id="tpl-support" maxlength="90" style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
+          '<div style="display:flex;gap:14px;align-items:flex-end">' +
+          '<div style="flex:1"><label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Button text</label>' +
+          '<input type="text" id="tpl-cta" maxlength="24" style="width:100%;box-sizing:border-box"></div>' +
+          '<div><label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Button colour</label>' +
+          '<input type="color" id="tpl-accent" style="width:52px;height:38px;padding:2px;border:1px solid var(--line);border-radius:7px;background:#fff"></div>' +
+          '</div></div></div>' +
           '<div id="skelbox">' + '<svg id="adskel" width="300" height="250" viewBox="0 0 300 250" xmlns="http://www.w3.org/2000/svg" ' +
   'style="border:1px solid var(--line);border-radius:8px;background:#fff;max-width:100%">' +
   '<defs><linearGradient id="sh" x1="0" y1="0" x2="1" y2="0">' +
@@ -1253,6 +1269,55 @@
           fetch(API + '/api/requests/' + encodeURIComponent(rid) + '/status')
             .then(function (r) { return r.json(); })
             .then(function (st) {
+              if (st.state === 'choose-template' && st.templatePreviews && st.templatePreviews.length && !document.getElementById('tplopts').childElementCount) {
+                var box = document.getElementById('tplopts');
+                st.templatePreviews.forEach(function (tp) {
+                  var card = document.createElement('div');
+                  card.style.cssText = 'border:2px solid var(--line);border-radius:12px;padding:10px;background:#fff;max-width:280px';
+                  var img = document.createElement('img');
+                  img.src = API + tp.url; img.alt = tp.template;
+                  img.style.cssText = 'width:250px;height:250px;border-radius:8px;display:block';
+                  var btn = document.createElement('button');
+                  btn.type = 'button'; btn.textContent = 'Use this style';
+                  btn.style.cssText = 'width:100%;margin-top:10px';
+                  btn.addEventListener('click', function () {
+                    var all = document.querySelectorAll('#tplopts button');
+                    for (var q = 0; q < all.length; q++) { all[q].disabled = true; }
+                    btn.textContent = 'Building your sizes\u2026';
+                    fetch(API + '/api/requests/' + encodeURIComponent(rid) + '/choose-template', {
+                      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
+                      body: JSON.stringify({
+                        layoutFamily: tp.template,
+                        copy: {
+                          headline: (document.getElementById('tpl-headline').value || '').trim(),
+                          support: (document.getElementById('tpl-support').value || '').trim(),
+                          cta: (document.getElementById('tpl-cta').value || '').trim()
+                        },
+                        colors: document.getElementById('tpl-accent').dataset.touched
+                          ? { accent: document.getElementById('tpl-accent').value } : undefined
+                      })
+                    }).then(function () {
+                      document.getElementById('tplbox').style.display = 'none';
+                      document.getElementById('skelbox').style.display = '';
+                    }).catch(function () {
+                      for (var q2 = 0; q2 < all.length; q2++) { all[q2].disabled = false; }
+                      btn.textContent = 'Use this style';
+                    });
+                  });
+                  card.appendChild(img); card.appendChild(btn); box.appendChild(card);
+                });
+                document.getElementById('tpl-accent').addEventListener('input', function () { this.dataset.touched = '1'; });
+                // Start the tweak fields from the copy they already approved.
+                var ph = document.getElementById('approvedHeadline');
+                var ps = document.getElementById('approvedSupport');
+                var pc = document.getElementById('approvedCta');
+                if (ph) document.getElementById('tpl-headline').value = ph.value || '';
+                if (ps) document.getElementById('tpl-support').value = ps.value || '';
+                if (pc) document.getElementById('tpl-cta').value = pc.value || '';
+                document.getElementById('skelbox').style.display = 'none';
+                document.getElementById('tplbox').style.display = '';
+                reportHeight();
+              }
               if (st.firstLook && !shownFirst) {
                 shownFirst = true;
                 document.getElementById('firstimg').src = API + st.firstLook;

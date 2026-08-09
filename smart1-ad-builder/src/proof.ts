@@ -449,7 +449,8 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
           <button type="button" class="mini bg-mode" data-bgmode="ai">AI from your page</button>
         </div>
         <div id="ed-bgResults" style="display:none;margin-top:10px"></div>
-        <p class="hint" style="margin:6px 0 0">Photos are kept readable automatically with an overlay. Applies on rebuild.</p>
+        <p class="hint" style="margin:6px 0 0">Photos are kept readable automatically with an overlay. Applies on rebuild.
+        Need to crop or edit an image first? Use the <a href="https://smart1marketing.com/image-optimizer" target="_blank" rel="noopener" style="color:var(--signal);font-weight:600">Smart 1 image optimizer</a>.</p>
       </div>
       <p class="hint" id="ed-status"></p>
     </div>
@@ -475,6 +476,9 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
     <input type="text" id="se-support" maxlength="90">
     <label>Button text</label>
     <input type="text" id="se-cta" maxlength="24">
+    <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;margin-top:14px">
+      <input type="checkbox" id="se-reverselogo" style="width:auto"> Use the white logo on this size (for dark or photo backgrounds)
+    </label>
     <div class="row">
       <button id="se-cancel">Cancel</button>
       <button class="primary" id="se-apply">Apply to this size</button>
@@ -674,9 +678,20 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
       })
         .then(function (r) { return r.json(); })
         .then(function (res) {
-          status.textContent = 'Done — reloading your updated ads…';
-          // Cache-bust so the browser fetches the fresh creatives.
-          location.href = (res.proofUrl || location.pathname) + '?u=' + Date.now();
+          // The server returns immediately and renders in the background;
+          // poll the public status endpoint and reload when it's done.
+          status.textContent = 'Rebuilding in the background — this page will refresh itself when the new ads are ready. You can keep looking around.';
+          var ridFromPath = (location.pathname.match(/\/proof\/([\w-]+)/) || [])[1];
+          var target = (res.proofUrl || location.pathname);
+          (function pollReady() {
+            fetch('/api/requests/' + ridFromPath + '/status')
+              .then(function (r2) { return r2.json(); })
+              .then(function (st) {
+                if (st.ready && st.state === 'ready') location.href = target + '?u=' + Date.now();
+                else setTimeout(pollReady, 2500);
+              })
+              .catch(function () { setTimeout(pollReady, 4000); });
+          })();
         })
         .catch(function () {
           rebuildBtn.disabled = false;
@@ -727,11 +742,24 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
           headline: document.getElementById('se-headline').value.trim(),
           support: document.getElementById('se-support').value.trim(),
           cta: document.getElementById('se-cta').value.trim()
-        }
+        },
+        reverseLogo: document.getElementById('se-reverselogo').checked
       })
     })
       .then(function (r) { return r.json(); })
-      .then(function (res) { location.href = (res.proofUrl || location.pathname) + '?u=' + Date.now(); })
+      .then(function (res) {
+        btn.textContent = 'Rebuilding in background…';
+        var ridFromPath = (location.pathname.match(/\/proof\/([\w-]+)/) || [])[1];
+        (function pollReady() {
+          fetch('/api/requests/' + ridFromPath + '/status')
+            .then(function (r2) { return r2.json(); })
+            .then(function (st) {
+              if (st.ready && st.state === 'ready') location.href = (res.proofUrl || location.pathname) + '?u=' + Date.now();
+              else setTimeout(pollReady, 2500);
+            })
+            .catch(function () { setTimeout(pollReady, 4000); });
+        })();
+      })
       .catch(function () { btn.disabled = false; btn.textContent = 'Apply to this size'; });
   });
 })();
