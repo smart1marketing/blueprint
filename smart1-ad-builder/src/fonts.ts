@@ -167,14 +167,44 @@ export function textPath(
   size: number,
   tracking = 0,
 ): string {
-  if (tracking === 0) {
-    return font.getPath(text, x, y, size, { kerning: true }).toPathData(2);
-  }
+  // Build the path one glyph at a time with manual kerning, rather than
+  // opentype's whole-string getPath. The string version intermittently emits
+  // NaN coordinates on some kerned sequences, and a single NaN makes librsvg
+  // abort the whole path — a headline line silently vanishes from the ad.
+  // Per-glyph paths are immune, and the guard below drops any individually
+  // corrupt glyph instead of losing the line.
+  const scale = size / font.unitsPerEm;
+  const glyphs = font.stringToGlyphs(text);
   let cursor = x;
   const parts: string[] = [];
-  for (const ch of text) {
-    parts.push(font.getPath(ch, cursor, y, size).toPathData(2));
-    cursor += font.getAdvanceWidth(ch, size) + tracking;
+  const f = (n: number) => (Math.round(n * 100) / 100).toString();
+  for (let i = 0; i < glyphs.length; i++) {
+    const g = glyphs[i];
+    // Transform the raw outline ourselves (font units are y-up; SVG is
+    // y-down). opentype's glyph.getPath() intermittently emits NaN even when
+    // every outline point, the cursor, and the scale are finite — bypassing
+    // its transform entirely removes the failure mode.
+    const cmds = (g.path?.commands ?? []) as any[];
+    let d = '';
+    let ok = true;
+    for (const c of cmds) {
+      switch (c.type) {
+        case 'M': d += `M${f(cursor + c.x * scale)} ${f(y - c.y * scale)}`; break;
+        case 'L': d += `L${f(cursor + c.x * scale)} ${f(y - c.y * scale)}`; break;
+        case 'Q': d += `Q${f(cursor + c.x1 * scale)} ${f(y - c.y1 * scale)} ${f(cursor + c.x * scale)} ${f(y - c.y * scale)}`; break;
+        case 'C': d += `C${f(cursor + c.x1 * scale)} ${f(y - c.y1 * scale)} ${f(cursor + c.x2 * scale)} ${f(y - c.y2 * scale)} ${f(cursor + c.x * scale)} ${f(y - c.y * scale)}`; break;
+        case 'Z': d += 'Z'; break;
+        default: break;
+      }
+      if (d.includes('NaN')) { ok = false; break; }
+    }
+    if (ok && d) parts.push(d);
+    cursor += (g.advanceWidth ?? 0) * scale;
+    if (i < glyphs.length - 1) {
+      const kern = font.getKerningValue(g, glyphs[i + 1]);
+      if (Number.isFinite(kern)) cursor += kern * scale;
+    }
+    cursor += tracking;
   }
   return parts.join(' ');
 }

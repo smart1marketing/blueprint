@@ -163,17 +163,24 @@
 
     var rows = list.map(function (p) {
       var adCount = p.batches ? p.batches.reduce(function (n, b) { return n + b.ads.length; }, 0) : (p.adCount || 0);
+      // Everything lives here in the dashboard: the latest delivered zip is
+      // one click, no email required.
+      var lastDel = (p.delivered && p.delivered.length) ? p.delivered[p.delivered.length - 1] : null;
+      var filesCell = lastDel
+        ? '<a class="dl" href="' + esc(lastDel.zipUrl) + '" download onclick="event.stopPropagation()">\u2B07 ' + (lastDel.fileCount || '') + ' files</a>'
+        : '<span class="nofiles">\u2014</span>';
       return '<tr data-request="' + esc(p.requestId) + '">' +
         '<td><div class="name">' + esc(p.projectName) + '</div><div class="client">' + esc(p.client) + ' — ' + esc(p.campaignName) + '</div></td>' +
         '<td><span class="pill ' + esc(p.status) + '">' + esc(STATUS_LABEL[p.status] || p.status) + '</span></td>' +
         '<td class="ads">' + adCount + (adCount === 1 ? ' ad' : ' ads') + '</td>' +
+        '<td class="files">' + filesCell + '</td>' +
         '<td class="date">' + fmtDate(p.createdAt) + '</td>' +
         '<td class="date">' + fmtDate(p.updatedAt) + '</td>' +
         '</tr>';
     }).join('');
 
     $('results').innerHTML =
-      '<table><thead><tr><th>Project</th><th>Status</th><th>Creative</th><th>Created</th><th>Updated</th></tr></thead>' +
+      '<table><thead><tr><th>Project</th><th>Status</th><th>Creative</th><th>Files</th><th>Created</th><th>Updated</th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table>';
 
     Array.prototype.forEach.call($('results').querySelectorAll('tr[data-request]'), function (tr) {

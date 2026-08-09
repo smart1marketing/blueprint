@@ -533,44 +533,44 @@
       "background": "light",
       "logo": {
         "x": 16,
-        "y": 20,
+        "y": 16,
         "w": 218,
-        "h": 28,
+        "h": 22,
         "align": "center",
         "valign": "top"
       },
       "headline": {
         "x": 16,
-        "y": 66,
+        "y": 40,
         "w": 218,
-        "h": 74,
+        "h": 96,
         "size": [
-          18,
-          26
+          15,
+          24
         ],
-        "maxLines": 3,
-        "lineHeight": 1.12,
+        "maxLines": 4,
+        "lineHeight": 1.1,
         "weight": "bold",
         "color": "dark",
         "align": "center"
       },
       "support": {
         "x": 16,
-        "y": 146,
+        "y": 142,
         "w": 218,
-        "h": 34,
+        "h": 30,
         "size": [
           11,
           13
         ],
         "maxLines": 2,
-        "lineHeight": 1.25,
+        "lineHeight": 1.2,
         "color": "dark",
         "align": "center"
       },
       "cta": {
         "x": 55,
-        "y": 196,
+        "y": 194,
         "w": 140,
         "h": 38,
         "size": [

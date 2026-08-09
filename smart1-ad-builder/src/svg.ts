@@ -195,7 +195,10 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
   if (layout.logo) {
     const lb = layout.logo;
     const useReverse = (copy as any).__useReverseLogo === true;
-    const file = useReverse && brand.logos.reverse ? brand.logos.reverse : brand.logos.primary;
+    // A per-size logo override (e.g. a square variant for square placements)
+    // wins over the brand-wide logo choice.
+    const file = (copy as any).__logoFile
+      ?? (useReverse && brand.logos.reverse ? brand.logos.reverse : brand.logos.primary);
     const img = file ? await dataUri(abs(file)) : null;
     if (!img) {
       missingAssets.push(file || '(no logo supplied)');
@@ -259,15 +262,19 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
 
     if (!includeText) return;
 
-    const paths = fit.lines.map((line, i) => {
+    // Emit one <path> per line rather than concatenating every line into a
+    // single path. librsvg truncates extremely long path `d` strings, which
+    // silently dropped multi-line headlines (only the first line rendered).
+    // One path per line keeps each `d` well within safe limits.
+    fit.lines.forEach((line, i) => {
       const lw = fit.lines.length === 1 ? inkW : undefined;
       const width =
         lw ?? font.getAdvanceWidth(line, fit.fontSize, { kerning: true }) +
           Math.max(0, line.length - 1) * (spec.letterSpacing ?? 0);
       const x = xForAlign(width, spec.x, spec.w, spec.align);
-      return textPath(font, line, x, ys[i], fit.fontSize, spec.letterSpacing ?? 0);
+      const d = textPath(font, line, x, ys[i], fit.fontSize, spec.letterSpacing ?? 0);
+      if (d) body.push(`<path d="${d}" fill="${fill}" data-role="${role}"/>`);
     });
-    body.push(`<path d="${paths.join(' ')}" fill="${fill}" data-role="${role}"/>`);
   };
 
   drawText('headline', layout.headline);

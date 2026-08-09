@@ -157,7 +157,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith('/api/project') ||
     url.pathname.startsWith('/api/build/') ||
     url.pathname.startsWith('/api/diagnostics') ||
-    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/') && !url.pathname.startsWith('/files/gallery/')) ||
+    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/') && !url.pathname.startsWith('/files/gallery/') && !url.pathname.startsWith('/files/deliveries/')) ||
     route === 'POST /api/render' ||
     url.pathname.startsWith('/api/render/');
 
@@ -640,6 +640,9 @@ const server = http.createServer(async (req, res) => {
         initialColors,
         perSizeCopy,
         meta: proofMeta,
+        delivered: (project?.delivered && project.delivered.length)
+          ? project.delivered[project.delivered.length - 1]
+          : undefined,
       });
       // Inline every creative as a data URI so the page depends on nothing else.
       for (const e of manifest.entries) {
@@ -673,9 +676,9 @@ const server = http.createServer(async (req, res) => {
         await notify(
           {
             subject: `Delivered — ${project.client} / ${project.projectName}`,
-            body: `${out.fileCount} finished file(s) packaged for ${project.client}.` +
+            body: `${out.fileCount} finished file(s) packaged for ${project.client}. Download from the build screen.` +
               (out.skipped.length ? `\nNot included: ${out.skipped.map((s) => `${s.size} (${s.reason})`).join('; ')}` : ''),
-            url: `${PUBLIC_URL}${out.zipUrl}`,
+            url: `${PUBLIC_URL}/build?request=${project.requestId}`,
           },
           OUT,
         );
@@ -781,12 +784,16 @@ const server = http.createServer(async (req, res) => {
       const campFile = path.join(OUT, 'campaigns', `${project.requestId}.json`);
       if (!fs.existsSync(campFile)) return json(res, 404, { error: 'No campaign to rebuild' });
 
-      const body = JSON.parse(await readBody(req, 200_000)) as {
+      const body = JSON.parse(await readBody(req, 3_000_000)) as {
         conceptId?: string;
         copy?: { headline?: string; support?: string; cta?: string; offer?: string };
         size?: string;
         /** Flip to the white (reversed) logo for one size — dark backgrounds. */
         reverseLogo?: boolean;
+        /** Replace the logo on ONE size (with body.size) or brand-wide
+         *  (without). dataUrl carries a direct upload from the size editor —
+         *  e.g. a square logo variant for square placements. */
+        sizeLogo?: { dataUrl?: string; url?: string };
         colors?: { accent?: string; ctaText?: string; headline?: string };
         /** Logo change: a new uploaded logo (url/publicId) or an AI-rework of
          *  the current one. Applied to the whole brand (all sizes). */
@@ -885,6 +892,29 @@ const server = http.createServer(async (req, res) => {
               // The composer reads this flag from the size's copy set.
               (target as any).__useReverseLogo = body.reverseLogo;
             }
+            if (body.sizeLogo?.dataUrl || body.sizeLogo?.url) {
+              try {
+                const cacheDir = path.join(OUT, 'cache', project.requestId, 'szlogo-' + Date.now().toString(36));
+                fs.mkdirSync(cacheDir, { recursive: true });
+                let raw: Buffer;
+                if (body.sizeLogo.dataUrl) {
+                  const b64 = body.sizeLogo.dataUrl.split(',')[1] ?? '';
+                  raw = Buffer.from(b64, 'base64');
+                } else {
+                  const r = await fetch(body.sizeLogo.url!);
+                  if (!r.ok) throw new Error(`fetch ${r.status}`);
+                  raw = Buffer.from(await r.arrayBuffer());
+                }
+                const src = path.join(cacheDir, 'raw');
+                fs.writeFileSync(src, raw);
+                // Same treatment as every logo: transparency enforced, budget-fit.
+                const reworked = await reworkLogo(src, cacheDir, {});
+                const fitted = await fitImageToBudget(reworked.primary, path.join(cacheDir, 'size-logo.png'), { keepAlpha: true });
+                (target as any).__logoFile = fitted.file;
+              } catch (e: any) {
+                return json(res, 400, { error: `Size logo failed: ${e?.message ?? e}` });
+              }
+            }
           } else {
             // Default edit: change the concept default AND clear any stale
             // per-size overrides for the edited fields. Without this, a size
@@ -951,6 +981,48 @@ const server = http.createServer(async (req, res) => {
         project.status = 'approved';
         if (body.concept) project.approvedConcept = body.concept;
         project.notes.push(`[${at}] Concept ${body.concept ?? '?'} approved by the client.`);
+        projects.save(project);
+        console.log(`[proof] ${projectId} -> approved`);
+
+        // Approval IS the trigger for delivery — no human in the loop just to
+        // press "deliver". Package the approved concept now: platform folders,
+        // final names, QA failures withheld. The client gets the download link
+        // in this response; staff get it in the notification.
+        try {
+          const out = await deliverProject(project, { outDir: OUT, conceptId: body.concept });
+          project.status = 'complete';
+          project.delivered = project.delivered ?? [];
+          project.delivered.push({ at, zipUrl: out.zipUrl, fileCount: out.fileCount });
+          project.notes.push(
+            `[${at}] Auto-delivered ${out.fileCount} file(s) on approval` +
+            (out.skipped.length ? `; withheld ${out.skipped.map((s) => s.size).join(', ')}` : ''),
+          );
+          projects.save(project);
+          await notify(
+            {
+              subject: `Approved & delivered — ${project.client} / ${project.projectName}`,
+              body: `Concept ${body.concept ?? '?'} was approved. ${out.fileCount} finished file(s) are packaged — download from the build screen or the projects dashboard.` +
+                (out.skipped.length ? `\nNot included: ${out.skipped.map((s) => `${s.size} (${s.reason})`).join('; ')}` : ''),
+              url: `${PUBLIC_URL}/build?request=${project.requestId}`,
+            },
+            OUT,
+          );
+          return json(res, 200, { status: 'complete', recordedAt: at, downloadUrl: out.zipUrl, fileCount: out.fileCount });
+        } catch (e: any) {
+          // Delivery failing must not lose the approval. Record it, tell
+          // staff, and let the client know files are on the way manually.
+          project.notes.push(`[${at}] Auto-delivery failed: ${e?.message ?? e}. Deliver manually from the build screen.`);
+          projects.save(project);
+          await notify(
+            {
+              subject: `Approved (delivery needs attention) — ${project.client} / ${project.projectName}`,
+              body: `Concept ${body.concept ?? '?'} was approved but packaging failed: ${e?.message ?? e}`,
+              url: `${PUBLIC_URL}/build?request=${project.requestId}`,
+            },
+            OUT,
+          );
+          return json(res, 200, { status: 'approved', recordedAt: at });
+        }
       } else {
         project.status = 'proof-sent';
         project.notes.push(`[${at}] Revision requested on concept ${body.concept ?? '?'}: ${body.notes ?? '(no detail)'}`);
@@ -960,14 +1032,8 @@ const server = http.createServer(async (req, res) => {
 
       await notify(
         {
-          subject:
-            kind === 'approve'
-              ? `Approved — ${project.client} / ${project.projectName}`
-              : `Revision requested — ${project.client} / ${project.projectName}`,
-          body:
-            kind === 'approve'
-              ? `Concept ${body.concept ?? '?'} was approved and is ready for final delivery.`
-              : `Concept ${body.concept ?? '?'} needs changes:\n\n"${body.notes ?? '(no detail given)'}"`,
+          subject: `Revision requested — ${project.client} / ${project.projectName}`,
+          body: `Concept ${body.concept ?? '?'} needs changes:\n\n"${body.notes ?? '(no detail given)'}"`,
           url: `${PUBLIC_URL}/build?request=${project.requestId}`,
         },
         OUT,

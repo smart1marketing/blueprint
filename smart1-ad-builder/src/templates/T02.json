@@ -349,21 +349,21 @@
       "logo": {
         "x": 18,
         "y": 18,
-        "w": 150,
-        "h": 26,
+        "w": 132,
+        "h": 22,
         "align": "left",
         "valign": "top"
       },
       "headline": {
         "x": 18,
-        "y": 62,
+        "y": 42,
         "w": 214,
-        "h": 86,
+        "h": 106,
         "size": [
-          19,
-          27
+          14,
+          24
         ],
-        "maxLines": 3,
+        "maxLines": 5,
         "lineHeight": 1.1,
         "weight": "bold",
         "color": "dark",
@@ -373,13 +373,13 @@
         "x": 18,
         "y": 152,
         "w": 210,
-        "h": 32,
+        "h": 34,
         "size": [
-          11,
+          12,
           13
         ],
         "maxLines": 2,
-        "lineHeight": 1.25,
+        "lineHeight": 1.2,
         "color": "dark",
         "align": "left"
       },
@@ -387,7 +387,7 @@
         "x": 18,
         "y": 194,
         "w": 150,
-        "h": 36,
+        "h": 38,
         "size": [
           12,
           15

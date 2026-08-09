@@ -333,55 +333,55 @@
       "panels": [
         {
           "x": 0,
-          "y": 146,
+          "y": 190,
           "w": 250,
-          "h": 104,
+          "h": 60,
           "fill": "primary",
           "radius": 0
         }
       ],
       "logo": {
         "x": 16,
-        "y": 18,
+        "y": 16,
         "w": 150,
-        "h": 24,
+        "h": 22,
         "align": "left",
         "valign": "top"
       },
       "headline": {
         "x": 16,
-        "y": 54,
+        "y": 40,
         "w": 218,
-        "h": 80,
+        "h": 106,
         "size": [
-          18,
-          26
+          14,
+          24
         ],
-        "maxLines": 3,
-        "lineHeight": 1.12,
+        "maxLines": 5,
+        "lineHeight": 1.1,
         "weight": "bold",
         "color": "dark",
         "align": "left"
       },
       "support": {
         "x": 16,
-        "y": 158,
+        "y": 150,
         "w": 218,
-        "h": 24,
+        "h": 34,
         "size": [
-          11,
+          12,
           13
         ],
-        "maxLines": 1,
+        "maxLines": 2,
         "lineHeight": 1.2,
-        "color": "light",
+        "color": "dark",
         "align": "left"
       },
       "cta": {
         "x": 16,
-        "y": 192,
+        "y": 196,
         "w": 150,
-        "h": 40,
+        "h": 36,
         "size": [
           12,
           15

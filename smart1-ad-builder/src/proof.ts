@@ -38,6 +38,8 @@ export interface ProofOptions {
   meta?: { business?: string; promoting?: string; objective?: string };
   /** Effective copy per concept/size ("C/728x90" -> {...}) for inline editing. */
   perSizeCopy?: Record<string, { headline?: string; support?: string; cta?: string }>;
+  /** Latest delivered package, when the project is already complete. */
+  delivered?: { at: string; zipUrl: string; fileCount?: number };
 }
 
 const esc = (v: unknown) =>
@@ -479,6 +481,9 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
     <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;margin-top:14px">
       <input type="checkbox" id="se-reverselogo" style="width:auto"> Use the white logo on this size (for dark or photo backgrounds)
     </label>
+    <label>Different logo for this size</label>
+    <input type="file" id="se-logofile" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="font-size:13px;padding:8px 0;border:0">
+    <p class="sub" style="margin:2px 0 0;font-size:12px">A rectangular logo often needs a square variant on square sizes. Upload one here — it applies to this size only.</p>
     <div class="row">
       <button id="se-cancel">Cancel</button>
       <button class="primary" id="se-apply">Apply to this size</button>
@@ -492,6 +497,7 @@ window.PROOF_COPY = ${JSON.stringify(opts.initialCopy ?? {})};
 window.PROOF_COLORS = ${JSON.stringify(opts.initialColors ?? {})};
 window.PROOF_META = ${JSON.stringify(opts.meta ?? {})};
 window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
+window.PROOF_DELIVERED = ${JSON.stringify(opts.delivered ?? null)};
 (function () {
   'use strict';
   var body = document.body;
@@ -567,13 +573,29 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
       fetch(window.PROOF_ENDPOINT + '/' + (kind === 'approve' ? 'approve' : 'revision'), {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ concept: id, notes: notes })
-      }).catch(function () { /* the client already saw confirmation */ });
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (kind === 'approve' && res && res.downloadUrl) showDownload(res.downloadUrl, res.fileCount);
+        })
+        .catch(function () { /* the client already saw confirmation */ });
     }
     var box = document.querySelector('.decide');
-    box.innerHTML = '<h2>' + (kind === 'approve' ? 'Approved' : 'Changes requested') + '</h2>' +
-      '<p>' + (kind === 'approve'
-        ? 'Concept ' + id + ' is moving into production. We will send the finished files shortly.'
-        : 'Thanks — your notes are with the team and a revised proof is on the way.') + '</p>';
+    if (kind === 'approve') {
+      box.innerHTML = '<h2>Approved</h2>' +
+        '<p><span class="spinner"></span> Packaging your finished files\u2026</p>';
+    } else {
+      box.innerHTML = '<h2>Changes requested</h2>' +
+        '<p>Thanks \u2014 your notes are with the team and a revised proof is on the way.</p>';
+    }
+  }
+  // When approval comes back with a download link, show the button right here.
+  function showDownload(url, count) {
+    var box = document.querySelector('.decide');
+    box.innerHTML = '<h2>Approved \u2014 your ads are ready</h2>' +
+      '<p>' + (count ? count + ' finished files, ' : '') + 'organised by platform and named for upload.</p>' +
+      '<a href="' + url + '" style="display:inline-block;background:#1F5FC0;color:#fff;text-decoration:none;' +
+      'padding:14px 30px;border-radius:8px;font-weight:600;font-size:16px">Download your ads (.zip)</a>';
   }
 
   document.getElementById('approve').addEventListener('click', function () { decision('approve'); });
@@ -708,6 +730,12 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
 
   prefillEditor((document.querySelector('input[name=concept]:checked') || {}).value || 'A');
 
+  // Already approved and packaged? The download stays right here on the proof,
+  // however many times the page is opened. Nobody needs an email to find it.
+  if (window.PROOF_DELIVERED && window.PROOF_DELIVERED.zipUrl) {
+    showDownload(window.PROOF_DELIVERED.zipUrl, window.PROOF_DELIVERED.fileCount);
+  }
+
   /* -------------------------------------- per-banner "edit this size" */
   var sizeModal = document.getElementById('sizeEditor');
   var seCtx = { concept: null, size: null };
@@ -732,6 +760,18 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
   document.getElementById('se-cancel').addEventListener('click', function () {
     sizeModal.classList.remove('on');
   });
+  var seLogoInput = document.getElementById('se-logofile');
+  if (seLogoInput) {
+    seLogoInput.addEventListener('change', function () {
+      window.__seLogoData = null;
+      var f = this.files && this.files[0];
+      if (!f) return;
+      if (f.size > 2 * 1024 * 1024) { alert('Please keep the logo under 2 MB.'); this.value = ''; return; }
+      var rd = new FileReader();
+      rd.onload = function () { window.__seLogoData = rd.result; };
+      rd.readAsDataURL(f);
+    });
+  }
   sizeModal.addEventListener('click', function (e) {
     if (e.target === sizeModal) sizeModal.classList.remove('on');
   });
@@ -748,7 +788,8 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
           support: document.getElementById('se-support').value.trim(),
           cta: document.getElementById('se-cta').value.trim()
         },
-        reverseLogo: document.getElementById('se-reverselogo').checked
+        reverseLogo: document.getElementById('se-reverselogo').checked,
+        sizeLogo: window.__seLogoData ? { dataUrl: window.__seLogoData } : undefined
       })
     })
       .then(function (r) { return r.json(); })
