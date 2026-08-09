@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
 import DatePicker from 'react-datepicker';
 import Select from 'react-select';
-import { parseISO, isAfter, isBefore, parseISO as parse } from 'date-fns';
+import { parseISO, isAfter, isBefore } from 'date-fns';
 import ImageModal from './components/ImageModal';
 import LoadingSpinner from './components/LoadingSpinner';
 import './App.css';
+import 'react-datepicker/dist/react-datepicker.css';
 
 const App = () => {
   // State
@@ -13,69 +13,48 @@ const App = () => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
-  // Filters
   const [selectedClient, setSelectedClient] = useState(null);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
-  const [searchInput, setSearchInput] = useState('');
-  
-  // Modal
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedCreative, setSelectedCreative] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  // Initialize - Fetch IO records from Knack
+  // Initialize - Load data from JSON file
   useEffect(() => {
-    fetchIoRecords();
+    loadDataFromFile();
   }, []);
 
-  const fetchIoRecords = async () => {
+  const loadDataFromFile = async () => {
     setLoading(true);
     setError(null);
     try {
-      const apiKey = process.env.REACT_APP_KNACK_API_KEY;
-      const appId = process.env.REACT_APP_KNACK_APP_ID;
+      console.log('📥 Loading campaigns data from file...');
       
-      if (!apiKey || !appId) {
-        throw new Error(
-          'Missing required Knack credentials. Check: REACT_APP_KNACK_API_KEY, REACT_APP_KNACK_APP_ID'
-        );
+      // Load JSON file from public/data/campaigns.json
+      const response = await fetch('/data/campaigns.json');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load data file: ${response.statusText}`);
       }
 
-      // Query object_135 - ONLY LOAD FIRST PAGE (250 records)
-      const objectId = 'object_135';
-      const batchSize = 250;
+      const data = await response.json();
+      const records = data.records || [];
 
-      const response = await axios.get(
-        `https://api.knack.com/v1/objects/${objectId}/records`,
-        {
-          headers: {
-            'X-Knack-REST-API-Key': apiKey,
-            'X-Knack-Application-Id': appId,
-            'Content-Type': 'application/json'
-          },
-          params: {
-            rows_per_page: batchSize,
-            page: 1 // ONLY LOAD PAGE 1
-          },
-          timeout: 10000 // 10 second timeout
-        }
-      );
-
-      const records = response.data.records || [];
-      
       if (records.length === 0) {
-        setError('No records found');
+        setError('No records found in data file');
         setIoRecords([]);
         setClients([]);
+        setLastUpdated(data.exportedAt || new Date().toISOString());
         return;
       }
 
       setIoRecords(records);
+      setLastUpdated(data.exportedAt || new Date().toISOString());
 
       // Extract unique clients from field_2384 (no duplicates)
       const uniqueClients = [...new Set(
-        allRecords
+        records
           .map(r => r.field_2384) // Client lookup field
           .filter(client => client && client.toString().trim() !== '') // Remove empty/null
       )].sort();
@@ -93,13 +72,96 @@ const App = () => {
       setStartDate(firstDayOfMonth);
       setEndDate(today);
 
-      console.log(`✓ Loaded ${allRecords.length} records from ${pageNumber - 1} pages`);
+      console.log(`✓ Loaded ${records.length} records from local data`);
 
     } catch (err) {
-      console.error('Error fetching records:', err);
-      setError(err.message || 'Failed to fetch data from Knack');
+      console.error('Error loading data:', err);
+      setError(`Error: ${err.message}. Make sure to run: npm run export-data`);
       setIoRecords([]);
       setClients([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Refresh data by re-exporting from Knack (requires API credentials)
+  const refreshDataFromKnack = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const apiKey = process.env.REACT_APP_KNACK_API_KEY;
+      const appId = process.env.REACT_APP_KNACK_APP_ID;
+      
+      if (!apiKey || !appId) {
+        throw new Error(
+          'API credentials not found. Cannot refresh from Knack.'
+        );
+      }
+
+      console.log('🔄 Refreshing data from Knack...');
+      
+      let allRecords = [];
+      let pageNumber = 1;
+      let hasMore = true;
+      const batchSize = 250;
+
+      while (hasMore && pageNumber <= 40) { // Max 10,000 records
+        try {
+          const response = await fetch(
+            `https://api.knack.com/v1/objects/object_135/records?rows_per_page=${batchSize}&page=${pageNumber}`,
+            {
+              headers: {
+                'X-Knack-REST-API-Key': apiKey,
+                'X-Knack-Application-Id': appId,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+
+          if (!response.ok) throw new Error(`API returned ${response.status}`);
+
+          const data = await response.json();
+          const records = data.records || [];
+          
+          if (records.length === 0) {
+            hasMore = false;
+          } else {
+            allRecords = allRecords.concat(records);
+            pageNumber++;
+          }
+        } catch (pageErr) {
+          console.warn(`Error on page ${pageNumber}:`, pageErr);
+          hasMore = false;
+        }
+      }
+
+      if (allRecords.length === 0) {
+        throw new Error('No records found from Knack');
+      }
+
+      setIoRecords(allRecords);
+      setLastUpdated(new Date().toISOString());
+
+      // Extract unique clients
+      const uniqueClients = [...new Set(
+        allRecords
+          .map(r => r.field_2384)
+          .filter(client => client && client.toString().trim() !== '')
+      )].sort();
+
+      setClients(
+        uniqueClients.map(client => ({
+          label: client,
+          value: client
+        }))
+      );
+
+      alert(`✅ Refreshed! Loaded ${allRecords.length} records from Knack`);
+      console.log(`✓ Refreshed ${allRecords.length} records from Knack`);
+
+    } catch (err) {
+      console.error('Error refreshing:', err);
+      setError(`Refresh failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -163,194 +225,169 @@ const App = () => {
     }).filter(creative => creative.clientName);
   }, [filteredRecords]);
 
-  const handleImageClick = (creative) => {
-    setSelectedImage(creative);
+  const handleResetFilters = () => {
+    setSelectedClient(null);
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    setStartDate(firstDayOfMonth);
+    setEndDate(today);
+  };
+
+  const openModal = (creative) => {
+    setSelectedCreative(creative);
     setIsModalOpen(true);
   };
 
-  const handleClientChange = (option) => {
-    setSelectedClient(option);
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedCreative(null);
   };
 
-  const handleReset = () => {
-    setSelectedClient(null);
-    setStartDate(null);
-    setEndDate(null);
-    setSearchInput('');
-  };
-
-  const clientOptions = clients.filter(client =>
-    client.label.toLowerCase().includes(searchInput.toLowerCase())
-  );
+  if (loading) {
+    return <LoadingSpinner message="Loading campaigns data..." />;
+  }
 
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>📸 Creative Lookup</h1>
-        <p>Find creatives running in your campaigns</p>
+        <h1>🎬 Creative Lookup</h1>
+        <p>Search and filter marketing campaign creatives</p>
       </header>
 
-      <div className="filters-section">
-        <div className="filter-group">
-          <label>Client Organization</label>
-          <Select
-            options={clientOptions}
-            value={selectedClient}
-            onChange={handleClientChange}
-            placeholder="Search and select client..."
-            isClearable
-            isSearchable
-            onInputChange={setSearchInput}
-            inputValue={searchInput}
-            styles={customSelectStyles}
-          />
-        </div>
-
-        <div className="filter-group">
-          <label>Start Date</label>
-          <DatePicker
-            selected={startDate}
-            onChange={date => setStartDate(date)}
-            placeholderText="Select start date"
-            dateFormat="MM/dd/yyyy"
-            className="date-input"
-            isClearable
-          />
-        </div>
-
-        <div className="filter-group">
-          <label>End Date</label>
-          <DatePicker
-            selected={endDate}
-            onChange={date => setEndDate(date)}
-            placeholderText="Select end date"
-            dateFormat="MM/dd/yyyy"
-            className="date-input"
-            isClearable
-            minDate={startDate}
-          />
-        </div>
-
-        <button className="reset-button" onClick={handleReset}>
-          Reset Filters
-        </button>
-      </div>
-
       {error && (
-        <div className="error-message">
-          <strong>Error:</strong> {error}
+        <div className="error-banner">
+          <p>⚠️ {error}</p>
+          <small>Try running: <code>npm run export-data</code></small>
         </div>
       )}
 
-      {loading && <LoadingSpinner />}
+      <main className="app-main">
+        <div className="filters-section">
+          <div className="filter-group">
+            <label>Client</label>
+            <Select
+              aria-label="Filter by client"
+              options={clients}
+              value={selectedClient}
+              onChange={setSelectedClient}
+              placeholder="Select a client..."
+              isClearable
+              isSearchable
+              styles={{
+                control: (base) => ({
+                  ...base,
+                  minHeight: '40px'
+                })
+              }}
+            />
+          </div>
 
-      {!loading && creatives.length === 0 && (
-        <div className="empty-state">
-          <p>No creatives found. Try adjusting your filters.</p>
-        </div>
-      )}
+          <div className="filter-group">
+            <label>Start Date</label>
+            <DatePicker
+              selected={startDate}
+              onChange={(date) => setStartDate(date)}
+              placeholderText="Start date"
+              dateFormat="MM/dd/yyyy"
+              className="date-picker"
+            />
+          </div>
 
-      {!loading && creatives.length > 0 && (
-        <div className="results-section">
-          <h2>Results ({creatives.length} creatives)</h2>
-          
-          <div className="creatives-grid">
-            {creatives.map(creative => (
-              <CreativeCard
-                key={creative.id}
-                creative={creative}
-                onImageClick={handleImageClick}
-              />
-            ))}
+          <div className="filter-group">
+            <label>End Date</label>
+            <DatePicker
+              selected={endDate}
+              onChange={(date) => setEndDate(date)}
+              placeholderText="End date"
+              dateFormat="MM/dd/yyyy"
+              className="date-picker"
+            />
+          </div>
+
+          <div className="filter-actions">
+            <button className="reset-button" onClick={handleResetFilters}>
+              Reset Filters
+            </button>
+            <button className="refresh-button" onClick={refreshDataFromKnack}>
+              🔄 Refresh Data
+            </button>
           </div>
         </div>
-      )}
 
-      {isModalOpen && selectedImage && (
-        <ImageModal
-          creative={selectedImage}
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setSelectedImage(null);
-          }}
-        />
-      )}
-    </div>
-  );
-};
-
-// Creative Card Component
-const CreativeCard = ({ creative, onImageClick }) => {
-  const [imageError, setImageError] = useState(false);
-
-  return (
-    <div className="creative-card">
-      <div 
-        className="creative-thumbnail"
-        onClick={() => onImageClick(creative)}
-        role="button"
-        tabIndex={0}
-        onKeyPress={(e) => e.key === 'Enter' && onImageClick(creative)}
-      >
-        {imageError ? (
-          <div className="image-error">No image available</div>
-        ) : (
-          <img
-            src={creative.imageUrl}
-            alt={creative.campaignName}
-            onError={() => setImageError(true)}
-          />
-        )}
-        <div className="thumbnail-overlay">
-          <span className="expand-icon">🔍</span>
-        </div>
-      </div>
-      
-      <div className="creative-info">
-        <h3 title={creative.ioCampaignName}>
-          {creative.ioCampaignName || creative.productCampaignName || 'Untitled'}
-        </h3>
-        <p className="client-name">{creative.clientName}</p>
-        {creative.productText && (
-          <p className="product-text" title={creative.productText}>
-            {creative.productText}
+        <div className="results-info">
+          <p>
+            Showing <strong>{creatives.length}</strong> of{' '}
+            <strong>{ioRecords.length}</strong> campaigns
+            {lastUpdated && (
+              <span style={{ marginLeft: '20px', fontSize: '0.9em', opacity: 0.7 }}>
+                Last updated: {new Date(lastUpdated).toLocaleDateString()}
+              </span>
+            )}
           </p>
+        </div>
+
+        {creatives.length === 0 ? (
+          <div className="no-results">
+            <p>No campaigns found matching your filters.</p>
+            <button onClick={handleResetFilters}>Clear Filters</button>
+          </div>
+        ) : (
+          <div className="creatives-grid">
+            {creatives.map((creative) => (
+              <div key={creative.id} className="creative-card">
+                <div
+                  className="creative-image"
+                  onClick={() => openModal(creative)}
+                >
+                  {creative.imageUrl ? (
+                    <img
+                      src={creative.imageUrl}
+                      alt={creative.ioCampaignName || 'Campaign creative'}
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200"%3E%3Crect fill="%23eee" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="14" fill="%23999"%3ENo image%3C/text%3E%3C/svg%3E';
+                      }}
+                    />
+                  ) : (
+                    <div className="no-image">No image available</div>
+                  )}
+                </div>
+
+                <div className="creative-info">
+                  <h3 title={creative.ioCampaignName}>
+                    {creative.ioCampaignName || creative.productCampaignName || 'Untitled'}
+                  </h3>
+                  <p className="client-name">{creative.clientName}</p>
+                  {creative.productText && (
+                    <p className="product-text" title={creative.productText}>
+                      {creative.productText}
+                    </p>
+                  )}
+                  <p className="meta">
+                    <strong>IO:</strong> {creative.ioNumber || 'N/A'}
+                  </p>
+                  <p className="meta">
+                    <strong>Date:</strong> {creative.startDate || 'N/A'}
+                  </p>
+                  <p className="meta">
+                    <strong>Status:</strong>
+                    <span className={`status-badge ${creative.status?.toLowerCase()}`}>
+                      {creative.status || 'N/A'}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
-        <p className="meta">
-          <strong>IO:</strong> {creative.ioNumber || 'N/A'}
-        </p>
-        <p className="meta">
-          <strong>Date:</strong> {creative.startDate || 'N/A'}
-        </p>
-        <p className="meta">
-          <strong>Status:</strong> 
-          <span className={`status-badge ${creative.status?.toLowerCase()}`}>
-            {creative.status}
-          </span>
-        </p>
-      </div>
+      </main>
+
+      <ImageModal
+        creative={selectedCreative}
+        isOpen={isModalOpen}
+        onClose={closeModal}
+      />
     </div>
   );
-};
-
-// Custom React-Select Styles
-const customSelectStyles = {
-  control: (base) => ({
-    ...base,
-    borderRadius: '8px',
-    borderColor: '#d1d5db',
-    boxShadow: 'none',
-    '&:hover': {
-      borderColor: '#9ca3af'
-    }
-  }),
-  option: (base, state) => ({
-    ...base,
-    backgroundColor: state.isSelected ? '#3b82f6' : state.isFocused ? '#eff6ff' : 'white',
-    color: state.isSelected ? 'white' : 'black',
-    cursor: 'pointer'
-  })
 };
 
 export default App;

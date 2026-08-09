@@ -4,13 +4,10 @@ services:
     env: node
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: npm start
+    startCommand: npm run serve
     
     envVars:
       - key: REACT_APP_KNACK_API_KEY
-        scope: build
-        sync: false
-      - key: REACT_APP_KNACK_IO_OBJECT_ID
         scope: build
         sync: false
       - key: NODE_ENV
