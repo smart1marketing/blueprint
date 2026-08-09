@@ -810,7 +810,16 @@
       method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify({
         business: val('business'), promoting: val('promoting'),
-        objective: val('objective'), landingAnalysis: suggestions || undefined
+        objective: val('objective'), landingAnalysis: suggestions || undefined,
+        benefit: val('benefit'), offer: val('offer'),
+        palette: (discovered.brand && discovered.brand.colors) ? {
+          primary: discovered.brand.colors.primary,
+          secondary: discovered.brand.colors.secondary,
+          accent: discovered.brand.colors.accent
+        } : undefined,
+        // Uploaded photos become references so the AI hero reflects the real
+        // product/location, not a generic stock scene.
+        referenceImages: (uploaded.image || []).map(function (x) { return x.url; })
       })
     })
       .then(function (r) { return r.json(); })
@@ -1078,8 +1087,37 @@
           if (!out || !out.public_id) throw new Error((out && out.error && out.error.message) || 'Upload rejected');
           uploaded[kindFor === 'logo' ? 'logo' : 'image'].push({ publicId: out.public_id, url: out.secure_url, name: file.name });
           setRow(row, 'ok', 'Uploaded');
+          // For a photo (not a logo), offer to use it as the ad background.
+          if (kindFor !== 'logo' && /^image\//.test(file.type) && file.type !== 'image/svg+xml') {
+            offerAsBackground(out.secure_url, file.name, row);
+          }
         })
         .catch(function (err) { setRow(row, 'bad', err.message || 'Upload failed'); });
+    }
+
+    // When someone uploads a photo, ask if they want it as the ad background.
+    // Their choice is remembered on window.__uploadedBg and sent at submit.
+    function offerAsBackground(url, name, row) {
+      if (!row) return;
+      var q = document.createElement('div');
+      q.style.cssText = 'margin-top:6px;font-size:13px;color:var(--ink-2)';
+      q.innerHTML = 'Use this photo as your ad background? ';
+      var yes = document.createElement('button');
+      yes.type = 'button'; yes.textContent = 'Yes, use it';
+      yes.style.cssText = 'font-size:12px;padding:3px 10px;margin-right:6px;border:1px solid var(--signal);border-radius:6px;background:#fff;color:var(--signal);font-weight:600;cursor:pointer';
+      var no = document.createElement('button');
+      no.type = 'button'; no.textContent = 'No';
+      no.style.cssText = 'font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer';
+      yes.addEventListener('click', function () {
+        window.__uploadedBg = { url: url, name: name };
+        q.innerHTML = '<span style="color:var(--signal);font-weight:600">\\u2713 This photo will be used as your background.</span>';
+      });
+      no.addEventListener('click', function () {
+        if (window.__uploadedBg && window.__uploadedBg.url === url) window.__uploadedBg = null;
+        q.remove();
+      });
+      q.appendChild(yes); q.appendChild(no);
+      row.appendChild(q);
     }
 
     function addRow(file, cls, text) {
@@ -1178,6 +1216,15 @@
       data.pickedLogoUrl = picked ? picked.value : ((discovered.logoOptions || [])[0] || {}).url;
     }
     data.honeypot = form.elements.company_url_confirm.value;
+    // Every uploaded logo and photo (Cloudinary links only — the files live in
+    // Cloudinary, we store just the URL). Logged with the campaign server-side.
+    data.uploadedLogos = uploaded.logo || [];
+    data.uploadedImages = uploaded.image || [];
+    // If the person opted to use one of their uploaded photos as the ad
+    // background, pass that choice straight through.
+    if (window.__uploadedBg && window.__uploadedBg.url) {
+      data.backgroundChoice = { mode: 'upload', url: window.__uploadedBg.url };
+    }
     var loadedAt = Number(document.getElementById('loadedAt').value) || 0;
     data.elapsedMs = loadedAt ? (Date.now() - loadedAt) : null;
     data.pageUrl = document.referrer || '';

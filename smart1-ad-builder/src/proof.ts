@@ -593,7 +593,11 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
   var bgSel = { mode: 'solid', url: null };
   function apiBase() {
     // The rebuild endpoint is /api/proof/<pid>; image endpoints are /api/images/*
-    return (window.PROOF_ENDPOINT || '').replace(/\\/proof\\/[^/]+$/, '');
+    // Derive the /api base from PROOF_ENDPOINT (e.g. '/api/proof/<pid>')
+    // without a regex — regex literals get mangled inside this template.
+    var ep = window.PROOF_ENDPOINT || '';
+    var cut = ep.indexOf('/proof/');
+    return cut >= 0 ? ep.slice(0, cut) : ep;
   }
   var bgModeBtns = document.querySelectorAll('.bg-mode');
   for (var m = 0; m < bgModeBtns.length; m++) {
@@ -681,7 +685,8 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
           // The server returns immediately and renders in the background;
           // poll the public status endpoint and reload when it's done.
           status.textContent = 'Rebuilding in the background — this page will refresh itself when the new ads are ready. You can keep looking around.';
-          var ridFromPath = (location.pathname.match(/\/proof\/([\w-]+)/) || [])[1];
+          var _pp = location.pathname.split('/proof/');
+          var ridFromPath = _pp.length > 1 ? _pp[1].split('/')[0].split('?')[0].split('#')[0] : '';
           var target = (res.proofUrl || location.pathname);
           (function pollReady() {
             fetch('/api/requests/' + ridFromPath + '/status')
@@ -749,7 +754,8 @@ window.PROOF_PERSIZE = ${JSON.stringify(opts.perSizeCopy ?? {})};
       .then(function (r) { return r.json(); })
       .then(function (res) {
         btn.textContent = 'Rebuilding in background…';
-        var ridFromPath = (location.pathname.match(/\/proof\/([\w-]+)/) || [])[1];
+        var _pp = location.pathname.split('/proof/');
+          var ridFromPath = _pp.length > 1 ? _pp[1].split('/')[0].split('?')[0].split('#')[0] : '';
         (function pollReady() {
           fetch('/api/requests/' + ridFromPath + '/status')
             .then(function (r2) { return r2.json(); })

@@ -38,6 +38,7 @@ import { getPlatform } from './registry';
 import sharp from 'sharp';
 import { notify } from './notify';
 import { discoverBrand, normalizeDomain } from './brandfetch';
+import { BrandCache } from './brand-cache';
 import { ALLOWED_FORMATS, folderFor, signUpload, type AssetKind } from './assets';
 import { CloudinaryService, slug } from './cloudinary';
 
@@ -54,6 +55,7 @@ const BUILD_STAMP: { builtAt?: string; node?: string } = (() => {
 /** Base URL for links inside notifications. Set on Render to the public host. */
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/$/, '');
 const projects = new ProjectStore(OUT);
+const brandCache = new BrandCache(path.join(OUT, 'brand-cache'));
 
 /**
  * Sites allowed to iframe the embed. Browsers block framing unless the framed
@@ -330,10 +332,26 @@ const server = http.createServer(async (req, res) => {
             .filter(Boolean).map(String),
           notes: result.notes,
         });
+        const now = new Date().toISOString();
         for (const [kind, source] of Object.entries(result.assetSources)) {
           if (source === 'none') continue;
-          projects.addAsset(project.projectId, { kind: kind as any, source: source as any });
+          project.assets.push({ kind: kind as any, source: source as any, addedAt: now });
         }
+        for (const up of (body.uploadedLogos ?? []) as any[]) {
+          if (up?.url) project.assets.push({ kind: 'logo', source: 'upload', url: up.url, publicId: up.publicId, name: up.name, addedAt: now });
+        }
+        for (const up of (body.uploadedImages ?? []) as any[]) {
+          if (up?.url) {
+            const isBg = body.backgroundChoice?.mode === 'upload' && body.backgroundChoice?.url === up.url;
+            project.assets.push({ kind: isBg ? 'background' : 'product', source: 'upload', url: up.url, publicId: up.publicId, name: up.name, addedAt: now });
+          }
+        }
+        // Log the website + brand details we pulled, with the fetch time, so a
+        // refresh decision (>3 months) has something to check against later.
+        if (result.campaign.brand && body.landingPage) {
+          project.notes.push(`[${now}] Brand details on file for ${body.website ?? body.landingPage} (source: ${body.brandSource ?? 'brandfetch'}).`);
+        }
+        projects.save(project);
         (build as any).projectId = project.projectId;
         console.log(`[intake] ${requestId} -> project ${project.projectId}, renderable=${result.renderable}` +
           (result.renderable ? '' : ` (not renderable: ${result.notes.slice(0, 2).join('; ')})`));
@@ -427,8 +445,17 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: 'Provide a website domain' }, cors);
       }
       try {
-        const found = await discoverBrand(domain);
-        return json(res, 200, found, cors);
+        // Cache Brandfetch results for ~3 months. A domain looked up recently
+        // is served from disk; only a stale (or forced) lookup hits the API.
+        // `refresh=1` on the query forces a re-fetch.
+        const forceRefresh = url.searchParams.get('refresh') === '1';
+        const { result: found, cached, ageDays } = await brandCache.getOrFetch(
+          domain,
+          () => discoverBrand(domain),
+          { refresh: forceRefresh },
+        );
+        console.log(`[brand] ${domain}: ${cached ? `cache hit (${ageDays}d old)` : 'fetched fresh from Brandfetch'}`);
+        return json(res, 200, { ...(found as object), cached, ageDays }, cors);
       } catch (e: any) {
         // Discovery failing is normal for small businesses with no public
         // brand record. It must not block the request — the customer just
@@ -1016,8 +1043,26 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse(await readBody(req, 50_000)) as any;
       try {
         const cacheDir = path.join(OUT, 'imagery', slug(body.requestId ?? "adhoc"));
+        // If the caller passed uploaded photo URLs (Cloudinary), fetch them as
+        // local references so the generated hero echoes the real product.
+        const refs: string[] = [];
+        for (const u of (body.referenceImages ?? []) as string[]) {
+          try {
+            if (!/^https?:\/\//.test(u)) continue;
+            const r = await fetch(u);
+            if (!r.ok) continue;
+            fs.mkdirSync(cacheDir, { recursive: true });
+            const f = path.join(cacheDir, `ref-${refs.length}.png`);
+            fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
+            refs.push(f);
+          } catch { /* skip a bad reference */ }
+        }
         const cand = await generateHero(
-          { business: body.business ?? '', promoting: body.promoting ?? '', objective: body.objective, landing: body.landingAnalysis },
+          {
+            business: body.business ?? '', promoting: body.promoting ?? '', objective: body.objective,
+            landing: body.landingAnalysis, benefit: body.benefit, offer: body.offer,
+            palette: body.palette, referenceImages: refs,
+          },
           { cacheDir },
         );
         return json(res, 200, { candidate: { ...cand, url: `/files/${path.relative(OUT, cand.file)}`, file: undefined } }, cors);

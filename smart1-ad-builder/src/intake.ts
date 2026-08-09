@@ -56,7 +56,11 @@ export interface Submission {
   approvedCopy?: { headline?: string; support?: string; cta?: string };
   /** Background direction chosen for the offer concept: a Pixabay or AI image
    *  the person selected on the review step. */
-  backgroundChoice?: { mode: 'pixabay' | 'ai'; url: string };
+  backgroundChoice?: { mode: 'pixabay' | 'ai' | 'upload'; url: string };
+  /** Cloudinary links for everything the customer uploaded. Files live in
+   *  Cloudinary; we keep only the URL. Logged with the campaign. */
+  uploadedLogos?: { publicId?: string; url: string; name?: string }[];
+  uploadedImages?: { publicId?: string; url: string; name?: string }[];
   platforms?: string[];
   stockOk?: boolean;
   /** Present when discovery ran in the browser and the customer confirmed it. */
@@ -601,10 +605,27 @@ export async function buildCampaign(
     // attach it. The composer paints it full-bleed with a legibility overlay.
     if (sub.backgroundChoice?.url) {
       try {
-        // The url is like /files/imagery/<slug>/<file>; map to a disk path.
-        const rel = sub.backgroundChoice.url.replace(/^\/files\//, '');
-        const candidate = path.join(opts.outputDir ?? 'out', rel);
-        if (fs.existsSync(candidate)) {
+        const chosen = sub.backgroundChoice.url;
+        let candidate: string | null = null;
+        if (/^https?:\/\//.test(chosen)) {
+          // An uploaded photo lives in Cloudinary — fetch it once to raster it
+          // under budget. We still keep the Cloudinary link as the source of
+          // record; this local copy is only the composited input.
+          const resp = await fetch(chosen);
+          if (resp.ok) {
+            const buf = Buffer.from(await resp.arrayBuffer());
+            const tmp = path.join(cacheDir, 'uploaded-bg-src');
+            fs.mkdirSync(cacheDir, { recursive: true });
+            fs.writeFileSync(tmp, buf);
+            candidate = tmp;
+          }
+        } else {
+          // A Pixabay/AI pick already served locally under /files/...
+          const rel = chosen.replace(/^\/files\//, '');
+          const local = path.join(opts.outputDir ?? 'out', rel);
+          if (fs.existsSync(local)) candidate = local;
+        }
+        if (candidate) {
           const fitted = await fitImageToBudget(candidate, path.join(cacheDir, 'offer-bg.jpg'));
           offerBg = fitted.file;
           notes.push(`Your chosen ${sub.backgroundChoice.mode} background is applied to every concept.`);

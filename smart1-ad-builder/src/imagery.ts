@@ -41,6 +41,16 @@ export interface ImageQuery {
   landing?: LandingAnalysis;
   /** Extra keywords the caller wants to force in. */
   keywords?: string[];
+  /** The single most important benefit, if known — sharpens the subject. */
+  benefit?: string;
+  /** The offer/promotion, so a sale image differs from a lead-gen image. */
+  offer?: string;
+  /** Brand palette, so the generated scene tones match the ad. */
+  palette?: { primary?: string; secondary?: string; accent?: string };
+  /** Local reference images the customer uploaded (product/location/staff
+   *  photos). When present, the generator is told to match their look, and —
+   *  where the model supports it — they are sent as visual references. */
+  referenceImages?: string[];
 }
 
 /**
@@ -121,6 +131,61 @@ export async function searchPixabay(
  * Generate an original hero with OpenAI images, prompted from the campaign and
  * landing page. Returns one candidate, under 150 KB.
  */
+
+/**
+ * Build a structured, five-tier text-to-image prompt (subject, setting,
+ * composition, style/lighting, and a negative-prompt clause). This mirrors the
+ * design-guidelines recommendation: a controlled prompt produces on-brand
+ * imagery with clean negative space for the text overlay, instead of the loose
+ * one-line prompt we used before.
+ */
+export function buildHeroPrompt(q: ImageQuery): { prompt: string; negative: string } {
+  // 1. Subject — the concrete thing the ad is about. Landing summary is the
+  //    richest source; benefit and offer sharpen it.
+  const subjectBits = [q.landing?.summary, q.promoting, q.benefit]
+    .filter(Boolean)
+    .map((s) => String(s).replace(/\.\s*$/, ''))
+    .join('. ');
+  const subject = subjectBits || q.business;
+
+  // 2. Context / setting — tie to the campaign, note the offer if any.
+  const setting = q.offer
+    ? `A real-world setting that suits ${q.business}, evoking the promotion "${q.offer}".`
+    : `A natural, real-world setting that suits ${q.business}.`;
+
+  // 3. Spatial composition — enforce negative space for copy.
+  const composition =
+    'Rule-of-thirds composition with the subject offset to one side, leaving ' +
+    'generous, uncluttered negative space on the opposite side for headline and ' +
+    'button text. Nothing important near the edges.';
+
+  // 4. Style & lighting, tinted toward the brand palette when known.
+  const paletteHint = q.palette?.primary
+    ? `Colour palette in harmony with ${q.palette.primary}${q.palette.accent ? ` and ${q.palette.accent}` : ''}.`
+    : 'Colour palette suited to a professional brand.';
+  const style =
+    `Realistic commercial advertising photography, soft natural lighting, ` +
+    `crisp focus, high resolution. ${paletteHint}`;
+
+  const prompt = [
+    `Advertising background photo for ${q.business}.`,
+    `Subject: ${subject}.`,
+    setting,
+    composition,
+    style,
+  ].join(' ');
+
+  // 5. Negative prompt — keep the model from producing anything that fights
+  //    the overlaid copy or looks artificial.
+  const negative =
+    'text, typography, letters, words, embedded logos, watermarks, signage, ' +
+    'cluttered background, busy patterns behind text, distorted or extra limbs, ' +
+    'oversaturated colours, harsh high-contrast shadows in the copy area, ' +
+    'collage, borders, low resolution, noise artifacts';
+
+  return { prompt, negative };
+}
+
 export async function generateHero(
   q: ImageQuery,
   opts: { cacheDir: string; apiKey?: string; fetchImpl?: typeof fetch; timeoutMs?: number; size?: string },
@@ -129,27 +194,49 @@ export async function generateHero(
   if (!apiKey) throw new Error('OPENAI_API_KEY is not set.');
   const doFetch = opts.fetchImpl ?? fetch;
 
-  const subject = q.landing?.summary || q.promoting || q.business;
-  const prompt =
-    `A clean, professional advertising background photo for ${q.business}. ` +
-    `Subject: ${subject}. ` +
-    `Bright, uncluttered, with generous empty space on one side for text overlay. ` +
-    `Realistic commercial photography, no text, no logos, no watermarks.`;
+  const { prompt, negative } = buildHeroPrompt(q);
+  // gpt-image-1 has no separate negative-prompt field, so fold it in as an
+  // explicit exclusion clause the model honours well in practice.
+  const fullPrompt = `${prompt} Do not include: ${negative}.`;
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 60_000);
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 90_000);
   try {
-    const res = await doFetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1',
-        prompt,
-        n: 1,
-        size: opts.size ?? '1536x1024',
-      }),
-      signal: ctrl.signal,
-    });
+    // When the customer uploaded reference photos, use the edits endpoint so
+    // the generated hero echoes their real product/location, not a generic
+    // stock scene. Fall back to plain generation when there are none.
+    const refs = (q.referenceImages ?? []).filter((f) => fs.existsSync(f)).slice(0, 4);
+    let res: Response;
+    if (refs.length) {
+      const form = new FormData();
+      form.set('model', process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1');
+      form.set('prompt',
+        `${fullPrompt} Use the supplied image(s) as reference for the real subject, ` +
+        `style and colours, but recompose with clean negative space for text.`);
+      form.set('size', opts.size ?? '1536x1024');
+      for (const r of refs) {
+        const buf = fs.readFileSync(r);
+        form.append('image[]', new Blob([buf], { type: 'image/png' }), path.basename(r));
+      }
+      res = await doFetch('https://api.openai.com/v1/images/edits', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${apiKey}` },
+        body: form as any,
+        signal: ctrl.signal,
+      });
+    } else {
+      res = await doFetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1',
+          prompt: fullPrompt,
+          n: 1,
+          size: opts.size ?? '1536x1024',
+        }),
+        signal: ctrl.signal,
+      });
+    }
     if (!res.ok) throw new Error(`OpenAI images returned ${res.status}: ${(await res.text()).slice(0, 150)}`);
     const data: any = await res.json();
     const b64 = data.data?.[0]?.b64_json;

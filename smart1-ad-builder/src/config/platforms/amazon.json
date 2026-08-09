@@ -106,8 +106,8 @@
         12
       ],
       "minFontPx": 22,
-      "noBakedCta": true,
-      "notes": "Amazon mobile shopping format. Supply at 828x250 with a 640x250 safe zone. Amazon may supply the CTA separately, so the safe zone prioritises product, brand and headline.",
+      "noBakedCta": false,
+      "notes": "Amazon mobile shopping format. Supply at 828x250 with a 640x250 safe zone. Amazon may supply the CTA separately, so the safe zone prioritises product, brand and headline. (CTA baked in per Smart 1 request; Amazon may also overlay its own.)",
       "source": "doc",
       "_verifiedAgainst": "https://advertising.amazon.com/resources/ad-specs/dsp/desktop, fetched 2026-08-02"
     },
