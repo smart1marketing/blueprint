@@ -405,16 +405,19 @@ function startBannerJob(projectId, toneId) {
 
     const copy = await ai.bannerCopy({
       analysis: project.analysis, brand: project.brand, customer: project.customer, toneId
-    }).catch(() => ({ cta: tone.line, offer: project.brand?.name || '', headline: tone.line }));
+    }).catch(() => ({ headline: tone.line, support: project.brand?.name || '', cta: tone.line }));
 
     // Get the logo into the account first so the banner can overlay it
     // natively instead of fetching it from the client's website.
     let logoAsset = project.logoAsset || null;
     if (!logoAsset && project.brand?.logo) {
       const folder0 = cdn.folderFor(project.customer, project.createdAt);
-      const up = await cdn.uploadRemote(project.brand.logo, { folder: folder0, publicId: 'client-logo', tags: ['logo'] });
+      const up = await cdn.uploadRemote(project.brand.logo, { folder: folder0, publicId: 'client-logo', tags: ['logo'], colors: true });
       if (up) {
-        logoAsset = { url: up.secure_url, publicId: up.public_id };
+        logoAsset = {
+          url: up.secure_url, publicId: up.public_id,
+          colors: (up.colors || []).slice(0, 4).map((c) => c[0])
+        };
         store.update(projectId, { logoAsset });
       } else {
         log.warn('banner', "Couldn't copy the client logo into Cloudinary — the banner will be built without it.");
@@ -427,16 +430,21 @@ function startBannerJob(projectId, toneId) {
     const folder = cdn.folderFor(project.customer, project.createdAt);
     const uploaded = await cdn.uploadBuffer(Buffer.from(art.b64, 'base64'), {
       folder: `${folder}/banners`, publicId: `banner-art-${toneId}`, resourceType: 'image',
-      tags: ['companion-banner', toneId], context: { tone: tone.label, project: project.customer.projectName }
+      tags: ['companion-banner', toneId], colors: true,
+      context: { tone: tone.label, project: project.customer.projectName }
     });
+    const artColors = (uploaded.colors || []).slice(0, 5).map((c) => c[0]);
 
     const accent = (project.brand?.colors?.[0]?.hex || '#FFB020').replace('#', '');
     const shared = {
       logoPublicId: logoAsset?.publicId || null,
       logoUrl: logoAsset ? null : project.brand?.logo,
-      cta: copy.cta || copy.headline,
-      offer: copy.offer || copy.subline,
-      landingUrl: project.customer.landingUrl || project.customer.homeUrl || '',
+      logoColors: logoAsset?.colors || [],
+      artColors,
+      headline: copy.headline || copy.cta,
+      support: copy.support || copy.offer,
+      homeUrl: project.customer.homeUrl,
+      landingUrl: project.customer.landingUrl,
       accent
     };
 
@@ -460,7 +468,7 @@ function startBannerJob(projectId, toneId) {
         note = 'The logo could not be placed on the banner, so it was built without it. The rest of the banner is fine.';
       } else {
         log.error('banner', `Without logo too: ${second.reason}`);
-        sizes = build({ logoUrl: null, logoPublicId: null, cta: copy.cta || copy.headline, accent });
+        sizes = build({ ...shared, logoUrl: null, logoPublicId: null, support: null });
         const third = await cdn.verifyDerived(sizes['300x250']);
         note = third.ok
           ? 'Only the headline could be placed on the banner. Check the Cloudinary log for the failing layer.'
@@ -479,6 +487,7 @@ function startBannerJob(projectId, toneId) {
       // Companion banners are clickable — this is where a tap lands.
       clickThroughUrl: project.customer.landingUrl || project.customer.homeUrl || '',
       note,
+      contrast: cdn.bannerContrastReport({ accent, artColors, logoColors: logoAsset?.colors || [] }),
       sizes
     };
     banner.url = banner.sizes['300x250'];

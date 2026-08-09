@@ -184,24 +184,28 @@ Return JSON:
   );
 }
 
-/** The words on the banner: a call to action, and one line supporting it. */
+/** Banner words: a 3-4 word campaign headline and one supporting line. */
 export async function bannerCopy({ analysis, brand, customer, toneId }) {
   const tone = toneById(toneId);
   const lang = languageLabel(customer?.language || 'en');
   return chatJSON(
-    `You write companion banner copy for streaming audio ads, in ${lang}. The banner is small and glanceable — a listener sees it on a phone lock screen for a few seconds while the ad plays. The centre of the banner is a CALL TO ACTION: an instruction, starting with a verb, telling them what to do. Beneath it sits one short supporting line carrying the offer or the deadline. Reply as JSON only.`,
+    `You write companion banner copy for streaming audio ads, in ${lang}. A listener glances at this on a phone for two or three seconds while the ad plays, so it carries almost no words. The headline is a THREE OR FOUR WORD summary of what the campaign is — not a slogan, not a sentence, no punctuation at the end. Beneath it goes one short line carrying the offer, the price or the deadline. Reply as JSON only.`,
     `Tone: ${tone.label} — ${tone.direction}
 Business: ${brand?.name || customer.company || customer.customerName}
+Campaign: ${customer.projectName || ''}
 Offer: ${analysis?.offer || customer.promotion || ''}
 Spoken call to action: ${analysis?.callToAction || ''}
 
 Return JSON:
 {
-  "cta": "the instruction, 2-5 words, starts with a verb, no full stop",
-  "offer": "one supporting line, 3-6 words — the offer, price or deadline",
-  "headline": "same as cta, for compatibility"
+  "headline": "3-4 words summarising the campaign, title case, no trailing punctuation",
+  "support": "3-6 words — the offer, price or deadline",
+  "cta": "same as headline, for compatibility"
 }
-Keep both short. The call to action must fit on two lines at most on a 300 by 250 banner.`,
+
+The headline must be 4 words or fewer. Count them before answering. Good examples:
+"Fall Furnace Tune-Up", "Free Roof Inspection", "Spring Drain Special", "Winter Tire Event".
+Bad examples: "Get your furnace checked today before winter" (a sentence), "Comfort You Can Trust" (a slogan, says nothing about the campaign).`,
     { maxTokens: 300 }
   );
 }

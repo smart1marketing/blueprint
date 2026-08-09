@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { config } from '../config.js';
 import { log } from './store.js';
+import { solveScrim, plateFor, pickTextColor, rootDomain, WHITE } from './contrast.js';
 
 let configured = false;
 function ready() {
@@ -30,7 +31,7 @@ export function folderFor(customer, createdAt = new Date()) {
   return `${config.cloudinary.rootFolder}/${client}/${project}-${date}`;
 }
 
-export async function uploadBuffer(buffer, { folder, publicId, resourceType = 'auto', context = {}, tags = [] }) {
+export async function uploadBuffer(buffer, { folder, publicId, resourceType = 'auto', context = {}, tags = [], colors = false }) {
   const cl = ready();
   return new Promise((resolve, reject) => {
     const stream = cl.uploader.upload_stream(
@@ -40,6 +41,7 @@ export async function uploadBuffer(buffer, { folder, publicId, resourceType = 'a
         resource_type: resourceType,
         overwrite: true,
         context,
+        colors,
         tags: ['smart1-radio-studio', ...tags]
       },
       (err, result) => (err ? reject(new Error(`Cloudinary upload failed: ${err.message}`)) : resolve(result))
@@ -56,6 +58,7 @@ export async function uploadRemote(url, opts) {
       public_id: opts.publicId,
       resource_type: opts.resourceType || 'image',
       overwrite: true,
+      colors: opts.colors || false,
       tags: ['smart1-radio-studio', ...(opts.tags || [])]
     });
   } catch (err) {
@@ -70,53 +73,48 @@ const b64url = (s) => Buffer.from(s, 'utf8').toString('base64').replace(/\+/g, '
 // The SDK escapes overlay text itself — pre-encoding here double-encodes it.
 const textSafe = (s = '') => String(s).replace(/[\r\n]+/g, ' ').trim().slice(0, 90);
 
-/** Relative luminance, so text is never placed light-on-light. */
-function readableOn(hex) {
-  const h = String(hex || '').replace('#', '').slice(0, 6);
-  if (h.length !== 6) return 'white';
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-  const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.5 ? 'rgb:0B1220' : 'white';
-}
-
-/** Strip a URL down to what a listener should read on a small banner. */
-export function displayUrl(raw = '') {
-  const clean = String(raw).trim()
-    .replace(/^https?:\/\//i, '')
-    .replace(/^www\./i, '')
-    .replace(/\/$/, '');
-  return clean.length > 36 ? `${clean.slice(0, 34)}…` : clean;
-}
-
 /**
- * Fixed layout, top to bottom: logo, call to action, landing URL.
+ * Companion banner, to a fixed template:
  *
- *  - the artwork is darkened hard so white type is always legible on it
- *  - the logo sits on a white plate, so a dark or transparent logo still
- *    reads, and it is sized as large as the composition allows
- *  - the URL sits in a full-width bar in the brand accent, with its text
- *    colour chosen from that accent's luminance rather than assumed
+ *      logo            top centre, on a contrast-checked plate
+ *      headline        centre, 3-4 words summarising the campaign
+ *      support line    directly beneath, the offer or deadline
+ *      root domain     bottom centre, in a brand-accent bar
+ *
+ * Nothing here is assumed legible. The scrim strength is solved from the
+ * artwork's own predominant colours, the logo plate is chosen from the
+ * logo's colours, and the URL bar's text colour is chosen from the accent.
  */
 export function bannerUrl(artPublicId, {
-  width, height, logoUrl, logoPublicId, cta, offer, headline, landingUrl, accent = 'FFB020'
+  width, height, logoUrl, logoPublicId, headline, support, cta, offer,
+  landingUrl, homeUrl, accent = 'FFB020', artColors = [], logoColors = []
 }) {
   const cl = ready();
   const scale = width / 300;
-  const px = (n) => Math.max(8, Math.round(n * scale));
+  const px = (n) => Math.max(6, Math.round(n * scale));
+
   const accentHex = String(accent).replace('#', '').slice(0, 6) || 'FFB020';
-  const onAccent = readableOn(accentHex);
-  const middle = cta || headline || '';
-  const url = displayUrl(landingUrl);
+  const bar = pickTextColor(`#${accentHex}`);
+  const barText = bar.color === WHITE ? 'white' : 'rgb:0B1220';
+
+  const title = (headline || cta || '').trim();
+  const sub = (support || offer || '').trim();
+  const domain = rootDomain(homeUrl, landingUrl);
+
+  // Solve the scrim against this artwork rather than using a fixed one.
+  const scrim = solveScrim(artColors, { target: 7 });
+  const plate = plateFor(logoColors);
+
+  // Long headlines step down in size so they never overflow the safe area.
+  const titleSize = title.length <= 14 ? 30 : title.length <= 20 ? 26 : title.length <= 28 ? 22 : 19;
 
   const transformation = [
     { width, height, crop: 'fill', gravity: 'auto' },
-    // Heavy scrim: guarantees contrast for white type over any artwork.
-    { effect: 'brightness:-34' },
-    { effect: 'colorize:42', color: '#0B1220' }
+    { effect: `brightness:${scrim.brightness}` },
+    { effect: `colorize:${scrim.colorize}`, color: '#0B1220' }
   ];
 
-  // 1. LOGO — top, on a white plate, as large as good taste allows.
+  // 1. LOGO — top centre, on a plate chosen for its own colouring.
   const logoLayer = logoPublicId
     ? String(logoPublicId).replace(/\//g, ':')
     : logoUrl ? `fetch:${b64url(logoUrl)}` : null;
@@ -124,46 +122,64 @@ export function bannerUrl(artPublicId, {
   if (logoLayer) {
     transformation.push({
       overlay: logoLayer,
-      width: px(168), height: px(62),
-      crop: 'pad', background: 'white',
+      width: px(164), height: px(58),
+      crop: 'pad', background: plate.plate,
       radius: px(8),
-      gravity: 'north', y: px(16)
+      gravity: 'north', y: px(18)
     });
   }
 
-  // 2. CALL TO ACTION — centred, the largest type on the banner.
-  if (middle) {
+  // 2. HEADLINE — centred below the logo, the dominant element.
+  if (title) {
     transformation.push({
-      overlay: { font_family: 'Montserrat', font_size: px(27), font_weight: 'bold', text: textSafe(middle) },
-      color: 'white',
-      gravity: 'center', y: px(4),
-      width: px(258), crop: 'fit'
+      overlay: { font_family: 'Montserrat', font_size: px(titleSize), font_weight: 'bold', text: textSafe(title) },
+      color: scrim.textColor === WHITE ? 'white' : 'rgb:0B1220',
+      gravity: 'center', y: px(sub ? -4 : 6),
+      width: px(252), crop: 'fit'
     });
   }
 
-  // 3. Supporting line under the CTA, in the brand accent.
-  if (offer) {
+  // 3. SUPPORT LINE — directly beneath the headline, in the accent.
+  if (sub) {
     transformation.push({
-      overlay: { font_family: 'Montserrat', font_size: px(14), font_weight: 'bold', text: textSafe(offer) },
+      overlay: { font_family: 'Montserrat', font_size: px(14), font_weight: 'bold', text: textSafe(sub) },
       color: `rgb:${accentHex}`,
-      gravity: 'center', y: px(38),
-      width: px(258), crop: 'fit'
+      gravity: 'center', y: px(30),
+      width: px(252), crop: 'fit'
     });
   }
 
-  // 4. LANDING URL — bottom bar, accent background, contrast-checked text.
-  if (url) {
+  // 4. ROOT DOMAIN — bottom centre, accent bar, contrast-checked text.
+  if (domain) {
     transformation.push({
-      overlay: { font_family: 'Montserrat', font_size: px(15), font_weight: 'bold', text: textSafe(url) },
-      color: onAccent,
+      overlay: { font_family: 'Montserrat', font_size: px(15), font_weight: 'bold', text: textSafe(domain) },
+      color: barText,
       background: `rgb:${accentHex}`,
-      gravity: 'south', y: px(14),
+      gravity: 'south', y: px(16),
       crop: 'fit'
     });
   }
 
+  // A hairline edge so the banner reads as a unit on a white page.
+  transformation.push({ border: `1px_solid_rgb:0B122033` });
   transformation.push({ quality: 'auto', fetch_format: 'auto' });
+
   return cl.url(artPublicId, { transformation, secure: true });
+}
+
+/** The reasoning behind a banner's colour decisions, for the studio to show. */
+export function bannerContrastReport({ accent = 'FFB020', artColors = [], logoColors = [] }) {
+  const scrim = solveScrim(artColors, { target: 7 });
+  const bar = pickTextColor(`#${String(accent).replace('#', '')}`);
+  const plate = plateFor(logoColors);
+  return {
+    textOnArtwork: `${scrim.ratio}:1`,
+    textOnArtworkPasses: scrim.passes,
+    scrim: `brightness ${scrim.brightness}, colorize ${scrim.colorize}`,
+    urlBar: `${bar.ratio}:1`,
+    urlBarPasses: bar.ratio >= 4.5,
+    logoPlate: plate.reason
+  };
 }
 
 /** Licensed music beds the agency has uploaded to their bed folder. */

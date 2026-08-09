@@ -1244,9 +1244,13 @@ function bannerMarkup(banner) {
     <div class="rowcard">
       <img class="thumb" style="width:300px" src="${esc(banner.sizes['300x250'])}" alt="Companion banner, 300 by 250">
       <div>
-        <h3>${esc(banner.cta || banner.headline || '')}</h3>
-        <p class="small muted">${esc(banner.offer || banner.subline || '')}</p>
-        <p class="small muted">Logo top · call to action centre · ${esc(state.project.customer.landingUrl || state.project.customer.homeUrl || 'website')} along the bottom</p>
+        <h3>${esc(banner.headline || banner.cta || '')}</h3>
+        <p class="small muted">${esc(banner.support || banner.offer || '')}</p>
+        ${banner.contrast ? `<div class="tags" style="margin-top:8px">
+          <span class="tag ${banner.contrast.textOnArtworkPasses ? 'good' : 'hot'}">Headline ${esc(banner.contrast.textOnArtwork)}</span>
+          <span class="tag ${banner.contrast.urlBarPasses ? 'good' : 'hot'}">URL bar ${esc(banner.contrast.urlBar)}</span>
+          <span class="tag">${esc(banner.contrast.logoPlate)}</span>
+        </div>` : ''}
         <div class="tags">
           <a class="tag" href="${esc(banner.sizes['300x250'])}" target="_blank" rel="noopener">300×250</a>
           <a class="tag" href="${esc(banner.sizes['640x640'])}" target="_blank" rel="noopener">640×640</a>
