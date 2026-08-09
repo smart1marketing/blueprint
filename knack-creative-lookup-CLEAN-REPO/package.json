@@ -1,7 +1,0 @@
-{
-  "name": "knack-creative-lookup",
-  "version": "7.0.0",
-  "private": true,
-  "dependencies": { "serve": "^14.2.0" },
-  "scripts": { "start": "serve -s build -l 3000" }
-}
