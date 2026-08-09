@@ -3,12 +3,6 @@ services:
     name: knack-creative-lookup
     env: node
     plan: free
-    
-    # NO BUILD STEP - just serve pre-built files!
     buildCommand: npm install serve
     startCommand: serve -s build -l 3000
-    
-    # No environment variables needed for serving
-    
-    # Auto-deploy on push to main
     autoDeploy: true
