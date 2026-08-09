@@ -27,6 +27,8 @@ import { materializeAssets, resolveAsset, prepareLogo, validateAsset } from './a
 import { contrastRatio, hexLuminance } from './raster';
 import { fontIsAvailable } from './fonts';
 import { validateCampaign, type Finding } from './validate';
+import { makeWordmark } from './wordmark';
+import { fitImageToBudget } from './image-budget';
 import { getTemplate } from './registry';
 import { generateCopy, type CopyBrief } from './copywriter';
 import type { LandingAnalysis } from './projects';
@@ -49,6 +51,16 @@ export interface Submission {
   notes?: string;
   /** Cached landing-page read, when the form already ran it. */
   landingAnalysis?: LandingAnalysis;
+  /** Copy the customer approved on the intake form's review step. When
+   *  present it is authoritative — the build uses it rather than re-writing. */
+  approvedCopy?: { headline?: string; support?: string; cta?: string };
+  /** Background direction chosen for the offer concept: a Pixabay or AI image
+   *  the person selected on the review step. */
+  backgroundChoice?: { mode: 'pixabay' | 'ai' | 'upload'; url: string };
+  /** Cloudinary links for everything the customer uploaded. Files live in
+   *  Cloudinary; we keep only the URL. Logged with the campaign. */
+  uploadedLogos?: { publicId?: string; url: string; name?: string }[];
+  uploadedImages?: { publicId?: string; url: string; name?: string }[];
   platforms?: string[];
   stockOk?: boolean;
   /** Present when discovery ran in the browser and the customer confirmed it. */
@@ -72,13 +84,16 @@ export interface BuildOptions {
   allowPlaceholders?: boolean;
   /** Write copy with the model rather than the deterministic fallback. Default true. */
   aiCopy?: boolean;
+  /** Root of the output tree, so chosen background images (served from
+   *  /files/imagery/...) can be resolved to disk. */
+  outputDir?: string;
 }
 
 export interface BuildResult {
   campaign: Campaign;
   notes: string[];
   findings: Finding[];
-  assetSources: Record<string, 'upload' | 'brandfetch' | 'placeholder' | 'none'>;
+  assetSources: Record<string, 'upload' | 'brandfetch' | 'wordmark' | 'placeholder' | 'none'>;
   renderable: boolean;
 }
 
@@ -251,12 +266,18 @@ function shortCta(cta: string): string {
 export function copyFromSubmission(sub: Submission): CreativeConcept['copy'] {
   const benefit = (sub.benefit ?? '').trim();
   const promoting = (sub.promoting ?? '').trim();
-  const cta = sub.cta && !/recommend/i.test(sub.cta) ? sub.cta : CTA_FALLBACK;
   const offer = (sub.offer ?? '').trim();
 
   const words = (s: string, n: number) => s.split(/\s+/).filter(Boolean).slice(0, n).join(' ');
-  const headline = benefit || words(promoting, 6) || sub.business;
-  const support = promoting && promoting !== headline ? words(promoting, 12) : '';
+
+  // Approved copy from the review step wins over everything. This is the whole
+  // point of the gate: what the human signed off on is what renders.
+  const ap = sub.approvedCopy;
+  const cta = (ap?.cta && ap.cta.trim()) || (sub.cta && !/recommend/i.test(sub.cta) ? sub.cta : CTA_FALLBACK);
+  const headline = (ap?.headline && ap.headline.trim()) || benefit || words(promoting, 6) || sub.business;
+  const support = (ap?.support !== undefined)
+    ? ap.support.trim()
+    : (promoting && promoting !== headline ? words(promoting, 12) : '');
 
   const shortOffer = words(offer, 3);
 
@@ -430,8 +451,22 @@ export async function buildCampaign(
       /* stats are advisory only */
     }
   } else {
-    assetSources.logo = 'none';
-    notes.push('No usable logo. Every creative will fail QA until one is supplied.');
+    // No image logo resolved — from upload or discovery. Rather than dead-end
+    // the whole request, set the business name as a typographic wordmark and
+    // keep building. It is a real, presentable lockup, and it means a customer
+    // without a logo file still gets ads instead of a "we'll be in touch".
+    try {
+      logoFile = await makeWordmark(brand.name, brand, { cacheDir });
+      brand.logos.primary = logoFile;
+      assetSources.logo = 'wordmark';
+      notes.push(
+        'No logo image was available, so the business name is set as a text wordmark. ' +
+        'Uploading a logo later will sharpen the brand presence.',
+      );
+    } catch (e: any) {
+      assetSources.logo = 'none';
+      notes.push(`No usable logo and the text wordmark could not be generated (${e?.message ?? e}).`);
+    }
   }
 
   /* -------------------------------------------------------------- hero */
@@ -448,7 +483,12 @@ export async function buildCampaign(
         notes.push(`"${up.name ?? ref}" was not usable: ${check.reason}`);
         continue;
       }
-      hero = await deriveOrientations(file, path.join(cacheDir, 'hero'));
+      // Guarantee the source hero is under the 150 KB ceiling before it ever
+      // enters the render pipeline. A customer's 5 MB phone photo is squeezed,
+      // not rejected.
+      const fitted = await fitImageToBudget(file, path.join(cacheDir, 'hero-source.jpg'));
+      if (fitted.note) notes.push(`Uploaded photo: ${fitted.note}`);
+      hero = await deriveOrientations(fitted.file, path.join(cacheDir, 'hero'));
       assetSources.hero = 'upload';
       break;
     } catch (e: any) {
@@ -481,7 +521,10 @@ export async function buildCampaign(
   let offerConceptCopy: CreativeConcept['copy'] | null = null;
   let copySource: 'openai' | 'fallback' = 'fallback';
 
-  if (opts.aiCopy !== false) {
+  // If the customer approved copy on the review step, that is final — do not
+  // let the AI writer second-guess it. It still runs when there is no approved
+  // copy (e.g. an API caller that skipped the form).
+  if (opts.aiCopy !== false && !sub.approvedCopy) {
     const brief: CopyBrief = {
       business: sub.business,
       promoting: sub.promoting,
@@ -524,6 +567,7 @@ export async function buildCampaign(
     }
   }
 
+  let offerBg: string | undefined;
   const concepts: CreativeConcept[] = [
     {
       conceptId: 'A',
@@ -555,12 +599,55 @@ export async function buildCampaign(
     };
 
     const aiCopy = offerConceptCopy;
+
+    // If the customer picked a photo/AI background on the review step, resolve
+    // it to a local file (already under 150 KB from the imagery endpoints) and
+    // attach it. The composer paints it full-bleed with a legibility overlay.
+    if (sub.backgroundChoice?.url) {
+      try {
+        const chosen = sub.backgroundChoice.url;
+        let candidate: string | null = null;
+        if (/^https?:\/\//.test(chosen)) {
+          // An uploaded photo lives in Cloudinary — fetch it once to raster it
+          // under budget. We still keep the Cloudinary link as the source of
+          // record; this local copy is only the composited input.
+          const resp = await fetch(chosen);
+          if (resp.ok) {
+            const buf = Buffer.from(await resp.arrayBuffer());
+            const tmp = path.join(cacheDir, 'uploaded-bg-src');
+            fs.mkdirSync(cacheDir, { recursive: true });
+            fs.writeFileSync(tmp, buf);
+            candidate = tmp;
+          }
+        } else {
+          // A Pixabay/AI pick already served locally under /files/...
+          const rel = chosen.replace(/^\/files\//, '');
+          const local = path.join(opts.outputDir ?? 'out', rel);
+          if (fs.existsSync(local)) candidate = local;
+        }
+        if (candidate) {
+          const fitted = await fitImageToBudget(candidate, path.join(cacheDir, 'offer-bg.jpg'));
+          offerBg = fitted.file;
+          notes.push(`Your chosen ${sub.backgroundChoice.mode} background is applied to every concept.`);
+          try {
+            const gal = path.join(opts.outputDir ?? 'out', 'gallery',
+              (sub.campaignName ?? 'campaign').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
+            fs.mkdirSync(gal, { recursive: true });
+            fs.copyFileSync(fitted.file, path.join(gal, `bg-${Date.now().toString(36)}.jpg`));
+          } catch { /* best-effort */ }
+        }
+      } catch (e: any) {
+        notes.push(`Chosen background could not be applied (${e?.message ?? e}); using a solid colour.`);
+      }
+    }
+
     concepts.push({
       conceptId: 'C',
       name: 'Offer',
       layoutFamily: 'T04',
       useReverseLogo: true,
       hero: {},
+      backgroundImage: offerBg,
       copy: aiCopy ? {
         ...aiCopy,
         default: {
@@ -590,6 +677,12 @@ export async function buildCampaign(
     });
   } else {
     notes.push('No offer was supplied, so only the benefit-led concept was produced.');
+  }
+
+  // A chosen background belongs to the whole look, not one concept: apply it
+  // to every concept so no template option shows a grey placeholder instead.
+  if (typeof offerBg !== 'undefined' && offerBg) {
+    for (const c of concepts) c.backgroundImage = offerBg;
   }
 
   const campaign: Campaign = {

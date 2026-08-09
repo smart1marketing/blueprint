@@ -29,10 +29,17 @@ import { renderDiagnostics } from './diagnostics-page';
 import { scheduleSweep, sweep } from './retention';
 import { deliverProject, latestManifest } from './deliver';
 import { renderProof } from './proof';
+import { suggestCopy, critiqueCopy } from './copy-approval';
+import { searchPixabay, generateHero, imageKeywords } from './imagery';
+import { reworkLogo } from './logo-tools';
+import { resolveAsset } from './assets';
+import { fitImageToBudget } from './image-budget';
 import { getPlatform } from './registry';
 import sharp from 'sharp';
 import { notify } from './notify';
 import { discoverBrand, normalizeDomain } from './brandfetch';
+import { BrandCache } from './brand-cache';
+import { renderOverview, renderOverviewPdf } from './overview';
 import { ALLOWED_FORMATS, folderFor, signUpload, type AssetKind } from './assets';
 import { CloudinaryService, slug } from './cloudinary';
 
@@ -49,6 +56,13 @@ const BUILD_STAMP: { builtAt?: string; node?: string } = (() => {
 /** Base URL for links inside notifications. Set on Render to the public host. */
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/$/, '');
 const projects = new ProjectStore(OUT);
+function newRequestIdFor(): string {
+  // Same alphabet and entropy as intake ids: unguessable, no confusable chars.
+  return `AD-${new Date().getFullYear()}-` +
+    Array.from(crypto.randomBytes(8), (b) => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 31]).join('').slice(0, 8);
+}
+
+const brandCache = new BrandCache(path.join(OUT, 'brand-cache'));
 
 /**
  * Sites allowed to iframe the embed. Browsers block framing unless the framed
@@ -150,7 +164,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith('/api/project') ||
     url.pathname.startsWith('/api/build/') ||
     url.pathname.startsWith('/api/diagnostics') ||
-    url.pathname.startsWith('/files/') ||
+    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/') && !url.pathname.startsWith('/files/gallery/') && !url.pathname.startsWith('/files/deliveries/') && !url.pathname.startsWith('/files/renders/')) ||
     route === 'POST /api/render' ||
     url.pathname.startsWith('/api/render/');
 
@@ -228,6 +242,9 @@ const server = http.createServer(async (req, res) => {
       route === 'POST /api/requests' ||
       route === 'POST /api/brand/discover' ||
       route === 'POST /api/landing/analyze' ||
+      route === 'POST /api/copy/suggest' ||
+      route === 'POST /api/images/search' ||
+      route === 'POST /api/images/generate' ||
       route === 'POST /api/assets/upload-signature';
     if (intakeSurface && !intakeCodeOk(req)) {
       return json(res, 401, { error: 'A valid team access code is required.' }, corsHeaders(req.headers.origin));
@@ -292,11 +309,17 @@ const server = http.createServer(async (req, res) => {
         const result = await buildCampaign({ requestId, ...body } as Submission, {
           assetRoot: ROOT,
           cacheDir: path.join(OUT, 'cache', requestId),
+          outputDir: OUT,
         });
         fs.mkdirSync(path.join(OUT, 'campaigns'), { recursive: true });
         fs.writeFileSync(
           path.join(OUT, 'campaigns', `${requestId}.json`),
-          JSON.stringify({ campaign: result.campaign, notes: result.notes, assetSources: result.assetSources }, null, 2),
+          JSON.stringify({
+            campaign: result.campaign,
+            platforms: (body.platforms ?? ['google']).filter((p: string) => p === 'google' || p === 'amazon'),
+            notes: result.notes,
+            assetSources: result.assetSources,
+          }, null, 2),
         );
         build = { renderable: result.renderable, notes: result.notes };
 
@@ -309,6 +332,8 @@ const server = http.createServer(async (req, res) => {
           campaignName: body.campaignName,
           requestId,
           landingPage: body.landingPage,
+          contact: body.contact,
+          email: body.email,
           brand: result.campaign.brand,
           brandEnteredManually: Boolean(body.brandManual),
           cloudinaryFolder: cld.projectFolder(body.business, body.campaignName),
@@ -316,10 +341,26 @@ const server = http.createServer(async (req, res) => {
             .filter(Boolean).map(String),
           notes: result.notes,
         });
+        const now = new Date().toISOString();
         for (const [kind, source] of Object.entries(result.assetSources)) {
           if (source === 'none') continue;
-          projects.addAsset(project.projectId, { kind: kind as any, source: source as any });
+          project.assets.push({ kind: kind as any, source: source as any, addedAt: now });
         }
+        for (const up of (body.uploadedLogos ?? []) as any[]) {
+          if (up?.url) project.assets.push({ kind: 'logo', source: 'upload', url: up.url, publicId: up.publicId, name: up.name, addedAt: now });
+        }
+        for (const up of (body.uploadedImages ?? []) as any[]) {
+          if (up?.url) {
+            const isBg = body.backgroundChoice?.mode === 'upload' && body.backgroundChoice?.url === up.url;
+            project.assets.push({ kind: isBg ? 'background' : 'product', source: 'upload', url: up.url, publicId: up.publicId, name: up.name, addedAt: now });
+          }
+        }
+        // Log the website + brand details we pulled, with the fetch time, so a
+        // refresh decision (>3 months) has something to check against later.
+        if (result.campaign.brand && body.landingPage) {
+          project.notes.push(`[${now}] Brand details on file for ${body.website ?? body.landingPage} (source: ${body.brandSource ?? 'brandfetch'}).`);
+        }
+        projects.save(project);
         (build as any).projectId = project.projectId;
         console.log(`[intake] ${requestId} -> project ${project.projectId}, renderable=${result.renderable}` +
           (result.renderable ? '' : ` (not renderable: ${result.notes.slice(0, 2).join('; ')})`));
@@ -346,68 +387,42 @@ const server = http.createServer(async (req, res) => {
           // instance: one 300x250 rendered alone lands in seconds, while the
           // same render competing with a 20-size batch for one starved CPU is
           // exactly how a customer watches a skeleton for 17 minutes.
+          // STAGED FLOW: render the 250x250 in three template families and
+          // stop. The person picks a template (with edits) before the rest
+          // builds — no point rendering 20 sizes of a look they may reject.
           const pRef = project;
           (async () => {
             const t0 = Date.now();
-            try {
-              console.log(`[firstlook] ${requestId} rendering 300x250…`);
-              const first = await renderPreview({
-                brand: result.campaign.brand,
-                concept: result.campaign.concepts[0],
-                platform: platforms[0] ?? 'google',
-                size: '300x250',
-                assetRoot: ROOT,
-              });
-              const dir = path.join(OUT, 'firstlook');
-              fs.mkdirSync(dir, { recursive: true });
-              fs.writeFileSync(path.join(dir, `${requestId}.png`), first.png);
-              console.log(`[firstlook] ${requestId} written in ${Date.now() - t0}ms (${first.png.length} bytes)`);
-            } catch (e: any) {
-              console.warn(`[firstlook] ${requestId}: ${e?.message ?? e}`);
+            const FAMILIES = ['T01', 'T02', 'T03'];
+            const dir = path.join(OUT, 'tplprev', requestId);
+            fs.mkdirSync(dir, { recursive: true });
+            for (const fam of FAMILIES) {
+              try {
+                const prev = await renderPreview({
+                  brand: result.campaign.brand,
+                  concept: { ...result.campaign.concepts[0], layoutFamily: fam },
+                  platform: platforms[0] ?? 'google',
+                  size: '250x250',
+                  assetRoot: ROOT,
+                });
+                fs.writeFileSync(path.join(dir, `${fam}.png`), prev.png);
+                console.log(`[tplprev] ${requestId} ${fam} done at ${Date.now() - t0}ms`);
+              } catch (e: any) {
+                console.warn(`[tplprev] ${requestId} ${fam}: ${e?.message ?? e}`);
+              }
             }
-            const job = enqueue({ campaign: result.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
-            console.log(`[intake] ${requestId} queued batch job ${job.id} for ${platforms.join('+')}`);
-            pRef.autoJobId = job.id;
             projects.save(pRef);
 
-          // Poll rather than modify the job runner's contract — this keeps
-          // notifications a bystander to rendering, not a dependency of it.
-          const pid = project.projectId;
-          const started = Date.now();
-          const poll = setInterval(async () => {
-            const j = getJob(job.id);
-            if (!j || (j.status !== 'complete' && j.status !== 'failed')) {
-              if (Date.now() - started > 5 * 60_000) clearInterval(poll); // give up quietly after 5 minutes
-              return;
-            }
-            clearInterval(poll);
-            const p = projects.get(pid);
-            if (!p) return;
-
-            if (j.status === 'complete' && j.results) {
-              const proofUrl = j.reports?.find((r) => r.includes('/proof_'));
-              projects.addBatch(pid, j.results, { reportUrl: proofUrl });
-              await notify(
-                {
-                  subject: `New proof ready — ${p.client} / ${p.projectName}`,
-                  body: `${p.client} submitted "${p.campaignName}" and it has been rendered automatically.\n\nReview in the build screen, or send the proof link on to the client.`,
-                  url: `${PUBLIC_URL}/proof/${requestId}`,
-                },
-                OUT,
-              );
-            } else {
-              p.notes.push(`[${new Date().toISOString()}] Automatic render failed: ${j.error ?? 'unknown error'}`);
-              projects.save(p);
-              await notify(
-                {
-                  subject: `Render failed — ${p.client} / ${p.projectName}`,
-                  body: `Automatic rendering failed: ${j.error ?? 'unknown error'}\n\nThe request is saved and can be opened in the build screen.`,
-                  url: `${PUBLIC_URL}/build?request=${requestId}`,
-                },
-                OUT,
-              );
-            }
-          }, 2000);
+          // Staff heads-up: previews are ready and the customer is choosing a
+          // template. The full-build notification fires from the choose route.
+          await notify(
+            {
+              subject: `New request — ${project.client} / ${project.projectName}`,
+              body: `"${project.campaignName}" was submitted. Template previews are rendered and the customer is choosing a direction; remaining sizes build when they pick.`,
+              url: `${PUBLIC_URL}/build?request=${requestId}`,
+            },
+            OUT,
+          );
           })().catch((e: any) => console.error(`[intake] ${requestId} background render failed: ${e?.message ?? e}`));
         } else {
           // Not renderable — usually missing a logo. Still worth a heads-up so
@@ -439,8 +454,17 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: 'Provide a website domain' }, cors);
       }
       try {
-        const found = await discoverBrand(domain);
-        return json(res, 200, found, cors);
+        // Cache Brandfetch results for ~3 months. A domain looked up recently
+        // is served from disk; only a stale (or forced) lookup hits the API.
+        // `refresh=1` on the query forces a re-fetch.
+        const forceRefresh = url.searchParams.get('refresh') === '1';
+        const { result: found, cached, ageDays } = await brandCache.getOrFetch(
+          domain,
+          () => discoverBrand(domain),
+          { refresh: forceRefresh },
+        );
+        console.log(`[brand] ${domain}: ${cached ? `cache hit (${ageDays}d old)` : 'fetched fresh from Brandfetch'}`);
+        return json(res, 200, { ...(found as object), cached, ageDays }, cors);
       } catch (e: any) {
         // Discovery failing is normal for small businesses with no public
         // brand record. It must not block the request — the customer just
@@ -529,8 +553,14 @@ const server = http.createServer(async (req, res) => {
       const job = project?.autoJobId ? getJob(project.autoJobId) : null;
       // 'rendering' while a job is queued or running; 'failed' if it died;
       // 'waiting-assets' when nothing was renderable (usually: no logo yet).
+      const prevDir = path.join(OUT, 'tplprev', requestId);
+      const previews = fs.existsSync(prevDir)
+        ? fs.readdirSync(prevDir).filter((f) => f.endsWith('.png'))
+            .map((f) => ({ template: f.replace('.png', ''), url: `/tplprev/${requestId}/${f}` }))
+        : [];
       const state = ready ? 'ready'
         : job ? (job.status === 'failed' ? 'failed' : 'rendering')
+        : previews.length ? 'choose-template'
         : 'waiting-assets';
       let firstLookFile = path.join(OUT, 'firstlook', `${requestId}.png`);
       if (!fs.existsSync(firstLookFile) && manifest) {
@@ -548,8 +578,17 @@ const server = http.createServer(async (req, res) => {
         state,
         progress: job ? job.progress : null,
         firstLook: fs.existsSync(firstLookFile) ? `/firstlook/${requestId}.png` : null,
+        templatePreviews: previews,
         proofUrl: ready ? `/proof/${requestId}` : null,
       }, cors);
+    }
+
+    const tpMatch = url.pathname.match(/^\/tplprev\/([\w-]+)\/(T\d+)\.png$/);
+    if (tpMatch && req.method === 'GET') {
+      const f = path.join(OUT, 'tplprev', tpMatch[1], `${tpMatch[2]}.png`);
+      if (!fs.existsSync(f)) return json(res, 404, { error: 'Not ready' });
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(f));
     }
 
     const flMatch = url.pathname.match(/^\/firstlook\/([\w-]+)\.png$/);
@@ -559,6 +598,50 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(f));
     }
+
+    const ovMatch = url.pathname.match(/^\/overview\/([\w-]+)(\/pdf)?$/);
+    if (ovMatch && req.method === 'GET') {
+      const requestId = ovMatch[1];
+      const manifest = latestManifest(OUT, requestId);
+      const project = projects.byRequest(requestId);
+      if (!project) return json(res, 404, { error: 'Unknown campaign' });
+      let campaign: any = null; let submission: any = undefined;
+      try {
+        const doc = JSON.parse(fs.readFileSync(path.join(OUT, 'campaigns', `${requestId}.json`), 'utf8'));
+        campaign = doc.campaign ?? null;
+      } catch { /* overview still renders from the project record */ }
+      try {
+        // The intake record is the submission of record — every field the
+        // customer typed, exactly as received.
+        submission = JSON.parse(fs.readFileSync(path.join(OUT, 'requests', `${requestId}.json`), 'utf8'));
+      } catch { /* fall back to project/campaign fields */ }
+      const brandRec = project.domain ? brandCache.read(project.domain) : null;
+      const delivered = project.delivered?.length ? project.delivered[project.delivered.length - 1] : null;
+      const ads = (manifest?.entries ?? [])
+        .filter((e: any) => fs.existsSync(e.localFile))
+        .map((e: any) => ({
+          size: e.size, delivered: e.deliveredDimensions, platform: e.platform,
+          file: e.localFile, bytes: e.bytes, qaStatus: e.qaStatus,
+          url: `/files/${path.relative(OUT, e.localFile).split(path.sep).join('/')}`,
+        }));
+      const data = {
+        requestId, project, campaign, submission,
+        brandCacheRecord: brandRec, ads,
+        publicUrl: PUBLIC_URL, proofUrl: `/proof/${requestId}`,
+        downloadUrl: delivered?.zipUrl,
+      };
+      if (ovMatch[2]) {
+        const pdf = await renderOverviewPdf(data as any);
+        res.writeHead(200, { 'content-type': 'application/pdf',
+          'content-disposition': `inline; filename="${slug(project.client)}_${slug(project.campaignName)}_overview.pdf"` });
+        return res.end(pdf);
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(renderOverview(data as any));
+    }
+
+    // Overview ad images must be publicly viewable via their /files paths —
+    // covered below by the renders exemption added to the admin gate.
 
     const proofMatch = url.pathname.match(/^\/proof\/([\w-]+)$/);
     if (proofMatch && req.method === 'GET') {
@@ -572,9 +655,47 @@ const server = http.createServer(async (req, res) => {
           '<p>This page will work as soon as rendering finishes — usually under a minute. Refresh to check.</p>');
       }
       const project = projects.byRequest(requestId);
+      // Pull current copy + palette from the stored campaign so the proof's
+      // live editor starts from what is actually on the ads.
+      const initialCopy: Record<string, { headline?: string; support?: string; cta?: string }> = {};
+      const perSizeCopy: Record<string, { headline?: string; support?: string; cta?: string }> = {};
+      let initialColors: { accent?: string; ctaText?: string; headline?: string } = {};
+      let proofMeta: { business?: string; promoting?: string; objective?: string } = {};
+      try {
+        const campFile = path.join(OUT, 'campaigns', `${requestId}.json`);
+        if (fs.existsSync(campFile)) {
+          const doc = JSON.parse(fs.readFileSync(campFile, 'utf8'));
+          for (const c of doc.campaign?.concepts ?? []) {
+            const d = c.copy?.default ?? {};
+            initialCopy[c.conceptId] = { headline: d.headline, support: d.support, cta: d.cta };
+            // Per-size copy for the inline "edit this size" editor: the
+            // effective copy for a size is default overlaid with any per-size
+            // override, matching how the renderer resolves it.
+            for (const key of Object.keys(c.copy ?? {})) {
+              if (key === 'default') continue;
+              perSizeCopy[`${c.conceptId}/${key}`] = { ...d, ...c.copy[key] };
+            }
+          }
+          const col = doc.campaign?.brand?.colors ?? {};
+          initialColors = { accent: col.accent, ctaText: col.ctaText ?? col.dark, headline: col.headlineInk ?? col.dark };
+          proofMeta = {
+            business: doc.campaign?.brand?.name,
+            promoting: doc.campaign?.promoting ?? doc.campaign?.landing?.summary,
+            objective: doc.campaign?.objective,
+          };
+        }
+      } catch { /* editor simply starts blank if the campaign can't be read */ }
+
       let html = renderProof(manifest, {
         fileBase: '',
         actionBase: project ? `/api/proof/${project.projectId}` : undefined,
+        initialCopy,
+        initialColors,
+        perSizeCopy,
+        meta: proofMeta,
+        delivered: (project?.delivered && project.delivered.length)
+          ? project.delivered[project.delivered.length - 1]
+          : undefined,
       });
       // Inline every creative as a data URI so the page depends on nothing else.
       for (const e of manifest.entries) {
@@ -608,9 +729,9 @@ const server = http.createServer(async (req, res) => {
         await notify(
           {
             subject: `Delivered — ${project.client} / ${project.projectName}`,
-            body: `${out.fileCount} finished file(s) packaged for ${project.client}.` +
+            body: `${out.fileCount} finished file(s) packaged for ${project.client}. Download from the build screen.` +
               (out.skipped.length ? `\nNot included: ${out.skipped.map((s) => `${s.size} (${s.reason})`).join('; ')}` : ''),
-            url: `${PUBLIC_URL}${out.zipUrl}`,
+            url: `${PUBLIC_URL}/build?request=${project.requestId}`,
           },
           OUT,
         );
@@ -705,6 +826,217 @@ const server = http.createServer(async (req, res) => {
 
     /* ------------------------------------------------------------ approvals */
     // Posted by the proof screen. Public on purpose: the customer opening a
+    // In-place rebuild. The heart of "revisions happen in the same window":
+    // apply edits (per-concept or per-size copy, CTA, colours) to the stored
+    // campaign, re-render, and refresh the proof. No new request, no "a revised
+    // proof is on the way" — the same proof URL now shows the updated ads.
+    const rebuildMatch = url.pathname.match(/^\/api\/proof\/([\w.-]+)\/rebuild$/);
+    if (rebuildMatch && req.method === 'POST') {
+      const project = projects.get(rebuildMatch[1]);
+      if (!project) return json(res, 404, { error: 'No such project' });
+      const campFile = path.join(OUT, 'campaigns', `${project.requestId}.json`);
+      if (!fs.existsSync(campFile)) return json(res, 404, { error: 'No campaign to rebuild' });
+
+      const body = JSON.parse(await readBody(req, 3_000_000)) as {
+        conceptId?: string;
+        copy?: { headline?: string; support?: string; cta?: string; offer?: string };
+        size?: string;
+        /** Flip to the white (reversed) logo for one size — dark backgrounds. */
+        reverseLogo?: boolean;
+        /** Replace the logo on ONE size (with body.size) or brand-wide
+         *  (without). dataUrl carries a direct upload from the size editor —
+         *  e.g. a square logo variant for square placements. */
+        sizeLogo?: { dataUrl?: string; url?: string };
+        /** Plain-English photo placement for this size, e.g. "show more of
+         *  the left side" or "move the picture down". */
+        picturePlacement?: string;
+        colors?: { accent?: string; ctaText?: string; headline?: string };
+        /** Logo change: a new uploaded logo (url/publicId) or an AI-rework of
+         *  the current one. Applied to the whole brand (all sizes). */
+        logo?: { url?: string; publicId?: string; aiRework?: boolean; reversed?: boolean };
+        /** Background change for a concept. `mode:'solid'` clears any image;
+         *  a `url` applies a chosen Pixabay/AI/uploaded image; `overlay` tunes
+         *  the legibility scrim (0..1). Defaults to the offer concept. */
+        background?: { conceptId?: string; mode?: 'solid' | 'image'; url?: string; overlay?: number };
+      };
+
+      const doc = JSON.parse(fs.readFileSync(campFile, 'utf8'));
+      const campaign = doc.campaign;
+
+      // --- apply logo edit ---
+      if (body.logo) {
+        const cacheDir = path.join(OUT, 'cache', project.requestId, 'relogo-' + Date.now().toString(36));
+        try {
+          let src: string | undefined;
+          if (body.logo.url || body.logo.publicId) {
+            const ref = body.logo.publicId ? `cloudinary:${body.logo.publicId}` : body.logo.url!;
+            src = await resolveAsset(ref, { cacheDir, label: 'logo' });
+          } else if (body.logo.aiRework && campaign.brand.logos?.primary) {
+            src = campaign.brand.logos.primary;
+          }
+          if (src) {
+            // Always enforce transparency; optionally make a reversed version.
+            const reworked = await reworkLogo(src, cacheDir, { reversed: body.logo.reversed });
+            const fitted = await fitImageToBudget(reworked.primary, path.join(cacheDir, 'logo-final.png'), { keepAlpha: true });
+            campaign.brand.logos.primary = fitted.file;
+            if (reworked.reverse) {
+              const rev = await fitImageToBudget(reworked.reverse, path.join(cacheDir, 'logo-rev-final.png'), { keepAlpha: true });
+              campaign.brand.logos.reverse = rev.file;
+            }
+          }
+        } catch (e: any) {
+          return json(res, 400, { error: `Logo change failed: ${e?.message ?? e}` });
+        }
+      }
+
+      // --- apply background change ---
+      // Change or remove a concept's full-bleed background photo after the
+      // fact. Defaults to the offer concept, the one designed to carry a photo.
+      if (body.background) {
+        const targetId = body.background.conceptId
+          ?? (campaign.concepts.find((c: any) => c.conceptId === 'C') ? 'C' : campaign.concepts[0]?.conceptId);
+        const concept = campaign.concepts.find((c: any) => c.conceptId === targetId);
+        if (concept) {
+          if (body.background.mode === 'solid' || (!body.background.url && body.background.mode !== 'image')) {
+            // Clear back to the flat brand background.
+            delete concept.backgroundImage;
+            delete concept.backgroundOverlay;
+          } else if (body.background.url) {
+            try {
+              const cacheDir = path.join(OUT, 'cache', project.requestId, 'rebg-' + Date.now().toString(36));
+              const rel = body.background.url.replace(/^\/files\//, '');
+              const candidate = path.join(OUT, rel);
+              const src = fs.existsSync(candidate)
+                ? candidate
+                : await resolveAsset(body.background.url, { cacheDir, label: 'background' });
+              const fitted = await fitImageToBudget(src, path.join(cacheDir, 'bg.jpg'));
+              concept.backgroundImage = fitted.file;
+              try {
+                const gal = path.join(OUT, 'gallery', slug(campaign.campaignName ?? project.projectId));
+                fs.mkdirSync(gal, { recursive: true });
+                fs.copyFileSync(fitted.file, path.join(gal, `bg-${Date.now().toString(36)}.jpg`));
+              } catch { /* gallery is best-effort */ }
+              if (typeof body.background.overlay === 'number') {
+                concept.backgroundOverlay = body.background.overlay;
+              }
+            } catch (e: any) {
+              return json(res, 400, { error: `Background change failed: ${e?.message ?? e}` });
+            }
+          }
+        }
+      }
+
+      // --- apply colour edits to the brand palette ---
+      if (body.colors) {
+        if (body.colors.accent) campaign.brand.colors.accent = body.colors.accent;
+        // ctaText / headline are carried as brand extensions the composer reads.
+        if (body.colors.ctaText) campaign.brand.colors.ctaText = body.colors.ctaText;
+        if (body.colors.headline) campaign.brand.colors.headlineInk = body.colors.headline;
+      }
+
+      // --- apply copy edits ---
+      if ((body.copy || body.picturePlacement || body.sizeLogo || typeof body.reverseLogo === 'boolean') && body.conceptId) {
+        const concept = campaign.concepts.find((c: any) => c.conceptId === body.conceptId);
+        if (concept) {
+          if (body.size) {
+            // Targeted edit: change just this one size.
+            const target = (concept.copy[body.size] = concept.copy[body.size] || {});
+            for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
+              if (body.copy && body.copy[k] !== undefined) target[k] = body.copy[k];
+            }
+            if (typeof body.reverseLogo === 'boolean') {
+              // The composer reads this flag from the size's copy set.
+              (target as any).__useReverseLogo = body.reverseLogo;
+            }
+            if (typeof body.picturePlacement === 'string' && body.picturePlacement.trim()) {
+              // Conversational repositioning: read direction words and map
+              // them to the photo's focal point for this one size. "Show more
+              // of the left" means anchor the LEFT edge of the photo.
+              const t = body.picturePlacement.toLowerCase();
+              const has = (...words: string[]) => words.some((w) => t.includes(w));
+              let fx = 'xMid'; let fy = 'YMid';
+              if (has('left')) fx = 'xMin';
+              if (has('right')) fx = 'xMax';
+              if (has('top', 'up', 'higher', 'head', 'face', 'sky')) fy = 'YMin';
+              if (has('bottom', 'down', 'lower', 'ground', 'floor')) fy = 'YMax';
+              if (has('center', 'centre', 'middle')) { if (!has('left','right')) fx = 'xMid'; if (!has('top','bottom','up','down')) fy = 'YMid'; }
+              (target as any).__bgPos = `${fx}${fy}`;
+              (target as any).__bgPosNote = body.picturePlacement.trim();
+            }
+            if (body.sizeLogo?.dataUrl || body.sizeLogo?.url) {
+              try {
+                const cacheDir = path.join(OUT, 'cache', project.requestId, 'szlogo-' + Date.now().toString(36));
+                fs.mkdirSync(cacheDir, { recursive: true });
+                let raw: Buffer;
+                if (body.sizeLogo.dataUrl) {
+                  const b64 = body.sizeLogo.dataUrl.split(',')[1] ?? '';
+                  raw = Buffer.from(b64, 'base64');
+                } else {
+                  const r = await fetch(body.sizeLogo.url!);
+                  if (!r.ok) throw new Error(`fetch ${r.status}`);
+                  raw = Buffer.from(await r.arrayBuffer());
+                }
+                const src = path.join(cacheDir, 'raw');
+                fs.writeFileSync(src, raw);
+                // Same treatment as every logo: transparency enforced, budget-fit.
+                const reworked = await reworkLogo(src, cacheDir, {});
+                const fitted = await fitImageToBudget(reworked.primary, path.join(cacheDir, 'size-logo.png'), { keepAlpha: true });
+                (target as any).__logoFile = fitted.file;
+              } catch (e: any) {
+                return json(res, 400, { error: `Size logo failed: ${e?.message ?? e}` });
+              }
+            }
+          } else {
+            // Default edit: change the concept default AND clear any stale
+            // per-size overrides for the edited fields. Without this, a size
+            // that got its own shortened headline at build time would keep it
+            // and ignore the edit — the bug where 728x90 and 970x250 stayed on
+            // the old copy after a rebuild.
+            const def = (concept.copy.default = concept.copy.default || {});
+            const editedFields: string[] = [];
+            for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
+              if (body.copy && body.copy[k] !== undefined) { def[k] = body.copy[k]; editedFields.push(k); }
+            }
+            for (const key of Object.keys(concept.copy)) {
+              if (key === 'default') continue;
+              for (const f of editedFields) delete concept.copy[key][f];
+            }
+          }
+        }
+      }
+
+      fs.writeFileSync(campFile, JSON.stringify(doc, null, 2));
+
+      const platforms: string[] = (doc.platforms as string[])
+        ?? (campaign.platforms as string[])
+        ?? ['google', 'amazon'];
+      const job = enqueue({ campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
+      project.status = 'in-build';
+      project.notes.push(`[${new Date().toISOString()}] Rebuild requested (job ${job.id})` +
+        (body.conceptId ? ` for concept ${body.conceptId}${body.size ? '/' + body.size : ''}` : ''));
+      projects.save(project);
+
+      // Return immediately; render in the background. The proof polls the
+      // status endpoint and reloads when ready — holding this HTTP request
+      // open through a multi-minute render blocks the UI and trips proxies.
+      project.autoJobId = job.id;
+      projects.save(project);
+      void (async () => {
+        const started = Date.now();
+        const t = setInterval(() => {
+          const j = getJob(job.id);
+          if (!j || j.status === 'complete' || j.status === 'failed' || Date.now() - started > 300_000) {
+            clearInterval(t);
+            if (j?.status === 'complete' && j.results) {
+              const proofUrl = j.reports?.find((r) => r.includes('/proof_'));
+              projects.addBatch(project.projectId, j.results, { reportUrl: proofUrl });
+            }
+          }
+        }, 1500);
+      })();
+      return json(res, 200, { rebuilt: true, building: true, requestId: project.requestId, proofUrl: `/proof/${project.requestId}` });
+    }
+
     // proof link is not an authenticated user. The project id in the URL is
     // the capability, so treat it like a signed link, not a secret.
     const decision = url.pathname.match(/^\/api\/proof\/([\w.-]+)\/(approve|revision)$/);
@@ -720,6 +1052,48 @@ const server = http.createServer(async (req, res) => {
         project.status = 'approved';
         if (body.concept) project.approvedConcept = body.concept;
         project.notes.push(`[${at}] Concept ${body.concept ?? '?'} approved by the client.`);
+        projects.save(project);
+        console.log(`[proof] ${projectId} -> approved`);
+
+        // Approval IS the trigger for delivery — no human in the loop just to
+        // press "deliver". Package the approved concept now: platform folders,
+        // final names, QA failures withheld. The client gets the download link
+        // in this response; staff get it in the notification.
+        try {
+          const out = await deliverProject(project, { outDir: OUT, conceptId: body.concept });
+          project.status = 'complete';
+          project.delivered = project.delivered ?? [];
+          project.delivered.push({ at, zipUrl: out.zipUrl, fileCount: out.fileCount });
+          project.notes.push(
+            `[${at}] Auto-delivered ${out.fileCount} file(s) on approval` +
+            (out.skipped.length ? `; withheld ${out.skipped.map((s) => s.size).join(', ')}` : ''),
+          );
+          projects.save(project);
+          await notify(
+            {
+              subject: `Approved & delivered — ${project.client} / ${project.projectName}`,
+              body: `Concept ${body.concept ?? '?'} was approved. ${out.fileCount} finished file(s) are packaged — download from the build screen or the projects dashboard.` +
+                (out.skipped.length ? `\nNot included: ${out.skipped.map((s) => `${s.size} (${s.reason})`).join('; ')}` : ''),
+              url: `${PUBLIC_URL}/build?request=${project.requestId}`,
+            },
+            OUT,
+          );
+          return json(res, 200, { status: 'complete', recordedAt: at, downloadUrl: out.zipUrl, fileCount: out.fileCount });
+        } catch (e: any) {
+          // Delivery failing must not lose the approval. Record it, tell
+          // staff, and let the client know files are on the way manually.
+          project.notes.push(`[${at}] Auto-delivery failed: ${e?.message ?? e}. Deliver manually from the build screen.`);
+          projects.save(project);
+          await notify(
+            {
+              subject: `Approved (delivery needs attention) — ${project.client} / ${project.projectName}`,
+              body: `Concept ${body.concept ?? '?'} was approved but packaging failed: ${e?.message ?? e}`,
+              url: `${PUBLIC_URL}/build?request=${project.requestId}`,
+            },
+            OUT,
+          );
+          return json(res, 200, { status: 'approved', recordedAt: at });
+        }
       } else {
         project.status = 'proof-sent';
         project.notes.push(`[${at}] Revision requested on concept ${body.concept ?? '?'}: ${body.notes ?? '(no detail)'}`);
@@ -729,14 +1103,8 @@ const server = http.createServer(async (req, res) => {
 
       await notify(
         {
-          subject:
-            kind === 'approve'
-              ? `Approved — ${project.client} / ${project.projectName}`
-              : `Revision requested — ${project.client} / ${project.projectName}`,
-          body:
-            kind === 'approve'
-              ? `Concept ${body.concept ?? '?'} was approved and is ready for final delivery.`
-              : `Concept ${body.concept ?? '?'} needs changes:\n\n"${body.notes ?? '(no detail given)'}"`,
+          subject: `Revision requested — ${project.client} / ${project.projectName}`,
+          body: `Concept ${body.concept ?? '?'} needs changes:\n\n"${body.notes ?? '(no detail given)'}"`,
           url: `${PUBLIC_URL}/build?request=${project.requestId}`,
         },
         OUT,
@@ -767,6 +1135,137 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* ------------------------------------------------- landing page reader */
+    // Pixabay background options for the campaign. Returns candidates served
+    // from a public cache dir; nothing is applied until the person picks one.
+    const galMatch = url.pathname.match(/^\/api\/gallery\/([\w-]+)$/);
+    if (galMatch && req.method === 'GET') {
+      const cors = corsHeaders(req.headers.origin);
+      const dir = path.join(OUT, 'gallery', galMatch[1]);
+      const items = fs.existsSync(dir)
+        ? fs.readdirSync(dir).filter((f) => /\.(jpe?g|png)$/.test(f)).map((f) => ({ url: `/files/gallery/${galMatch[1]}/${f}` }))
+        : [];
+      return json(res, 200, { items }, cors);
+    }
+
+    if (route === 'POST /api/images/search') {
+      const cors = corsHeaders(req.headers.origin);
+      const limit = rateLimit(route, req);
+      if (!limit.allowed) return json(res, 429, { error: 'Slow down a moment.' }, cors);
+      if (!process.env.PIXABAY_API) {
+        return json(res, 200, { candidates: [], reason: 'Image search is not configured (PIXABAY_API missing).' }, cors);
+      }
+      const body = JSON.parse(await readBody(req, 50_000)) as any;
+      try {
+        const cacheDir = path.join(OUT, 'imagery', slug(body.requestId ?? "adhoc"));
+        const cands = await searchPixabay(
+          { business: body.business ?? '', promoting: body.promoting ?? '', objective: body.objective, landing: body.landingAnalysis, keywords: body.keywords },
+          { cacheDir, count: 2 },
+        );
+        // expose each under /files with a public url the browser can load
+        const withUrls = cands.map((c) => ({ ...c, url: `/files/${path.relative(OUT, c.file)}` , file: undefined }));
+        return json(res, 200, { candidates: withUrls, query: imageKeywords({ business: body.business ?? '', promoting: body.promoting ?? '', landing: body.landingAnalysis, keywords: body.keywords }) }, cors);
+      } catch (e: any) {
+        return json(res, 200, { candidates: [], reason: e?.message ?? 'Image search failed' }, cors);
+      }
+    }
+
+    // AI-generated hero from the campaign / landing page. One candidate.
+    if (route === 'POST /api/images/generate') {
+      const cors = corsHeaders(req.headers.origin);
+      const limit = rateLimit(route, req);
+      if (!limit.allowed) return json(res, 429, { error: 'Slow down a moment.' }, cors);
+      if (!process.env.OPENAI_API_KEY) {
+        return json(res, 200, { candidate: null, reason: 'Image generation is not configured (OPENAI_API_KEY missing).' }, cors);
+      }
+      const body = JSON.parse(await readBody(req, 50_000)) as any;
+      try {
+        const cacheDir = path.join(OUT, 'imagery', slug(body.requestId ?? "adhoc"));
+        // If the caller passed uploaded photo URLs (Cloudinary), fetch them as
+        // local references so the generated hero echoes the real product.
+        const refs: string[] = [];
+        for (const u of (body.referenceImages ?? []) as string[]) {
+          try {
+            if (!/^https?:\/\//.test(u)) continue;
+            const r = await fetch(u);
+            if (!r.ok) continue;
+            fs.mkdirSync(cacheDir, { recursive: true });
+            const f = path.join(cacheDir, `ref-${refs.length}.png`);
+            fs.writeFileSync(f, Buffer.from(await r.arrayBuffer()));
+            refs.push(f);
+          } catch { /* skip a bad reference */ }
+        }
+        const cand = await generateHero(
+          {
+            business: body.business ?? '', promoting: body.promoting ?? '', objective: body.objective,
+            landing: body.landingAnalysis, benefit: body.benefit, offer: body.offer,
+            palette: body.palette, referenceImages: refs,
+          },
+          { cacheDir },
+        );
+        return json(res, 200, { candidate: { ...cand, url: `/files/${path.relative(OUT, cand.file)}`, file: undefined } }, cors);
+      } catch (e: any) {
+        return json(res, 200, { candidate: null, reason: e?.message ?? 'Image generation failed' }, cors);
+      }
+    }
+
+    // Template chosen on the confirmation screen (optionally with edits).
+    // Apply to every concept, THEN build the remaining sizes in the background.
+    const chooseMatch = url.pathname.match(/^\/api\/requests\/([\w-]+)\/choose-template$/);
+    if (chooseMatch && req.method === 'POST') {
+      const cors = corsHeaders(req.headers.origin);
+      if (!intakeCodeOk(req)) return json(res, 401, { error: 'A valid team access code is required.' }, cors);
+      const requestId = chooseMatch[1];
+      const campFile = path.join(OUT, 'campaigns', `${requestId}.json`);
+      if (!fs.existsSync(campFile)) return json(res, 404, { error: 'Unknown request' }, cors);
+      const body = JSON.parse(await readBody(req, 100_000)) as {
+        layoutFamily?: string;
+        copy?: { headline?: string; support?: string; cta?: string };
+        colors?: { accent?: string; ctaText?: string; headline?: string };
+      };
+      const fam = ['T01', 'T02', 'T03'].includes(body.layoutFamily ?? '') ? body.layoutFamily! : 'T01';
+      const doc = JSON.parse(fs.readFileSync(campFile, 'utf8'));
+      for (const c of doc.campaign.concepts) c.layoutFamily = fam;
+      if (body.colors) {
+        if (body.colors.accent) doc.campaign.brand.colors.accent = body.colors.accent;
+        if (body.colors.ctaText) doc.campaign.brand.colors.ctaText = body.colors.ctaText;
+        if (body.colors.headline) doc.campaign.brand.colors.headlineInk = body.colors.headline;
+      }
+      if (body.copy) {
+        for (const c of doc.campaign.concepts) {
+          c.copy.default = { ...c.copy.default };
+          for (const k of ['headline', 'support', 'cta'] as const) {
+            if (body.copy[k]) {
+              c.copy.default[k] = body.copy[k];
+              for (const key of Object.keys(c.copy)) if (key !== 'default') delete c.copy[key][k];
+            }
+          }
+        }
+      }
+      fs.writeFileSync(campFile, JSON.stringify(doc, null, 2));
+      const project = projects.byRequest(requestId);
+      const platforms: string[] = doc.platforms ?? ['google'];
+      const job = enqueue({ campaign: doc.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
+      if (project) { project.autoJobId = job.id; project.status = 'in-build'; projects.save(project); }
+      console.log(`[choose] ${requestId} template ${fam}, building remaining sizes as job ${job.id}`);
+      return json(res, 200, { building: true, template: fam }, cors);
+    }
+
+    if (route === 'POST /api/copy/suggest') {
+      const cors = corsHeaders(req.headers.origin);
+      const limit = rateLimit(route, req);
+      if (!limit.allowed) return json(res, 429, { error: 'Slow down a moment and try again.' }, cors);
+      const body = JSON.parse(await readBody(req, 50_000)) as any;
+      if (!body.business || !body.promoting) {
+        return json(res, 400, { error: 'business and promoting are required' }, cors);
+      }
+      const suggestion = await suggestCopy({
+        business: body.business, promoting: body.promoting, benefit: body.benefit,
+        offer: body.offer, audience: body.audience, geography: body.geography,
+        objective: body.objective, cta: body.cta, landing: body.landingAnalysis,
+      });
+      return json(res, 200, suggestion, cors);
+    }
+
     if (route === 'POST /api/landing/analyze') {
       const cors = corsHeaders(req.headers.origin);
       const body = JSON.parse(await readBody(req, 20_000)) as { url?: string; projectId?: string };
@@ -784,6 +1283,53 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* -------------------------------------------------------------- projects */
+    // Clone a campaign: everything copies to a fresh AD number so a returning
+    // customer's edits live on a NEW campaign, leaving the original intact.
+    const cloneMatch = url.pathname.match(/^\/api\/project\/([\w-]+)\/clone$/);
+    if (cloneMatch && req.method === 'POST') {
+      const src = projects.get(cloneMatch[1]);
+      if (!src) return json(res, 404, { error: 'Unknown project' });
+      const newRequestId = newRequestIdFor();
+      const srcCamp = path.join(OUT, 'campaigns', `${src.requestId}.json`);
+      if (!fs.existsSync(srcCamp)) return json(res, 409, { error: 'Original campaign file is missing.' });
+      const doc = JSON.parse(fs.readFileSync(srcCamp, 'utf8'));
+      doc.requestId = newRequestId;
+      if (doc.campaign) doc.campaign.requestId = newRequestId;
+      fs.writeFileSync(path.join(OUT, 'campaigns', `${newRequestId}.json`), JSON.stringify(doc, null, 2));
+      // The intake record travels too, so the clone's overview shows the
+      // same submission details as the original.
+      try {
+        const srcReq = path.join(OUT, 'requests', `${src.requestId}.json`);
+        if (fs.existsSync(srcReq)) {
+          const rec = JSON.parse(fs.readFileSync(srcReq, 'utf8'));
+          rec.requestId = newRequestId;
+          rec.clonedFrom = src.requestId;
+          fs.writeFileSync(path.join(OUT, 'requests', `${newRequestId}.json`), JSON.stringify(rec, null, 2));
+        }
+      } catch { /* overview simply shows less without it */ }
+      const clone = projects.create({
+        projectName: `${src.projectName} (copy)`,
+        client: src.client, domain: src.domain, campaignName: src.campaignName,
+        requestId: newRequestId, landingPage: src.landingPage, brand: src.brand,
+        brandEnteredManually: src.brandEnteredManually,
+        cloudinaryFolder: src.cloudinaryFolder, keywords: src.keywords,
+        notes: [`Cloned from ${src.requestId} (${src.projectId}).`],
+      } as any);
+      clone.status = 'in-build';
+      projects.save(clone);
+      // Render the clone so its proof is immediately reviewable/editable.
+      const platforms: string[] = doc.platforms ?? ['google'];
+      const job = enqueue({ campaign: doc.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
+      clone.autoJobId = job.id;
+      projects.save(clone);
+      console.log(`[clone] ${src.requestId} -> ${newRequestId}`);
+      return json(res, 200, {
+        requestId: newRequestId, projectId: clone.projectId,
+        proofUrl: `/proof/${newRequestId}`, overviewUrl: `/overview/${newRequestId}`,
+        building: true,
+      });
+    }
+
     if (route === 'GET /api/projects') {
       const q = url.searchParams;
       return json(res, 200, {

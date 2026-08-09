@@ -21,6 +21,7 @@ import { buildManifest, contextFor, tagsFor } from './manifest';
 import { writeReports } from './report';
 import { copyForSize } from './render';
 import { getPlatform, getTemplate } from './registry';
+import type { SizeKey } from './types';
 
 export type JobStatus = 'queued' | 'running' | 'complete' | 'failed';
 
@@ -171,15 +172,35 @@ async function runJob(id: string): Promise<void> {
     const all: RenderResult[] = [];
     const uploads = new Map<string, UploadedAsset>();
 
-    for (const platform of platforms) {
-      for (const concept of campaign.concepts) {
+    // Deduplicate by size across platforms — but only when the delivered
+    // output is byte-for-byte identical. A 300x250 is the same for Google and
+    // Amazon, so render once and tag both. A 320x50 is NOT: Google delivers it
+    // at 1x (320x50) and Amazon at 2x (640x100), so it must render per
+    // platform. The dedup key is therefore size + deliverScale, not size alone.
+    for (const concept of campaign.concepts) {
+      const doneKeys = new Set<string>();
+      for (const platform of platforms) {
+        const rule = getPlatform(platform);
+        const sizes = (Object.keys(getTemplate(concept.layoutFamily).sizes) as SizeKey[])
+          .filter((s) => {
+            const sr = rule.sizes[s];
+            if (!sr) return false;
+            return !doneKeys.has(`${s}@${sr.deliverScale}`);
+          });
+        if (!sizes.length) continue;
+
         const results = await renderPackage({
-          brand: campaign.brand,
-          concept,
-          platform,
-          outDir,
-          assetRoot,
+          brand: campaign.brand, concept, platform, outDir, assetRoot, sizes,
         });
+        for (const r of results) {
+          const myScale = rule.sizes[r.size]!.deliverScale;
+          // Tag every platform that supports this size AT THE SAME scale.
+          r.platforms = platforms.filter((p) => {
+            const pr = getPlatform(p).sizes[r.size];
+            return pr && pr.deliverScale === myScale;
+          });
+          doneKeys.add(`${r.size}@${myScale}`);
+        }
         all.push(...results);
         job.progress.done = all.length;
       }

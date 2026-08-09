@@ -218,6 +218,7 @@
   <button class="btn" id="save">Save</button>
   <a class="btn" id="proofLink" href="#" target="_blank" style="display:none">Open proof</a>
   <button class="btn" id="deliver" style="display:none;border-color:var(--pass);color:var(--pass)">Deliver final files</button>
+  <div id="deliveries" style="display:none;margin-top:10px;font-size:13px"></div>
   <button class="btn primary" id="renderAll">Render all sizes</button>
 </div>
 
@@ -577,6 +578,19 @@
     var btn = $('deliver');
     btn.style.display = le && (le.status === 'approved' || le.status === 'complete') ? '' : 'none';
     btn.textContent = le && le.status === 'complete' ? 'Deliver again' : 'Deliver final files';
+    // Every delivered package stays one click away, right here.
+    var box = $('deliveries');
+    if (le && le.delivered && le.delivered.length) {
+      box.style.display = '';
+      box.innerHTML = '<strong>Delivered packages</strong><br>' + le.delivered.map(function (d) {
+        var when = new Date(d.at);
+        return '<a href="' + d.zipUrl + '" download style="color:var(--accent,#1F5FC0);font-weight:600;text-decoration:none">\u2B07 ' +
+          (d.fileCount || '?') + ' files</a> <span style="color:#8a97a4">\u2014 ' +
+          when.toLocaleDateString() + ' ' + when.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) + '</span>';
+      }).reverse().join('<br>');
+    } else {
+      box.style.display = 'none';
+    }
   }
   $('deliver').addEventListener('click', function () {
     var pid = projectIdOf();

@@ -106,8 +106,8 @@
         12
       ],
       "minFontPx": 22,
-      "noBakedCta": true,
-      "notes": "Amazon mobile shopping format. Supply at 828x250 with a 640x250 safe zone. Amazon may supply the CTA separately, so the safe zone prioritises product, brand and headline.",
+      "noBakedCta": false,
+      "notes": "Amazon mobile shopping format. Supply at 828x250 with a 640x250 safe zone. Amazon may supply the CTA separately, so the safe zone prioritises product, brand and headline. (CTA baked in per Smart 1 request; Amazon may also overlay its own.)",
       "source": "doc",
       "_verifiedAgainst": "https://advertising.amazon.com/resources/ad-specs/dsp/desktop, fetched 2026-08-02"
     },
@@ -128,6 +128,23 @@
       "notes": "VERIFY: the background research does not give an Amazon static limit for this size. 40 KB is assumed by analogy with 728x90 and 160x600 \u2014 confirm against Amazon's current creative spec sheet before first live delivery.",
       "source": "doc",
       "_verifiedAgainst": "https://advertising.amazon.com/resources/ad-specs/dsp/desktop, fetched 2026-08-02"
+    },
+    "250x250": {
+      "w": 250,
+      "h": 250,
+      "maxFileBytes": 51200,
+      "formats": [
+        "jpg",
+        "png"
+      ],
+      "deliverScale": 1,
+      "words": [
+        8,
+        16
+      ],
+      "minFontPx": 12,
+      "notes": "Square. Logo and CTA centered.",
+      "source": "doc"
     }
   }
 }

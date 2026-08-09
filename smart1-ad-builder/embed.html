@@ -176,6 +176,15 @@
   .warn { background: #FCF0D8; color: #7A4E00; border-radius: 8px; padding: 11px 13px; font-size: 13.5px; margin-top: 12px; }
   .warn ul { margin: 6px 0 0; padding-left: 18px; }
   .muted-btn { background: transparent; color: var(--accent); border: 1.5px solid var(--line); padding: 10px 15px; font-size: 14.5px; }
+  .bg-choices { display: flex; gap: 10px; flex-wrap: wrap; }
+  .bg-opt { display: flex; flex-direction: column; align-items: center; gap: 8px; background: #fff; border: 2px solid var(--line); border-radius: 10px; padding: 12px; font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; flex: 1; min-width: 96px; }
+  .bg-opt.on { border-color: var(--accent); }
+  .bg-swatch { width: 100%; height: 46px; border-radius: 6px; }
+  .bg-swatch.solid { background: linear-gradient(135deg, #1F3A5F, #4A6E9B); }
+  .bg-swatch.photo { background: linear-gradient(135deg, #6b8e5a, #c9a86a); }
+  .bg-swatch.ai { background: linear-gradient(135deg, #7b4bc0, #c04b9b); }
+  .bg-thumb { display:inline-block; width: 120px; height: 68px; border-radius: 8px; border: 2px solid var(--line); object-fit: cover; cursor: pointer; margin: 4px; }
+  .bg-thumb.on { border-color: var(--accent); }
   .muted-btn:hover { background: var(--panel); }
   .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(0,0,0,.15);
     border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -3px; margin-right: 6px; }
@@ -205,6 +214,7 @@
 <body>
 <div class="form" id="root">
   <h1>Request Your Display Ads</h1>
+  <p style="margin:4px 0 0"><a href="/projects" target="_blank" rel="noopener" style="font-size:13px;color:var(--signal,#1F5FC0);font-weight:600;text-decoration:none">Search existing campaigns →</a></p>
   <p class="lede">A few short steps. We handle the sizes, layouts and platform requirements from here.</p>
 
   <!-- team access gate: shown only when the server has INTAKE_CODE set -->
@@ -222,6 +232,7 @@
     <div class="seg" data-goto="1"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">2</span></span><span class="t">The Campaign</span></div></div>
     <div class="seg" data-goto="2"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">3</span></span><span class="t">Logo &amp; Images</span></div></div>
     <div class="seg" data-goto="3"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">4</span></span><span class="t">Where Ads Run</span></div></div>
+    <div class="seg" data-goto="4"><div class="bar"></div><div class="lbl"><span class="num"><span class="n">5</span></span><span class="t">Review Message</span></div></div>
   </div>
 
   <div id="banner"></div>
@@ -406,6 +417,10 @@
           <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" multiple>
         </div>
         <ul class="files" id="imageFiles"></ul>
+        <div class="hint" style="margin-top:8px">
+          We'll automatically optimize images to meet the 150&nbsp;KB ad limit. Need to crop or edit one first?
+          Use our <a href="https://smart1marketing.com/image-optimizer" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">image optimizer</a>.
+        </div>
       </div>
 
       <label class="check" style="max-width:none" id="stockRow">
@@ -440,8 +455,57 @@
       </div>
 
       <p class="hint" style="margin-top:6px">
-        You'll get a confirmation by email, and we'll follow up on anything we still need.
+        Next we'll suggest your ad wording for you to approve before anything is built.
       </p>
+    </section>
+
+    <!-- ============================ STEP 5: copy approval ============================ -->
+    <section class="step" data-step="4">
+      <h2 class="steptitle">Review your message</h2>
+      <p class="stepsub">We drafted this from your answers. Edit anything, then approve — nothing is built until you do.</p>
+
+      <div id="copyLoading" style="padding:24px 0;color:var(--ink-2)"><span class="spinner"></span> Writing your ad copy…</div>
+
+      <div id="copyReview" style="display:none">
+        <div class="field" data-field="approvedHeadline">
+          <label class="req" for="approvedHeadline">Headline</label>
+          <input type="text" id="approvedHeadline" maxlength="60">
+          <div class="hint">The big line. 3–7 words works best.</div>
+        </div>
+        <div class="field" data-field="approvedSupport">
+          <label for="approvedSupport">Supporting line</label>
+          <input type="text" id="approvedSupport" maxlength="90">
+          <div class="hint">One short sentence that adds a second point.</div>
+        </div>
+        <div class="field" data-field="approvedCta">
+          <label class="req" for="approvedCta">Button text</label>
+          <input type="text" id="approvedCta" maxlength="24">
+        </div>
+
+        <div id="copyWarnings" style="display:none;background:#FCF0D8;color:#7A4E00;border-radius:8px;padding:12px 14px;font-size:13.5px;margin-bottom:14px"></div>
+
+        <button type="button" class="muted-btn" id="regenCopy" style="font-size:13.5px">Suggest different wording</button>
+
+        <div style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px">
+          <label style="font-weight:600;display:block;margin-bottom:4px">Background for your offer ad</label>
+          <p class="hint" style="margin:0 0 12px">One of your concepts can use a photo background. Pick a direction — we'll keep the text readable automatically.</p>
+          <div id="bgChoices" class="bg-choices">
+            <button type="button" class="bg-opt on" data-bg="solid">
+              <span class="bg-swatch solid"></span>
+              <span>Solid brand colour</span>
+            </button>
+            <button type="button" class="bg-opt" data-bg="pixabay">
+              <span class="bg-swatch photo"></span>
+              <span>Suggested photos</span>
+            </button>
+            <button type="button" class="bg-opt" data-bg="ai">
+              <span class="bg-swatch ai"></span>
+              <span>AI-generated from your page</span>
+            </button>
+          </div>
+          <div id="bgResults" style="display:none;margin-top:12px"></div>
+        </div>
+      </div>
     </section>
 
     <!-- step navigation -->
@@ -450,7 +514,7 @@
       <div class="spacer"></div>
       <span id="stepOf" class="hint" style="margin:0 4px 0 0"></span>
       <button type="button" id="next">Next</button>
-      <button type="submit" id="submit" style="display:none">Submit request</button>
+      <button type="submit" id="submit" style="display:none">Approve &amp; build my ads</button>
     </div>
   </form>
 </div>
@@ -594,7 +658,8 @@
     { required: ['business', 'website', 'contact', 'email'] },
     { required: ['campaignName', 'projectName', 'landingPage', 'promoting', 'objective', 'cta', 'benefit'] },
     { required: [] },
-    { required: ['platforms'] }
+    { required: ['platforms'] },
+    { required: ['approvedHeadline', 'approvedCta'] }
   ];
   var current = 0;
   var reached = 0;
@@ -660,8 +725,133 @@
     stepOf.textContent = 'Step ' + (i + 1) + ' of ' + STEPS.length;
 
     banner.innerHTML = '';
+    if (i === 4) loadCopySuggestion();
     document.getElementById('root').scrollIntoView({ behavior: 'smooth', block: 'start' });
     reportHeight();
+  }
+
+  /* ---------------------------------------- copy approval (step 5) */
+  var copyLoaded = false;
+  function renderCopyWarnings(warnings) {
+    var box = document.getElementById('copyWarnings');
+    if (warnings && warnings.length) {
+      box.style.display = '';
+      box.innerHTML = '<b>A couple of things to check:</b><ul style="margin:6px 0 0;padding-left:18px">' +
+        warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul>';
+    } else {
+      box.style.display = 'none';
+    }
+    reportHeight();
+  }
+  function fillCopy(sug) {
+    document.getElementById('approvedHeadline').value = sug.headline || '';
+    document.getElementById('approvedSupport').value = sug.support || '';
+    document.getElementById('approvedCta').value = sug.cta || (form.elements.cta.value !== 'Smart 1 should recommend' ? form.elements.cta.value : 'Learn More');
+    renderCopyWarnings(sug.warnings);
+    document.getElementById('copyLoading').style.display = 'none';
+    document.getElementById('copyReview').style.display = '';
+    reportHeight();
+  }
+  function loadCopySuggestion(force) {
+    if (copyLoaded && !force) return;
+    document.getElementById('copyLoading').style.display = '';
+    document.getElementById('copyReview').style.display = 'none';
+    reportHeight();
+    fetch(API + '/api/copy/suggest', {
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
+      body: JSON.stringify({
+        business: val('business'), promoting: val('promoting'), benefit: val('benefit'),
+        offer: form.elements.offer.value.trim(), audience: form.elements.audience.value.trim(),
+        geography: form.elements.geography.value.trim(), objective: val('objective'),
+        cta: val('cta'), landingAnalysis: suggestions || undefined
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (sug) { copyLoaded = true; fillCopy(sug); })
+      .catch(function () {
+        // Never block the build on a copy service hiccup — fall back to the
+        // form answers and let the person edit.
+        copyLoaded = true;
+        fillCopy({ headline: val('benefit') || val('promoting'), support: form.elements.offer.value.trim(), cta: val('cta'), warnings: [] });
+      });
+  }
+  // Re-run the client-side critique as they edit, so warnings stay honest.
+  ['approvedHeadline', 'approvedSupport', 'approvedCta'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', function () {
+      // lightweight local echo of the server critique for the truncation/label cases
+      var h = document.getElementById('approvedHeadline').value.trim();
+      var s = document.getElementById('approvedSupport').value.trim();
+      var w = [];
+      if (h && h.split(/\s+/).length < 2) w.push('The headline is a single word — it may read as a fragment.');
+      if (/(str|stre|adv|inc)$/i.test(h)) w.push('The headline looks truncated.');
+      if (s && /(str|stre|adv|inc)$/i.test(s)) w.push('The supporting line looks truncated.');
+      renderCopyWarnings(w);
+    });
+  });
+  document.getElementById('regenCopy').addEventListener('click', function () {
+    this.disabled = true; var b = this;
+    loadCopySuggestion(true);
+    setTimeout(function () { b.disabled = false; }, 1500);
+  });
+
+  /* -------------------------------------- background chooser (offer concept) */
+  var bgChoice = { mode: 'solid', url: null };
+  function selectBgMode(mode, btn) {
+    var opts = document.querySelectorAll('.bg-opt');
+    for (var i = 0; i < opts.length; i++) opts[i].classList.toggle('on', opts[i] === btn);
+    bgChoice = { mode: mode, url: null };
+    var results = document.getElementById('bgResults');
+    if (mode === 'solid') { results.style.display = 'none'; results.innerHTML = ''; return; }
+    results.style.display = '';
+    results.innerHTML = '<span class="hint"><span class="spinner"></span> ' +
+      (mode === 'ai' ? 'Generating an image from your landing page…' : 'Finding photos that fit your campaign…') + '</span>';
+
+    var endpoint = mode === 'ai' ? '/api/images/generate' : '/api/images/search';
+    fetch(API + endpoint, {
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
+      body: JSON.stringify({
+        business: val('business'), promoting: val('promoting'),
+        objective: val('objective'), landingAnalysis: suggestions || undefined,
+        benefit: val('benefit'), offer: val('offer'),
+        palette: (discovered.brand && discovered.brand.colors) ? {
+          primary: discovered.brand.colors.primary,
+          secondary: discovered.brand.colors.secondary,
+          accent: discovered.brand.colors.accent
+        } : undefined,
+        // Uploaded photos become references so the AI hero reflects the real
+        // product/location, not a generic stock scene.
+        referenceImages: (uploaded.image || []).map(function (x) { return x.url; })
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var cands = mode === 'ai' ? (data.candidate ? [data.candidate] : []) : (data.candidates || []);
+        if (!cands.length) {
+          results.innerHTML = '<span class="hint">' + esc(data.reason || 'No images available right now. Your ad will use a solid background.') + '</span>';
+          bgChoice = { mode: 'solid', url: null };
+          return;
+        }
+        results.innerHTML = '<p class="hint" style="margin:0 0 6px">Tap one to use it:</p>';
+        cands.forEach(function (c) {
+          var img = document.createElement('img');
+          img.src = API + c.url; img.className = 'bg-thumb'; img.alt = 'Background option';
+          img.addEventListener('click', function () {
+            var thumbs = results.querySelectorAll('.bg-thumb');
+            for (var t = 0; t < thumbs.length; t++) thumbs[t].classList.remove('on');
+            img.classList.add('on');
+            bgChoice = { mode: mode, url: c.url };
+          });
+          results.appendChild(img);
+        });
+      })
+      .catch(function () {
+        results.innerHTML = '<span class="hint">Could not load images. Your ad will use a solid background.</span>';
+        bgChoice = { mode: 'solid', url: null };
+      });
+  }
+  var bgOpts = document.querySelectorAll('.bg-opt');
+  for (var bi = 0; bi < bgOpts.length; bi++) {
+    bgOpts[bi].addEventListener('click', function () { selectBgMode(this.dataset.bg, this); });
   }
 
   nextBtn.addEventListener('click', function () {
@@ -898,8 +1088,37 @@
           if (!out || !out.public_id) throw new Error((out && out.error && out.error.message) || 'Upload rejected');
           uploaded[kindFor === 'logo' ? 'logo' : 'image'].push({ publicId: out.public_id, url: out.secure_url, name: file.name });
           setRow(row, 'ok', 'Uploaded');
+          // For a photo (not a logo), offer to use it as the ad background.
+          if (kindFor !== 'logo' && /^image\//.test(file.type) && file.type !== 'image/svg+xml') {
+            offerAsBackground(out.secure_url, file.name, row);
+          }
         })
         .catch(function (err) { setRow(row, 'bad', err.message || 'Upload failed'); });
+    }
+
+    // When someone uploads a photo, ask if they want it as the ad background.
+    // Their choice is remembered on window.__uploadedBg and sent at submit.
+    function offerAsBackground(url, name, row) {
+      if (!row) return;
+      var q = document.createElement('div');
+      q.style.cssText = 'margin-top:6px;font-size:13px;color:var(--ink-2)';
+      q.innerHTML = 'Use this photo as your ad background? ';
+      var yes = document.createElement('button');
+      yes.type = 'button'; yes.textContent = 'Yes, use it';
+      yes.style.cssText = 'font-size:12px;padding:3px 10px;margin-right:6px;border:1px solid var(--signal);border-radius:6px;background:#fff;color:var(--signal);font-weight:600;cursor:pointer';
+      var no = document.createElement('button');
+      no.type = 'button'; no.textContent = 'No';
+      no.style.cssText = 'font-size:12px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer';
+      yes.addEventListener('click', function () {
+        window.__uploadedBg = { url: url, name: name };
+        q.innerHTML = '<span style="color:var(--signal);font-weight:600">\\u2713 This photo will be used as your background.</span>';
+      });
+      no.addEventListener('click', function () {
+        if (window.__uploadedBg && window.__uploadedBg.url === url) window.__uploadedBg = null;
+        q.remove();
+      });
+      q.appendChild(yes); q.appendChild(no);
+      row.appendChild(q);
     }
 
     function addRow(file, cls, text) {
@@ -962,6 +1181,17 @@
     data.notes = form.elements.notes.value.trim();
     data.stockOk = document.getElementById('stockOk').checked;
     if (suggestions) data.landingAnalysis = suggestions;
+    // Human-approved copy is authoritative — the build uses it verbatim rather
+    // than re-suggesting, so what they approved is what renders.
+    data.approvedCopy = {
+      headline: document.getElementById('approvedHeadline').value.trim(),
+      support: document.getElementById('approvedSupport').value.trim(),
+      cta: document.getElementById('approvedCta').value.trim()
+    };
+    // Background direction chosen for the offer concept.
+    if (bgChoice && bgChoice.mode !== 'solid' && bgChoice.url) {
+      data.backgroundChoice = { mode: bgChoice.mode, url: bgChoice.url };
+    }
 
     if (manual.style.display !== 'none') {
       data.brandManual = true;
@@ -987,6 +1217,15 @@
       data.pickedLogoUrl = picked ? picked.value : ((discovered.logoOptions || [])[0] || {}).url;
     }
     data.honeypot = form.elements.company_url_confirm.value;
+    // Every uploaded logo and photo (Cloudinary links only — the files live in
+    // Cloudinary, we store just the URL). Logged with the campaign server-side.
+    data.uploadedLogos = uploaded.logo || [];
+    data.uploadedImages = uploaded.image || [];
+    // If the person opted to use one of their uploaded photos as the ad
+    // background, pass that choice straight through.
+    if (window.__uploadedBg && window.__uploadedBg.url) {
+      data.backgroundChoice = { mode: 'upload', url: window.__uploadedBg.url };
+    }
     var loadedAt = Number(document.getElementById('loadedAt').value) || 0;
     data.elapsedMs = loadedAt ? (Date.now() - loadedAt) : null;
     data.pageUrl = document.referrer || '';
@@ -1015,6 +1254,22 @@
           '<p>Thanks, ' + esc(data.contact.split(' ')[0] || 'there') + '. A confirmation is on its way to ' + esc(data.email) + '.</p>' +
           '<div class="ref">' + esc(rid) + '</div>' +
           '<div id="buildwait" style="margin-top:26px">' +
+          '<div id="tplbox" style="display:none">' +
+          '<p style="font-weight:600;color:var(--ink);margin:0 0 4px">Pick the look you like best.</p>' +
+          '<p class="hint" style="margin:0 0 14px">This is your 250\u00d7250. The remaining sizes build in your chosen style \u2014 you can still edit everything after.</p>' +
+          '<div id="tplopts" style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center"></div>' +
+          '<div id="tpledit" style="margin:18px auto 0;max-width:520px;text-align:left;background:#F7F9FC;border:1px solid var(--line);border-radius:10px;padding:16px">' +
+          '<p style="font-weight:600;margin:0 0 10px;font-size:14px">Want tweaks before we build the rest? Edit here \u2014 they apply to whichever style you pick.</p>' +
+          '<label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Headline</label>' +
+          '<input type="text" id="tpl-headline" maxlength="60" style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
+          '<label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Supporting line</label>' +
+          '<input type="text" id="tpl-support" maxlength="90" style="width:100%;box-sizing:border-box;margin-bottom:10px">' +
+          '<div style="display:flex;gap:14px;align-items:flex-end">' +
+          '<div style="flex:1"><label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Button text</label>' +
+          '<input type="text" id="tpl-cta" maxlength="24" style="width:100%;box-sizing:border-box"></div>' +
+          '<div><label class="hint" style="display:block;margin:0 0 2px;font-weight:600">Button colour</label>' +
+          '<input type="color" id="tpl-accent" style="width:52px;height:38px;padding:2px;border:1px solid var(--line);border-radius:7px;background:#fff"></div>' +
+          '</div></div></div>' +
           '<div id="skelbox">' + '<svg id="adskel" width="300" height="250" viewBox="0 0 300 250" xmlns="http://www.w3.org/2000/svg" ' +
   'style="border:1px solid var(--line);border-radius:8px;background:#fff;max-width:100%">' +
   '<defs><linearGradient id="sh" x1="0" y1="0" x2="1" y2="0">' +
@@ -1062,7 +1317,68 @@
           fetch(API + '/api/requests/' + encodeURIComponent(rid) + '/status')
             .then(function (r) { return r.json(); })
             .then(function (st) {
-              if (st.firstLook && !shownFirst) {
+              if (st.state === 'choose-template' && st.templatePreviews && st.templatePreviews.length && !document.getElementById('tplopts').childElementCount) {
+                var box = document.getElementById('tplopts');
+                var STYLE_NAMES = { T01: 'Style 1 \u2014 Centered', T02: 'Style 2 \u2014 Left aligned', T03: 'Style 3 \u2014 Panel' };
+                st.templatePreviews.forEach(function (tp, tpi) {
+                  var card = document.createElement('div');
+                  card.style.cssText = 'border:2px solid var(--line);border-radius:12px;padding:10px;background:#fff;max-width:280px';
+                  var lbl = document.createElement('div');
+                  lbl.textContent = STYLE_NAMES[tp.template] || ('Style ' + (tpi + 1));
+                  lbl.style.cssText = 'font-weight:600;font-size:14px;margin:0 0 8px;color:var(--ink)';
+                  card.appendChild(lbl);
+                  var img = document.createElement('img');
+                  img.src = API + tp.url; img.alt = tp.template;
+                  img.style.cssText = 'width:250px;height:250px;border-radius:8px;display:block';
+                  var btn = document.createElement('button');
+                  btn.type = 'button'; btn.textContent = 'Use this style';
+                  btn.style.cssText = 'width:100%;margin-top:10px';
+                  btn.addEventListener('click', function () {
+                    var all = document.querySelectorAll('#tplopts button');
+                    for (var q = 0; q < all.length; q++) { all[q].disabled = true; }
+                    btn.textContent = 'Building your sizes\u2026';
+                    window.__styleChosen = true;
+                    fetch(API + '/api/requests/' + encodeURIComponent(rid) + '/choose-template', {
+                      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
+                      body: JSON.stringify({
+                        layoutFamily: tp.template,
+                        copy: {
+                          headline: (document.getElementById('tpl-headline').value || '').trim(),
+                          support: (document.getElementById('tpl-support').value || '').trim(),
+                          cta: (document.getElementById('tpl-cta').value || '').trim()
+                        },
+                        colors: document.getElementById('tpl-accent').dataset.touched
+                          ? { accent: document.getElementById('tpl-accent').value } : undefined
+                      })
+                    }).then(function () {
+                      document.getElementById('tplbox').style.display = 'none';
+                      var sk = document.getElementById('skelbox');
+                      sk.style.display = '';
+                      var note = document.createElement('p');
+                      note.style.cssText = 'font-weight:600;color:var(--ink);margin:0 0 8px';
+                      note.textContent = 'Building all your sizes in that style \u2014 your full proof will open here automatically.';
+                      sk.insertBefore(note, sk.firstChild);
+                      reportHeight();
+                    }).catch(function () {
+                      for (var q2 = 0; q2 < all.length; q2++) { all[q2].disabled = false; }
+                      btn.textContent = 'Use this style';
+                    });
+                  });
+                  card.appendChild(img); card.appendChild(btn); box.appendChild(card);
+                });
+                document.getElementById('tpl-accent').addEventListener('input', function () { this.dataset.touched = '1'; });
+                // Start the tweak fields from the copy they already approved.
+                var ph = document.getElementById('approvedHeadline');
+                var ps = document.getElementById('approvedSupport');
+                var pc = document.getElementById('approvedCta');
+                if (ph) document.getElementById('tpl-headline').value = ph.value || '';
+                if (ps) document.getElementById('tpl-support').value = ps.value || '';
+                if (pc) document.getElementById('tpl-cta').value = pc.value || '';
+                document.getElementById('skelbox').style.display = 'none';
+                document.getElementById('tplbox').style.display = '';
+                reportHeight();
+              }
+              if (st.firstLook && !shownFirst && !window.__styleChosen) {
                 shownFirst = true;
                 document.getElementById('firstimg').src = API + st.firstLook;
                 document.getElementById('skelbox').style.display = 'none';
@@ -1074,6 +1390,11 @@
                   'Building the rest of your sizes… ' + st.progress.done + ' of ' + st.progress.total + ' done.';
               }
               if (st.ready && st.proofUrl) {
+                if (window.__styleChosen) {
+                  // Straight to the proof — no interstitial, no extra click.
+                  location.href = API + st.proofUrl;
+                  return;
+                }
                 document.getElementById('prooflink').href = API + st.proofUrl;
                 document.getElementById('readybox').style.display = '';
                 document.getElementById('progressline').textContent = '';
@@ -1083,15 +1404,9 @@
               }
               if (st.state === 'failed') {
                 document.getElementById('buildwait').innerHTML =
-                  '<p style="color:var(--ink-2)">Something needs attention on our side — our team has been ' +
-                  'notified automatically and will follow up with your previews.</p>';
-                reportHeight();
-                return;
-              }
-              if (st.state === 'waiting-assets') {
-                document.getElementById('buildwait').innerHTML =
-                  '<p style="color:var(--ink-2)">We have everything except a logo we can use, so our team will ' +
-                  'prepare your previews personally and follow up shortly.</p>';
+                  '<p style="color:var(--ink-2)">Your previews are taking longer than usual. ' +
+                  'They\'ll keep building — you can leave this page and open your link anytime:</p>' +
+                  '<div class="ref" style="margin-top:10px">' + esc(API + '/proof/' + rid) + '</div>';
                 reportHeight();
                 return;
               }

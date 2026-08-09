@@ -22,6 +22,9 @@ export interface ComposeInput {
   includeText?: boolean;
   /** Amazon responsive / 414x125 supply their own CTA. */
   noBakedCta?: boolean;
+  /** Full-bleed background photo path + overlay strength (0..1). */
+  backgroundImage?: string;
+  backgroundOverlay?: number;
   assetRoot?: string;
 }
 
@@ -120,12 +123,35 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
   const abs = (p: string) => (path.isAbsolute(p) ? p : path.resolve(assetRoot, p));
 
   /* ---------------------------------------------------------- background */
-  body.push(
-    `<rect x="0" y="0" width="${W}" height="${H}" fill="${resolveColor(layout.background, brand, '#ffffff')}"/>`,
-  );
+  // A full-bleed background photo (Concept C's image option) replaces the flat
+  // brand colour. It is always followed by a legibility overlay so headline,
+  // support and CTA stay readable over any photo — the whole reason a plain
+  // photo behind text usually fails. Overlay strength defaults from the
+  // caller's brightness read; 0.42 is a safe mid when unknown.
+  const bgImg = input.backgroundImage ? await dataUri(abs(input.backgroundImage)) : null;
+  if (bgImg) {
+    body.push(
+      `<image x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="${(copy as any).__bgPos ?? 'xMidYMid'} slice" href="${bgImg.uri}"/>`,
+    );
+    const strength = Math.max(0, Math.min(1, input.backgroundOverlay ?? 0.42));
+    // A vertical gradient: heavier where text sits (left/bottom on most
+    // layouts), lighter elsewhere, so the photo still reads.
+    defs.push(
+      `<linearGradient id="bgScrim" x1="0" y1="0" x2="1" y2="0">` +
+      `<stop offset="0" stop-color="#0b1220" stop-opacity="${(strength + 0.15).toFixed(2)}"/>` +
+      `<stop offset="0.6" stop-color="#0b1220" stop-opacity="${strength.toFixed(2)}"/>` +
+      `<stop offset="1" stop-color="#0b1220" stop-opacity="${Math.max(0, strength - 0.25).toFixed(2)}"/>` +
+      `</linearGradient>`,
+    );
+    body.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="url(#bgScrim)"/>`);
+  } else {
+    body.push(
+      `<rect x="0" y="0" width="${W}" height="${H}" fill="${resolveColor(layout.background, brand, '#ffffff')}"/>`,
+    );
+  }
 
   /* ---------------------------------------------------------------- hero */
-  if (layout.hero) {
+  if (layout.hero && !input.backgroundImage) {
     const hb = layout.hero;
     const src = hero[hb.orientation] ?? hero.landscape ?? hero.square ?? hero.vertical;
     const img = src ? await dataUri(abs(src)) : null;
@@ -154,17 +180,25 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
   }
 
   /* -------------------------------------------------------------- panels */
-  for (const [i, p] of (layout.panels ?? []).entries()) {
-    body.push(
-      `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="${p.radius ?? 0}" fill="${resolveColor(p.fill, brand)}" data-panel="${i}"/>`,
-    );
+  // A full-bleed background image replaces the panel structure — painting the
+  // template's opaque panels over it would defeat the point. The overlay
+  // already provides text legibility.
+  if (!input.backgroundImage) {
+    for (const [i, p] of (layout.panels ?? []).entries()) {
+      body.push(
+        `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="${p.radius ?? 0}" fill="${resolveColor(p.fill, brand)}" data-panel="${i}"/>`,
+      );
+    }
   }
 
   /* ---------------------------------------------------------------- logo */
   if (layout.logo) {
     const lb = layout.logo;
     const useReverse = (copy as any).__useReverseLogo === true;
-    const file = useReverse && brand.logos.reverse ? brand.logos.reverse : brand.logos.primary;
+    // A per-size logo override (e.g. a square variant for square placements)
+    // wins over the brand-wide logo choice.
+    const file = (copy as any).__logoFile
+      ?? (useReverse && brand.logos.reverse ? brand.logos.reverse : brand.logos.primary);
     const img = file ? await dataUri(abs(file)) : null;
     if (!img) {
       missingAssets.push(file || '(no logo supplied)');
@@ -214,22 +248,33 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
     minFontSize = Math.min(minFontSize, fit.fontSize);
 
     const ys = baselines(font, fit, spec.y, spec.h, spec.valign ?? 'top');
-    const fill = resolveColor(spec.color, brand, '#111111');
+    let fill = (role === 'headline' && (brand.colors as any).headlineInk)
+      ? resolveColor('headlineInk', brand)
+      : resolveColor(spec.color, brand, '#111111');
+    // Over a full-bleed background photo, text must be light to survive the
+    // overlay — the template's dark ink would fail the contrast check.
+    if (input.backgroundImage && role !== 'offer') {
+      fill = resolveColor('light', brand, '#ffffff');
+    }
     const inkW = fit.width;
     const inkX = xForAlign(inkW, spec.x, spec.w, spec.align);
     rects[role] = { x: inkX, y: spec.y, w: inkW, h: fit.height };
 
     if (!includeText) return;
 
-    const paths = fit.lines.map((line, i) => {
+    // Emit one <path> per line rather than concatenating every line into a
+    // single path. librsvg truncates extremely long path `d` strings, which
+    // silently dropped multi-line headlines (only the first line rendered).
+    // One path per line keeps each `d` well within safe limits.
+    fit.lines.forEach((line, i) => {
       const lw = fit.lines.length === 1 ? inkW : undefined;
       const width =
         lw ?? font.getAdvanceWidth(line, fit.fontSize, { kerning: true }) +
           Math.max(0, line.length - 1) * (spec.letterSpacing ?? 0);
       const x = xForAlign(width, spec.x, spec.w, spec.align);
-      return textPath(font, line, x, ys[i], fit.fontSize, spec.letterSpacing ?? 0);
+      const d = textPath(font, line, x, ys[i], fit.fontSize, spec.letterSpacing ?? 0);
+      if (d) body.push(`<path d="${d}" fill="${fill}" data-role="${role}"/>`);
     });
-    body.push(`<path d="${paths.join(' ')}" fill="${fill}" data-role="${role}"/>`);
   };
 
   drawText('headline', layout.headline);
@@ -256,13 +301,13 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
     rects.cta = { x: cb.x, y: cb.y, w: cb.w, h: cb.h };
 
     body.push(
-      `<rect x="${cb.x}" y="${cb.y}" width="${cb.w}" height="${cb.h}" rx="${cb.radius ?? 4}" fill="${resolveColor(cb.bg ?? 'accent', brand, '#ffc400')}" data-role="cta-bg"/>`,
+      `<rect x="${cb.x}" y="${cb.y}" width="${cb.w}" height="${cb.h}" rx="${cb.radius ?? 4}" fill="${(brand.colors as any).accent && cb.bg === undefined ? resolveColor('accent', brand, '#ffc400') : resolveColor(cb.bg ?? 'accent', brand, '#ffc400')}" data-role="cta-bg"/>`,
     );
     if (includeText) {
       const ys = baselines(font, fit, cb.y, cb.h, 'middle');
       const x = xForAlign(fit.width, cb.x, cb.w, cb.align ?? 'center');
       body.push(
-        `<path d="${textPath(font, fit.lines[0] ?? '', x, ys[0], fit.fontSize, cb.letterSpacing ?? 0)}" fill="${resolveColor(cb.color ?? 'dark', brand, '#111111')}" data-role="cta"/>`,
+        `<path d="${textPath(font, fit.lines[0] ?? '', x, ys[0], fit.fontSize, cb.letterSpacing ?? 0)}" fill="${(brand.colors as any).ctaText ? resolveColor('ctaText', brand) : resolveColor(cb.color ?? 'dark', brand, '#111111')}" data-role="cta"/>`,
       );
     }
   }
