@@ -1,12 +1,10 @@
 {
   "name": "knack-creative-lookup",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "private": true,
-  "dependencies": {
-    "serve": "^14.2.0"
-  },
+  "dependencies": { "serve": "^14.2.0" },
   "scripts": {
-    "build": "echo 'No build needed — serving prebuilt files'",
+    "build": "echo 'No build needed - serving prebuilt files'",
     "start": "serve -s build -l 3000"
   }
 }

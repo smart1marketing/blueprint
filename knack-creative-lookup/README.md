@@ -1,16 +1,24 @@
-# Creative Lookup
+# Creative Lookup (Smart 1 Marketing)
 
-Pre-built React app served as static files. Render runs `serve -s build`.
+Prebuilt React app served as static files (Render runs `serve -s build`).
 
-## What's here (this is the entire repo — nothing else is needed)
-- `build/` — the compiled app and `build/data/campaigns.json` (10,491 campaigns, 550 clients)
-- `render.yaml` — deploy config (no build step; serves the prebuilt folder)
-- `package.json` — only dependency is `serve`
+## What this version does
+- Excludes products: Search Engine Marketing (PPC), Website SEO/Listings, Email Blast
+- Most-recent-first; current year (2026) + future shown open
+- Prior years (2025, 2024, 2023...) in lazy accordions that load on open
+- Results grouped into **IO-number folders**, 5 across; click a folder for detail
+- Creative previews: real image when available, else a PDF / Google Drive /
+  Dropbox / generic-file (?) SVG placeholder based on the link
+- Smart 1 brand colors (green + charcoal)
 
-## Verify the data
-`build/data/campaigns.json` must start with:
-`{"recordCount":10491,"clientCount":550,...`
-If it says `clientCount:2`, it's the old broken file.
+## Data
+`build/data/campaigns.json` — 7,854 creatives, 495 clients, 1,616 IO folders.
+First chars must read: {"recordCount":7854,"clientCount":495,"ioCount":1616,...
+
+## Adjust brand colors
+Colors are CSS variables. If the green/charcoal are off, they're compiled into
+`build/static/css/main.*.css` — search for `--s1-green` and replace the hex.
+(Or tell me the exact hex codes and I'll rebuild.)
 
 ## Deploy
-Push to `main`; Render auto-deploys. First load may take ~30s on free tier.
+Push to main; Render serves the prebuilt folder. No build step, no OOM.
