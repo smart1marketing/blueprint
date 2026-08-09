@@ -105,15 +105,19 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
     .map((c, i) => {
       const tiles = c.entries
         .map((e) => {
-          const [w, h] = e.deliveredDimensions.split('x').map(Number);
+          // Display every creative at its LOGICAL size so a 2x asset sits in
+          // true proportion next to its 1x sibling; the label leads with the
+          // delivered dimensions so "640x100" reads as exactly that.
+          const [w, h] = e.size.split('x').map(Number);
+          const isScaled = e.deliveredDimensions !== e.size;
           const issues = e.qaIssues.length
             ? `<ul class="issues">${e.qaIssues.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`
             : '';
           return `
         <figure class="ad" data-size="${esc(e.size)}" data-concept="${esc(c.id)}">
           <figcaption>
-            <span class="size">${esc(e.size)}</span>
-            <span class="spec">${esc(e.deliveredDimensions)} · ${esc(e.format)} · ${kb(e.bytes)} · ${e.wordCount} words</span>
+            <span class="size">${esc(isScaled ? e.deliveredDimensions : e.size)}</span>
+            <span class="spec">${isScaled ? `${esc(e.size)} placement @2x · ` : ''}${esc(e.format)} · ${kb(e.bytes)} · ${e.wordCount} words</span>
             <span class="dot ${esc(e.qaStatus)}" title="${esc(e.qaStatus)}"></span>
             <button type="button" class="edit-size" data-size="${esc(e.size)}" data-concept="${esc(c.id)}" title="Edit just this size">Edit this size</button>
           </figcaption>
@@ -481,6 +485,9 @@ export function renderProof(m: Manifest, opts: ProofOptions = {}): string {
     <label style="display:flex;align-items:center;gap:8px;text-transform:none;font-size:13px;margin-top:14px">
       <input type="checkbox" id="se-reverselogo" style="width:auto"> Use the white logo on this size (for dark or photo backgrounds)
     </label>
+    <label>Picture placement</label>
+    <input type="text" id="se-bgpos" maxlength="120" placeholder="e.g. show more of the left side / move the photo down">
+    <p class="sub" style="margin:2px 0 0;font-size:12px">Tell us in plain words how the photo should sit on this size. We reposition it when you apply.</p>
     <label>Different logo for this size</label>
     <input type="file" id="se-logofile" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="font-size:13px;padding:8px 0;border:0">
     <p class="sub" style="margin:2px 0 0;font-size:12px">A rectangular logo often needs a square variant on square sizes. Upload one here — it applies to this size only.</p>
@@ -592,10 +599,15 @@ window.PROOF_DELIVERED = ${JSON.stringify(opts.delivered ?? null)};
   // When approval comes back with a download link, show the button right here.
   function showDownload(url, count) {
     var box = document.querySelector('.decide');
+    var _pp2 = location.pathname.split('/proof/');
+    var ridHere = _pp2.length > 1 ? _pp2[1].split('/')[0].split('?')[0].split('#')[0] : '';
+    var b = 'display:inline-block;text-decoration:none;padding:13px 24px;border-radius:8px;font-weight:600;font-size:15px;margin:0 10px 10px 0;';
     box.innerHTML = '<h2>Approved \u2014 your ads are ready</h2>' +
-      '<p>' + (count ? count + ' finished files, ' : '') + 'organised by platform and named for upload.</p>' +
-      '<a href="' + url + '" style="display:inline-block;background:#1F5FC0;color:#fff;text-decoration:none;' +
-      'padding:14px 30px;border-radius:8px;font-weight:600;font-size:16px">Download your ads (.zip)</a>';
+      '<p>' + (count ? count + ' finished files, ' : '') + 'organised by platform and named for upload. What next?</p>' +
+      '<a href="' + url + '" download style="' + b + 'background:#1F5FC0;color:#fff">Download ads</a>' +
+      '<a href="/overview/' + ridHere + '" style="' + b + 'background:#fff;color:#1F5FC0;border:1px solid #C9D4E0">Review campaign overview</a>' +
+      '<a href="/embed" style="' + b + 'background:#fff;color:#1F5FC0;border:1px solid #C9D4E0">Make another campaign</a>' +
+      '<a href="/projects" style="' + b + 'background:#fff;color:#1F5FC0;border:1px solid #C9D4E0">Search campaigns</a>';
   }
 
   document.getElementById('approve').addEventListener('click', function () { decision('approve'); });
@@ -789,7 +801,8 @@ window.PROOF_DELIVERED = ${JSON.stringify(opts.delivered ?? null)};
           cta: document.getElementById('se-cta').value.trim()
         },
         reverseLogo: document.getElementById('se-reverselogo').checked,
-        sizeLogo: window.__seLogoData ? { dataUrl: window.__seLogoData } : undefined
+        sizeLogo: window.__seLogoData ? { dataUrl: window.__seLogoData } : undefined,
+        picturePlacement: (document.getElementById('se-bgpos').value || '').trim() || undefined
       })
     })
       .then(function (r) { return r.json(); })

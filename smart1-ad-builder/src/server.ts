@@ -39,6 +39,7 @@ import sharp from 'sharp';
 import { notify } from './notify';
 import { discoverBrand, normalizeDomain } from './brandfetch';
 import { BrandCache } from './brand-cache';
+import { renderOverview, renderOverviewPdf } from './overview';
 import { ALLOWED_FORMATS, folderFor, signUpload, type AssetKind } from './assets';
 import { CloudinaryService, slug } from './cloudinary';
 
@@ -55,6 +56,12 @@ const BUILD_STAMP: { builtAt?: string; node?: string } = (() => {
 /** Base URL for links inside notifications. Set on Render to the public host. */
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? `http://localhost:${PORT}`).replace(/\/$/, '');
 const projects = new ProjectStore(OUT);
+function newRequestIdFor(): string {
+  // Same alphabet and entropy as intake ids: unguessable, no confusable chars.
+  return `AD-${new Date().getFullYear()}-` +
+    Array.from(crypto.randomBytes(8), (b) => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 31]).join('').slice(0, 8);
+}
+
 const brandCache = new BrandCache(path.join(OUT, 'brand-cache'));
 
 /**
@@ -157,7 +164,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname.startsWith('/api/project') ||
     url.pathname.startsWith('/api/build/') ||
     url.pathname.startsWith('/api/diagnostics') ||
-    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/') && !url.pathname.startsWith('/files/gallery/') && !url.pathname.startsWith('/files/deliveries/')) ||
+    (url.pathname.startsWith('/files/') && !url.pathname.startsWith('/files/imagery/') && !url.pathname.startsWith('/files/gallery/') && !url.pathname.startsWith('/files/deliveries/') && !url.pathname.startsWith('/files/renders/')) ||
     route === 'POST /api/render' ||
     url.pathname.startsWith('/api/render/');
 
@@ -325,6 +332,8 @@ const server = http.createServer(async (req, res) => {
           campaignName: body.campaignName,
           requestId,
           landingPage: body.landingPage,
+          contact: body.contact,
+          email: body.email,
           brand: result.campaign.brand,
           brandEnteredManually: Boolean(body.brandManual),
           cloudinaryFolder: cld.projectFolder(body.business, body.campaignName),
@@ -590,6 +599,50 @@ const server = http.createServer(async (req, res) => {
       return res.end(fs.readFileSync(f));
     }
 
+    const ovMatch = url.pathname.match(/^\/overview\/([\w-]+)(\/pdf)?$/);
+    if (ovMatch && req.method === 'GET') {
+      const requestId = ovMatch[1];
+      const manifest = latestManifest(OUT, requestId);
+      const project = projects.byRequest(requestId);
+      if (!project) return json(res, 404, { error: 'Unknown campaign' });
+      let campaign: any = null; let submission: any = undefined;
+      try {
+        const doc = JSON.parse(fs.readFileSync(path.join(OUT, 'campaigns', `${requestId}.json`), 'utf8'));
+        campaign = doc.campaign ?? null;
+      } catch { /* overview still renders from the project record */ }
+      try {
+        // The intake record is the submission of record — every field the
+        // customer typed, exactly as received.
+        submission = JSON.parse(fs.readFileSync(path.join(OUT, 'requests', `${requestId}.json`), 'utf8'));
+      } catch { /* fall back to project/campaign fields */ }
+      const brandRec = project.domain ? brandCache.read(project.domain) : null;
+      const delivered = project.delivered?.length ? project.delivered[project.delivered.length - 1] : null;
+      const ads = (manifest?.entries ?? [])
+        .filter((e: any) => fs.existsSync(e.localFile))
+        .map((e: any) => ({
+          size: e.size, delivered: e.deliveredDimensions, platform: e.platform,
+          file: e.localFile, bytes: e.bytes, qaStatus: e.qaStatus,
+          url: `/files/${path.relative(OUT, e.localFile).split(path.sep).join('/')}`,
+        }));
+      const data = {
+        requestId, project, campaign, submission,
+        brandCacheRecord: brandRec, ads,
+        publicUrl: PUBLIC_URL, proofUrl: `/proof/${requestId}`,
+        downloadUrl: delivered?.zipUrl,
+      };
+      if (ovMatch[2]) {
+        const pdf = await renderOverviewPdf(data as any);
+        res.writeHead(200, { 'content-type': 'application/pdf',
+          'content-disposition': `inline; filename="${slug(project.client)}_${slug(project.campaignName)}_overview.pdf"` });
+        return res.end(pdf);
+      }
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(renderOverview(data as any));
+    }
+
+    // Overview ad images must be publicly viewable via their /files paths —
+    // covered below by the renders exemption added to the admin gate.
+
     const proofMatch = url.pathname.match(/^\/proof\/([\w-]+)$/);
     if (proofMatch && req.method === 'GET') {
       const requestId = proofMatch[1];
@@ -794,6 +847,9 @@ const server = http.createServer(async (req, res) => {
          *  (without). dataUrl carries a direct upload from the size editor —
          *  e.g. a square logo variant for square placements. */
         sizeLogo?: { dataUrl?: string; url?: string };
+        /** Plain-English photo placement for this size, e.g. "show more of
+         *  the left side" or "move the picture down". */
+        picturePlacement?: string;
         colors?: { accent?: string; ctaText?: string; headline?: string };
         /** Logo change: a new uploaded logo (url/publicId) or an AI-rework of
          *  the current one. Applied to the whole brand (all sizes). */
@@ -879,18 +935,33 @@ const server = http.createServer(async (req, res) => {
       }
 
       // --- apply copy edits ---
-      if (body.copy && body.conceptId) {
+      if ((body.copy || body.picturePlacement || body.sizeLogo || typeof body.reverseLogo === 'boolean') && body.conceptId) {
         const concept = campaign.concepts.find((c: any) => c.conceptId === body.conceptId);
         if (concept) {
           if (body.size) {
             // Targeted edit: change just this one size.
             const target = (concept.copy[body.size] = concept.copy[body.size] || {});
             for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
-              if (body.copy[k] !== undefined) target[k] = body.copy[k];
+              if (body.copy && body.copy[k] !== undefined) target[k] = body.copy[k];
             }
             if (typeof body.reverseLogo === 'boolean') {
               // The composer reads this flag from the size's copy set.
               (target as any).__useReverseLogo = body.reverseLogo;
+            }
+            if (typeof body.picturePlacement === 'string' && body.picturePlacement.trim()) {
+              // Conversational repositioning: read direction words and map
+              // them to the photo's focal point for this one size. "Show more
+              // of the left" means anchor the LEFT edge of the photo.
+              const t = body.picturePlacement.toLowerCase();
+              const has = (...words: string[]) => words.some((w) => t.includes(w));
+              let fx = 'xMid'; let fy = 'YMid';
+              if (has('left')) fx = 'xMin';
+              if (has('right')) fx = 'xMax';
+              if (has('top', 'up', 'higher', 'head', 'face', 'sky')) fy = 'YMin';
+              if (has('bottom', 'down', 'lower', 'ground', 'floor')) fy = 'YMax';
+              if (has('center', 'centre', 'middle')) { if (!has('left','right')) fx = 'xMid'; if (!has('top','bottom','up','down')) fy = 'YMid'; }
+              (target as any).__bgPos = `${fx}${fy}`;
+              (target as any).__bgPosNote = body.picturePlacement.trim();
             }
             if (body.sizeLogo?.dataUrl || body.sizeLogo?.url) {
               try {
@@ -924,7 +995,7 @@ const server = http.createServer(async (req, res) => {
             const def = (concept.copy.default = concept.copy.default || {});
             const editedFields: string[] = [];
             for (const k of ['headline', 'support', 'cta', 'offer'] as const) {
-              if (body.copy[k] !== undefined) { def[k] = body.copy[k]; editedFields.push(k); }
+              if (body.copy && body.copy[k] !== undefined) { def[k] = body.copy[k]; editedFields.push(k); }
             }
             for (const key of Object.keys(concept.copy)) {
               if (key === 'default') continue;
@@ -1212,6 +1283,53 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* -------------------------------------------------------------- projects */
+    // Clone a campaign: everything copies to a fresh AD number so a returning
+    // customer's edits live on a NEW campaign, leaving the original intact.
+    const cloneMatch = url.pathname.match(/^\/api\/project\/([\w-]+)\/clone$/);
+    if (cloneMatch && req.method === 'POST') {
+      const src = projects.get(cloneMatch[1]);
+      if (!src) return json(res, 404, { error: 'Unknown project' });
+      const newRequestId = newRequestIdFor();
+      const srcCamp = path.join(OUT, 'campaigns', `${src.requestId}.json`);
+      if (!fs.existsSync(srcCamp)) return json(res, 409, { error: 'Original campaign file is missing.' });
+      const doc = JSON.parse(fs.readFileSync(srcCamp, 'utf8'));
+      doc.requestId = newRequestId;
+      if (doc.campaign) doc.campaign.requestId = newRequestId;
+      fs.writeFileSync(path.join(OUT, 'campaigns', `${newRequestId}.json`), JSON.stringify(doc, null, 2));
+      // The intake record travels too, so the clone's overview shows the
+      // same submission details as the original.
+      try {
+        const srcReq = path.join(OUT, 'requests', `${src.requestId}.json`);
+        if (fs.existsSync(srcReq)) {
+          const rec = JSON.parse(fs.readFileSync(srcReq, 'utf8'));
+          rec.requestId = newRequestId;
+          rec.clonedFrom = src.requestId;
+          fs.writeFileSync(path.join(OUT, 'requests', `${newRequestId}.json`), JSON.stringify(rec, null, 2));
+        }
+      } catch { /* overview simply shows less without it */ }
+      const clone = projects.create({
+        projectName: `${src.projectName} (copy)`,
+        client: src.client, domain: src.domain, campaignName: src.campaignName,
+        requestId: newRequestId, landingPage: src.landingPage, brand: src.brand,
+        brandEnteredManually: src.brandEnteredManually,
+        cloudinaryFolder: src.cloudinaryFolder, keywords: src.keywords,
+        notes: [`Cloned from ${src.requestId} (${src.projectId}).`],
+      } as any);
+      clone.status = 'in-build';
+      projects.save(clone);
+      // Render the clone so its proof is immediately reviewable/editable.
+      const platforms: string[] = doc.platforms ?? ['google'];
+      const job = enqueue({ campaign: doc.campaign, platforms, upload: false, outDir: OUT, assetRoot: ROOT });
+      clone.autoJobId = job.id;
+      projects.save(clone);
+      console.log(`[clone] ${src.requestId} -> ${newRequestId}`);
+      return json(res, 200, {
+        requestId: newRequestId, projectId: clone.projectId,
+        proofUrl: `/proof/${newRequestId}`, overviewUrl: `/overview/${newRequestId}`,
+        building: true,
+      });
+    }
+
     if (route === 'GET /api/projects') {
       const q = url.searchParams;
       return json(res, 200, {

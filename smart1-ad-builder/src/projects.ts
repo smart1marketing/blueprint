@@ -59,6 +59,10 @@ export interface RenderBatch {
 }
 
 export interface Project {
+  /** Contact person and email from the intake, so campaigns are searchable
+   *  by who asked for them. */
+  contact?: string;
+  email?: string;
   /** Human-chosen name. This is what people search for. */
   projectName: string;
   /** Slug used for the Cloudinary folder and the record filename. */
@@ -149,6 +153,8 @@ export class ProjectStore {
     campaignName: string;
     requestId: string;
     landingPage?: string;
+    contact?: string;
+    email?: string;
     brand?: Brand;
     brandEnteredManually?: boolean;
     cloudinaryFolder?: string;
@@ -167,6 +173,8 @@ export class ProjectStore {
       updatedAt: now,
       status: 'draft',
       landingPage: input.landingPage,
+      contact: input.contact,
+      email: input.email,
       brand: input.brand,
       brandEnteredManually: input.brandEnteredManually,
       cloudinaryFolder: input.cloudinaryFolder,
@@ -259,6 +267,7 @@ export class ProjectStore {
         const hay = [
           p.projectName, p.client, p.campaignName, p.domain,
           p.landingPage ?? '', p.requestId, p.status,
+          p.contact ?? '', p.email ?? '',
           ...(p.keywords ?? []),
           p.landingAnalysis?.summary ?? '',
         ].join(' ').toLowerCase();

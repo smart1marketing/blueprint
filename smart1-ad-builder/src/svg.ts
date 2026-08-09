@@ -131,7 +131,7 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
   const bgImg = input.backgroundImage ? await dataUri(abs(input.backgroundImage)) : null;
   if (bgImg) {
     body.push(
-      `<image x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice" href="${bgImg.uri}"/>`,
+      `<image x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="${(copy as any).__bgPos ?? 'xMidYMid'} slice" href="${bgImg.uri}"/>`,
     );
     const strength = Math.max(0, Math.min(1, input.backgroundOverlay ?? 0.42));
     // A vertical gradient: heavier where text sits (left/bottom on most
@@ -180,15 +180,15 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
   }
 
   /* -------------------------------------------------------------- panels */
-  // A full-bleed background image replaces the panel structure — painting the
-  // template's opaque panels over it would defeat the point. The overlay
-  // already provides text legibility.
-  if (!input.backgroundImage) {
-    for (const [i, p] of (layout.panels ?? []).entries()) {
-      body.push(
-        `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="${p.radius ?? 0}" fill="${resolveColor(p.fill, brand)}" data-panel="${i}"/>`,
-      );
-    }
+  // Structural panels normally yield to a full-bleed background photo — but a
+  // panel marked overBg is PART of the design over photos (e.g. the floating
+  // content card in the overlay-card archetype), optionally translucent.
+  for (const [i, p] of (layout.panels ?? []).entries()) {
+    if (input.backgroundImage && !(p as any).overBg) continue;
+    const op = (p as any).opacity;
+    body.push(
+      `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="${p.radius ?? 0}" fill="${resolveColor(p.fill, brand)}"${typeof op === 'number' ? ` fill-opacity="${op}"` : ''} data-panel="${i}"/>`,
+    );
   }
 
   /* ---------------------------------------------------------------- logo */
@@ -253,7 +253,7 @@ export async function compose(input: ComposeInput): Promise<ComposeOutput> {
       : resolveColor(spec.color, brand, '#111111');
     // Over a full-bleed background photo, text must be light to survive the
     // overlay — the template's dark ink would fail the contrast check.
-    if (input.backgroundImage && role !== 'offer') {
+    if (input.backgroundImage && role !== 'offer' && !(spec as any).keepColorOnBg) {
       fill = resolveColor('light', brand, '#ffffff');
     }
     const inkW = fit.width;

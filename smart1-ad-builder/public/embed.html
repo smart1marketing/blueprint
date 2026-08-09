@@ -214,6 +214,7 @@
 <body>
 <div class="form" id="root">
   <h1>Request Your Display Ads</h1>
+  <p style="margin:4px 0 0"><a href="/projects" target="_blank" rel="noopener" style="font-size:13px;color:var(--signal,#1F5FC0);font-weight:600;text-decoration:none">Search existing campaigns →</a></p>
   <p class="lede">A few short steps. We handle the sizes, layouts and platform requirements from here.</p>
 
   <!-- team access gate: shown only when the server has INTAKE_CODE set -->
@@ -1318,9 +1319,14 @@
             .then(function (st) {
               if (st.state === 'choose-template' && st.templatePreviews && st.templatePreviews.length && !document.getElementById('tplopts').childElementCount) {
                 var box = document.getElementById('tplopts');
-                st.templatePreviews.forEach(function (tp) {
+                var STYLE_NAMES = { T01: 'Style 1 \u2014 Centered', T02: 'Style 2 \u2014 Left aligned', T03: 'Style 3 \u2014 Panel' };
+                st.templatePreviews.forEach(function (tp, tpi) {
                   var card = document.createElement('div');
                   card.style.cssText = 'border:2px solid var(--line);border-radius:12px;padding:10px;background:#fff;max-width:280px';
+                  var lbl = document.createElement('div');
+                  lbl.textContent = STYLE_NAMES[tp.template] || ('Style ' + (tpi + 1));
+                  lbl.style.cssText = 'font-weight:600;font-size:14px;margin:0 0 8px;color:var(--ink)';
+                  card.appendChild(lbl);
                   var img = document.createElement('img');
                   img.src = API + tp.url; img.alt = tp.template;
                   img.style.cssText = 'width:250px;height:250px;border-radius:8px;display:block';
@@ -1331,6 +1337,7 @@
                     var all = document.querySelectorAll('#tplopts button');
                     for (var q = 0; q < all.length; q++) { all[q].disabled = true; }
                     btn.textContent = 'Building your sizes\u2026';
+                    window.__styleChosen = true;
                     fetch(API + '/api/requests/' + encodeURIComponent(rid) + '/choose-template', {
                       method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
                       body: JSON.stringify({
@@ -1345,7 +1352,13 @@
                       })
                     }).then(function () {
                       document.getElementById('tplbox').style.display = 'none';
-                      document.getElementById('skelbox').style.display = '';
+                      var sk = document.getElementById('skelbox');
+                      sk.style.display = '';
+                      var note = document.createElement('p');
+                      note.style.cssText = 'font-weight:600;color:var(--ink);margin:0 0 8px';
+                      note.textContent = 'Building all your sizes in that style \u2014 your full proof will open here automatically.';
+                      sk.insertBefore(note, sk.firstChild);
+                      reportHeight();
                     }).catch(function () {
                       for (var q2 = 0; q2 < all.length; q2++) { all[q2].disabled = false; }
                       btn.textContent = 'Use this style';
@@ -1365,7 +1378,7 @@
                 document.getElementById('tplbox').style.display = '';
                 reportHeight();
               }
-              if (st.firstLook && !shownFirst) {
+              if (st.firstLook && !shownFirst && !window.__styleChosen) {
                 shownFirst = true;
                 document.getElementById('firstimg').src = API + st.firstLook;
                 document.getElementById('skelbox').style.display = 'none';
@@ -1377,6 +1390,11 @@
                   'Building the rest of your sizes… ' + st.progress.done + ' of ' + st.progress.total + ' done.';
               }
               if (st.ready && st.proofUrl) {
+                if (window.__styleChosen) {
+                  // Straight to the proof — no interstitial, no extra click.
+                  location.href = API + st.proofUrl;
+                  return;
+                }
                 document.getElementById('prooflink').href = API + st.proofUrl;
                 document.getElementById('readybox').style.display = '';
                 document.getElementById('progressline').textContent = '';
