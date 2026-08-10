@@ -898,3 +898,40 @@ if (diagnosticsClose) {
     diagnosticsModal.style.display = 'none';
   });
 }
+// Deploy Custom Pixel Code Listener
+const btnDeployPixel = document.getElementById('btn-deploy-pixel');
+const pixelResults = document.getElementById('pixel-deploy-results');
+
+if (btnDeployPixel) {
+  btnDeployPixel.addEventListener('click', async () => {
+    const google_login = document.getElementById('pixel-login').value.trim();
+    const account_id = document.getElementById('pixel-account-id').value.trim();
+    const container_id = document.getElementById('pixel-container-id').value.trim();
+    const tag_name = document.getElementById('pixel-tag-name').value.trim();
+    const pixel_code = document.getElementById('pixel-code-input').value.trim();
+
+    if (!google_login || !account_id || !container_id || !tag_name || !pixel_code) {
+      showToast("Please fill in all pixel form fields including the script code.", "error");
+      return;
+    }
+
+    pixelResults.innerHTML = renderSkeletonCard();
+
+    const resp = await fetch('/api/gtm/deploy-pixel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        google_login, account_id, container_id, tag_name, pixel_code
+      })
+    });
+
+    const data = await resp.json();
+    if (resp.ok) {
+      pixelResults.innerHTML = `<div style="color:#137333; font-size:13px; font-weight:bold;">✓ ${esc(data.message)}</div>`;
+      showToast(`Custom pixel '${tag_name}' deployed successfully!`, "success");
+    } else {
+      pixelResults.innerHTML = `<div style="color:#c5221f; font-size:13px;">Error: ${esc(data.error)}</div>`;
+      showToast("Failed to deploy pixel.", "error");
+    }
+  });
+}
