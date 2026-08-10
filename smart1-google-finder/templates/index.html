@@ -5,39 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Smart 1 Google Account Command Center</title>
   <link rel="stylesheet" href="/static/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    html { scroll-behavior: smooth; }
-    .nav-anchor-bar {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 14px;
-      padding: 10px 14px;
-      background: #f0f4f9;
-      border: 1px solid #d8e0eb;
-      border-radius: 12px;
-    }
-    .nav-anchor-bar a {
-      font-size: 12px;
-      font-weight: 700;
-      color: #1a2e58;
-      background: #fff;
-      padding: 6px 12px;
-      border: 1px solid #ccd6e5;
-      border-radius: 999px;
-      text-decoration: none;
-      transition: background 0.15s ease, border-color 0.15s ease;
-    }
-    .nav-anchor-bar a:hover, .nav-anchor-bar a.active-page {
-      background: #1a2e58;
-      color: #fff!important;
-      border-color: #1a2e58;
-    }
-  </style>
 </head>
 <body>
-  <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toast-container"></div>
 
   <main class="wrap">
@@ -53,17 +22,14 @@
         </div>
       </div>
 
-      <!-- TOP NAVIGATION BAR -->
+      <!-- TOP NAVIGATION MENU -->
       <nav class="nav-anchor-bar">
         <a href="/" class="active-page">🔍 Quick Search</a>
-        <a href="#gtm-generator">⚡ GTM Event Generator</a>
-        <a href="#ask-analytics">💬 Ask GA4</a>
-        <a href="#ai-comparator">📊 AI Comparator</a>
-        <a href="#gsc-bulk">🌐 Bulk Search Console</a>
-        <a href="/reports" target="_blank">📁 Historical Reports ↗</a>
-        <a href="/gtm-logs" target="_blank">📜 GTM Audit Logs ↗</a>
-        <a href="#manual-gmb">📍 GMB Checker</a>
-        <a href="#connected-accounts">👥 Accounts</a>
+        <a href="/ga-tools">📊 GA Tools</a>
+        <a href="/gtm-tools">⚡ GTM Tools</a>
+        <a href="/webmaster-tools">🌐 Webmaster Tools</a>
+        <a href="/gmb-tools">📍 GMB Tools</a>
+        <a href="/history">📜 History & Logs</a>
       </nav>
 
       <!-- PRIMARY SEARCH SECTION -->
@@ -107,155 +73,7 @@
       </div>
       {% endif %}
 
-      <hr style="margin: 28px 0 20px; border: 0; border-top: 1px solid #e1e7ef;">
-
-      <!-- AI GTM EVENT GENERATOR -->
-      <div id="gtm-generator" class="manual-lookup-card">
-        <h3>⚡ AI Site Analysis & GTM Event Auto-Generator</h3>
-        <p>Type a website or landing page URL to analyze elements and generate GTM tracking events:</p>
-        <div class="manual-input-group">
-          <input id="gtm-gen-url" autocomplete="off" placeholder="e.g. https://buckeyelakewinery.com/contact">
-          <button id="gtm-gen-btn" class="btn">Analyze Page Elements</button>
-        </div>
-        <div id="gtm-gen-results" style="margin-top:12px;"></div>
-      </div>
-
-      <!-- BULK SEARCH CONSOLE MANAGER -->
-      <div id="gsc-bulk" class="manual-lookup-card" style="margin-top:20px;">
-        <h3>🌐 Bulk Search Console Property & Sitemap Deployer</h3>
-        <p>Batch add multiple domain properties or sitemaps to a selected Search Console account:</p>
-        
-        <div class="comp-grid">
-          <div>
-            <label>Target Google Account:</label>
-            <select id="gsc-bulk-account">
-              <option value="">Select Connected Login...</option>
-              {% for acc in accounts %}
-                <option value="{{ acc.email }}">{{ acc.email }} {% if acc.status == 'REAUTH_REQUIRED' %}(⚠️ Re-auth required){% endif %}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label>Bulk Domains & Sitemaps (One per line: domain | sitemap):</label>
-            <textarea id="gsc-bulk-text" rows="3" placeholder="https://example1.com/ | https://example1.com/sitemap.xml&#10;https://example2.com/ | https://example2.com/sitemap.xml" style="width:100%; font-size:12px; padding:8px; border:1px solid #ccd6e5; border-radius:6px;"></textarea>
-          </div>
-        </div>
-
-        <button id="btn-run-gsc-bulk" class="btn" style="margin-top:10px; background:#1a2e58!important;">Execute Bulk Deployment</button>
-        <div id="gsc-bulk-results" style="margin-top:10px;"></div>
-      </div>
-
-      <!-- GA4 NATURAL LANGUAGE "ASK ANALYTICS" -->
-      <div id="ask-analytics" class="manual-lookup-card" style="margin-top:20px;">
-        <h3>💬 Ask Analytics a Question Directly</h3>
-        <p>Type any plain-English question to pull immediate metric breakdowns from GA4:</p>
-        <div class="manual-input-group">
-          <input id="ask-q" autocomplete="off" placeholder="e.g. What were top device categories last month? or Top landing pages?">
-          <button id="ask-btn" class="btn">Ask GA4 Data</button>
-        </div>
-        <div id="ask-results" style="margin-top:10px;"></div>
-      </div>
-
-      <!-- GA4 AI COMPARISON ENGINE WITH VISUAL CHARTS -->
-      <div id="ai-comparator" class="ai-comparator-card" style="margin-top:20px;">
-        <h3>GA4 AI Performance Comparator & Visual Charts</h3>
-        <p>Compare date periods for any connected GA4 property and get automated AI insights and visual trend charts.</p>
-        
-        <div class="comp-grid">
-          <div>
-            <label>GA4 Property ID & Account:</label>
-            <input id="comp-property-id" placeholder="e.g. 312345678">
-          </div>
-          <div>
-            <label>Google Login Email:</label>
-            <input id="comp-login" placeholder="e.g. adops@smart1marketing.com">
-          </div>
-          <div>
-            <label>Preset Date Range:</label>
-            <select id="comp-date-preset">
-              <option value="last_month" selected>Last Month</option>
-              <option value="mtd">This Month to Date</option>
-              <option value="last_week">Last Week</option>
-              <option value="last_quarter">Last Quarter</option>
-              <option value="ytd">This Year to Date</option>
-              <option value="custom">Custom Date Range</option>
-            </select>
-          </div>
-          <div>
-            <label>Compare Against:</label>
-            <select id="comp-period-type">
-              <option value="previous_period">Previous Period (MoM/WoW)</option>
-              <option value="previous_year">Previous Year (YoY)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="comp-grid-secondary">
-          <div>
-            <label>Analysis Scope:</label>
-            <select id="comp-scope-type">
-              <option value="site">Entire Site</option>
-              <option value="top_10">Top 10 Pages</option>
-              <option value="top_25">Top 25 Pages</option>
-              <option value="top_50">Top 50 Pages</option>
-              <option value="page">Search Specific Page Path</option>
-            </select>
-          </div>
-
-          <div id="page-path-wrapper" style="display:none;">
-            <label>Page Path Search Filter:</label>
-            <input id="comp-page-path" placeholder="/contact-us, /blog/, or regex">
-          </div>
-
-          <div>
-            <label>Source / Medium Channel:</label>
-            <select id="comp-source-medium">
-              <option value="">All Sources / Mediums (No Filter)</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Report Persona Preset:</label>
-            <select id="comp-preset">
-              <option value="executive" selected>📊 Executive Summary</option>
-              <option value="ecommerce">🛒 E-Commerce Audit</option>
-              <option value="local">📍 Local Business Review</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Report Sentiment Mode:</label>
-            <select id="comp-tone">
-              <option value="positive" selected>🟢 Positive / Client Wins Mode</option>
-              <option value="troubling">🔴 Constructive / Optimization Needed</option>
-            </select>
-          </div>
-        </div>
-
-        <div id="custom-date-wrapper" style="margin-top:10px;">
-          <label>Selected Period (P1):</label>
-          <div style="display:flex; gap:6px;">
-            <input type="date" id="p1-start">
-            <input type="date" id="p1-end">
-          </div>
-        </div>
-
-        <button id="run-ga4-comp" class="btn" style="margin-top:14px;">Run GA4 Comparison & AI Analysis</button>
-        <div id="ai-comp-results"></div>
-      </div>
-
-      <!-- MANUAL GMB CHECKER -->
-      <div id="manual-gmb" class="manual-lookup-card" style="margin-top:20px;">
-        <h3>Manual GMB & Claim Checker</h3>
-        <p>Type a business name, city, or website domain to generate quick audit and claim links:</p>
-        <div class="manual-input-group">
-          <input id="manual-q" autocomplete="off" placeholder="e.g., Buckeye Lake Winery or buckeyelakewinery.com">
-          <button id="manual-btn" class="btn">Generate Links</button>
-        </div>
-        <div id="manual-results"></div>
-      </div>
-
-      <!-- CONNECTED ACCOUNTS FOOTER -->
+      <!-- CONNECTED ACCOUNTS FOOTER (SINGLE INSTANCE) -->
       <div id="connected-accounts" class="accounts" style="margin-top:28px;">
         <div class="accounts-title">Connected Google Accounts</div>
         {% if accounts %}
@@ -270,10 +88,26 @@
           <span class="muted">No Google accounts connected yet.</span>
         {% endif %}
       </div>
+
+      <!-- DIAGNOSTICS LINK -->
+      <div style="margin-top: 14px; text-align: center; font-size: 12px;">
+        <a href="#" id="btn-open-diagnostics" style="color: #69758a; text-decoration: underline; font-weight: 600;">⚙️ System Diagnostics Dashboard</a>
+      </div>
     </section>
   </main>
 
-  <!-- GTM CONTAINER INSPECTOR MODAL -->
+  <!-- DIAGNOSTICS MODAL -->
+  <div id="diagnostics-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:999;">
+    <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:680px; max-height:85vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; color:#1a2e58;">⚙️ System Diagnostics Dashboard</h3>
+        <button id="diagnostics-modal-close" style="border:0; background:none; font-size:20px; cursor:pointer;">×</button>
+      </div>
+      <div id="diagnostics-modal-body" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
+  <!-- GTM INSPECTOR MODAL -->
   <div id="gtm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:999;">
     <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:650px; max-height:85vh; overflow-y:auto;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -284,79 +118,6 @@
     </div>
   </div>
 
-  <!-- SAVE REPORT MODAL -->
-  <div id="save-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:999;">
-    <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:480px;">
-      <h3 style="margin-top:0; color:#1a2e58;">Save Report & Schedule Alerts</h3>
-      
-      <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">Customer Name:</label>
-      <input id="modal-cust-name" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-
-      <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">Summary Title:</label>
-      <input id="modal-sum-title" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-
-      <hr style="margin:16px 0; border:0; border-top:1px solid #eee;">
-
-      <label style="font-size:12px; font-weight:700; display:block;">Enable Automated Alerts?</label>
-      <select id="modal-enable-alerts" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-        <option value="no">No Alerts Needed</option>
-        <option value="yes">Yes, Send Periodic Updates</option>
-      </select>
-
-      <div id="alert-options-box" style="display:none; margin-top:10px;">
-        <label style="font-size:12px; font-weight:700; display:block;">Notification Email Address:</label>
-        <input id="modal-alert-email" type="email" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-
-        <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">Update Frequency:</label>
-        <select id="modal-alert-freq" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-          <option value="daily">Daily</option>
-          <option value="weekly" selected>Weekly</option>
-          <option value="monthly">Monthly</option>
-        </select>
-
-        <label style="font-size:12px; font-weight:700; display:block; margin-top:8px;">GoHighLevel Webhook URL:</label>
-        <input id="modal-ghl-url" placeholder="https://services.leadconnectorhq.com/hooks/..." style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
-      </div>
-
-      <div style="margin-top:18px; display:flex; justify-content:flex-end; gap:8px;">
-        <button id="modal-cancel" style="padding:8px 14px; background:#edf1f6; border:0; border-radius:6px; cursor:pointer;">Cancel</button>
-        <button id="modal-confirm-save" class="btn">Save Report</button>
-      </div>
-    </div>
-  </div>
-<!-- CONNECTED ACCOUNTS FOOTER -->
-      <div id="connected-accounts" class="accounts" style="margin-top:28px;">
-        <div class="accounts-title">Connected Google Accounts</div>
-        {% if accounts %}
-          {% for acc in accounts %}
-          <div class="account-chip" data-email="{{ acc.email }}">
-            <span class="check">{% if acc.status == 'ACTIVE' %}✓{% else %}⚠️{% endif %}</span>
-            <span>{{ acc.email }}</span>
-            <button class="disconnect" data-email="{{ acc.email }}" title="Disconnect">×</button>
-          </div>
-          {% endfor %}
-        {% else %}
-          <span class="muted">No Google accounts connected yet.</span>
-        {% endif %}
-      </div>
-
-      <!-- SMALL DIAGNOSTICS LINK AT BOTTOM -->
-      <div style="margin-top: 14px; text-align: center; font-size: 12px;">
-        <a href="#" id="btn-open-diagnostics" style="color: #69758a; text-decoration: underline; font-weight: 600;">⚙️ System Diagnostics Dashboard</a>
-      </div>
-    </section>
-  </main>
-
-  <!-- DIAGNOSTICS DASHBOARD MODAL -->
-  <div id="diagnostics-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; z-index:999;">
-    <div style="background:#fff; padding:24px; border-radius:12px; width:100%; max-width:680px; max-height:85vh; overflow-y:auto;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="margin:0; color:#1a2e58;">⚙️ System Diagnostics Dashboard</h3>
-        <button id="diagnostics-modal-close" style="border:0; background:none; font-size:20px; cursor:pointer;">×</button>
-      </div>
-      <div id="diagnostics-modal-body" style="margin-top:16px;"></div>
-    </div>
-  </div>
-<script src="/static/app.js"></script>
+  <script src="/static/app.js"></script>
 </body>
 </html>
