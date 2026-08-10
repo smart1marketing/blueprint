@@ -21,7 +21,7 @@
         </div>
       </div>
 
-      <!-- TOP NAVIGATION MENU -->
+      <!-- CLEAN NAVIGATION MENU -->
       <nav class="nav-anchor-bar">
         <a href="/">🔍 Quick Search</a>
         <a href="/ga-tools">📊 GA Tools</a>
@@ -30,6 +30,17 @@
         <a href="/gmb-tools">📍 GMB Tools</a>
         <a href="/history">📜 History & Logs</a>
       </nav>
+
+      <!-- STANDALONE SEARCH CONSOLE ACCOUNT LOOKUP BAR -->
+      <div class="manual-lookup-card" style="margin-top:20px; background:#fce8e6; border-color:#f5c2c0;">
+        <h3 style="color:#c5221f;">🔍 Find Webmaster Property & Account</h3>
+        <p style="color:#a51d19;">Search connected Search Console properties to auto-populate the bulk deployment tool below:</p>
+        <div class="manual-input-group">
+          <input id="gsc-lookup-q" placeholder="Type domain or website URL (e.g. buckeyelakewinery.com)...">
+          <button id="gsc-lookup-btn" class="btn" style="background:#c5221f!important;">Search Webmaster Accounts</button>
+        </div>
+        <div id="gsc-lookup-results" style="margin-top:10px;"></div>
+      </div>
 
       <!-- BULK SEARCH CONSOLE MANAGER -->
       <div id="gsc-bulk" class="manual-lookup-card" style="margin-top:20px;">
