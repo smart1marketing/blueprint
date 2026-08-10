@@ -6,6 +6,14 @@ let currentReportPayload = null;
 let currentGtmContext = { account_id: '', container_id: '', google_login: '' };
 let chartInstance = null;
 
+// Animated SVG Spinner HTML
+const svgSpinner = `
+  <svg class="search-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="10" stroke="#ccd6e5" stroke-width="3"></circle>
+    <path d="M12 2C6.47715 2 2 6.47715 2 12" stroke="#1a2e58" stroke-width="3" stroke-linecap="round"></path>
+  </svg>
+`;
+
 // Toast Notification Engine
 function showToast(message, type='success') {
   const container = document.getElementById('toast-container');
@@ -20,20 +28,20 @@ function showToast(message, type='success') {
   }, 3000);
 }
 
-// Auto-Refresh on Load
+// Auto-Refresh on Load (No Pre-Population)
 window.addEventListener('DOMContentLoaded', async () => {
   if (statusEl) {
-    statusEl.textContent = 'Auto-refreshing Google accounts in background...';
+    statusEl.innerHTML = `${svgSpinner} <span>Auto-refreshing Google accounts in background...</span>`;
     try {
       const r = await fetch('/api/refresh', { method: 'POST' });
       const data = await r.json();
-      statusEl.textContent = `Google accounts refreshed (${data.count || 0} assets indexed). Start typing to search...`;
+      statusEl.textContent = `Google accounts refreshed (${data.count || 0} assets indexed). Start typing above to search...`;
     } catch (err) {
-      statusEl.textContent = 'Start typing to search all connected accounts.';
+      statusEl.textContent = 'Start typing above to search all connected accounts.';
     }
   }
 
-  // Load history if on History page
+  // Load history on History page
   if (document.getElementById('saved-reports-list')) {
     fetchSavedReports();
     fetchGtmLogs();
@@ -63,7 +71,7 @@ function renderCard(x) {
       </div>
       <div style="display:flex; flex-direction:column; gap:6px;">
         ${x.open_url ? `<a class="open" target="_blank" rel="noopener" href="${esc(x.open_url)}">Open</a>` : ''}
-        ${x.platform === 'Google Analytics' ? `<button class="btn btn-auto-all" data-id="${esc(x.resource_id)}" data-login="${esc(x.google_login)}" data-name="${esc(x.name)}" data-extra="${esc(x.search_extra)}" style="font-size:12px; padding:6px 10px; background:#1a2e58!important;">⚡ Auto-Populate GA Tools</button>` : ''}
+        ${x.platform === 'Google Analytics' ? `<button class="btn btn-auto-all" data-id="${esc(x.resource_id)}" data-login="${esc(x.google_login)}" style="font-size:12px; padding:6px 10px; background:#1a2e58!important;">⚡ Auto-Populate GA Tools</button>` : ''}
         ${x.platform === 'Google Tag Manager' ? `<button class="btn btn-inspect-gtm" data-account="${esc(x.account_id)}" data-container="${esc(x.internal_container_id || x.resource_id)}" data-login="${esc(x.google_login)}" style="font-size:12px; padding:6px 10px; background:#24519c!important;">Inspect GTM Tags</button>` : ''}
       </div>
     </article>
@@ -184,12 +192,116 @@ function renderSkeletonCard() {
   `;
 }
 
-// Auto-fill URL params on GA Tools Page
-const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('id') && document.getElementById('comp-property-id')) {
-  document.getElementById('comp-property-id').value = urlParams.get('id');
-  document.getElementById('comp-login').value = urlParams.get('login');
-  applyPresetDates('last_month');
+// Search Logic with Animated SVG Indicator
+async function search() {
+  if (!q) return;
+  const value = q.value.trim();
+  if (!value) {
+    if (document.getElementById('box-analytics')) document.getElementById('box-analytics').style.display = 'none';
+    if (document.getElementById('box-gmb')) document.getElementById('box-gmb').style.display = 'none';
+    if (document.getElementById('box-gsc')) document.getElementById('box-gsc').style.display = 'none';
+    statusEl.textContent = 'Start typing above to search all connected accounts.';
+    return;
+  }
+
+  statusEl.innerHTML = `${svgSpinner} <span>Searching all connected Google accounts…</span>`;
+
+  const r = await fetch(`/api/search?q=${encodeURIComponent(value)}&platform=${encodeURIComponent(platform)}`);
+  const data = await r.json();
+  if (!r.ok) {
+    statusEl.textContent = data.error || 'Search failed.';
+    return;
+  }
+  const items = data.results || [];
+  const problemCount = (data.errors || []).length;
+  statusEl.textContent = `${items.length} match${items.length === 1 ? '' : 'es'}${problemCount ? ` · ${problemCount} account refresh error${problemCount === 1 ? '' : 's'}` : ''}`;
+  draw(items);
+}
+
+if (q) q.addEventListener('input', () => {
+  clearTimeout(timer);
+  timer = setTimeout(search, 250);
+});
+
+// STANDALONE PAGE SEARCH LOOKUPS
+// 1. GTM Tools Page Lookup
+const gtmLookupBtn = document.getElementById('gtm-lookup-btn');
+const gtmLookupInput = document.getElementById('gtm-lookup-q');
+const gtmLookupResults = document.getElementById('gtm-lookup-results');
+
+if (gtmLookupBtn && gtmLookupInput) {
+  gtmLookupBtn.addEventListener('click', async () => {
+    const query = gtmLookupInput.value.trim();
+    if (!query) return;
+
+    gtmLookupResults.innerHTML = renderSkeletonCard();
+    const r = await fetch(`/api/search?q=${encodeURIComponent(query)}&platform=gtm`);
+    const data = await r.json();
+
+    if (data.results && data.results.length) {
+      gtmLookupResults.innerHTML = data.results.map(item => `
+        <div style="padding:8px; background:#fff; border:1px solid #ccd6e5; border-radius:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong>${esc(item.name)}</strong> (${esc(item.resource_id)})
+            <div style="font-size:11px; color:#69758a;">User: ${esc(item.google_login)}</div>
+          </div>
+          <button class="btn btn-use-gtm" data-login="${esc(item.google_login)}" data-acct="${esc(item.account_id)}" data-container="${esc(item.internal_container_id || item.resource_id)}" style="font-size:11px; padding:4px 8px; background:#24519c!important;">Auto-Populate Pixel Form</button>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.btn-use-gtm').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.getElementById('pixel-login').value = btn.dataset.login;
+          document.getElementById('pixel-account-id').value = btn.dataset.acct;
+          document.getElementById('pixel-container-id').value = btn.dataset.container;
+          currentGtmContext = { account_id: btn.dataset.acct, container_id: btn.dataset.container, google_login: btn.dataset.login };
+          showToast("Loaded GTM container parameters into pixel form!", "success");
+        });
+      });
+    } else {
+      gtmLookupResults.innerHTML = '<span style="font-size:12px; color:#c5221f;">No GTM containers found.</span>';
+    }
+  });
+}
+
+// 2. Webmaster Tools Page Lookup
+const gscLookupBtn = document.getElementById('gsc-lookup-btn');
+const gscLookupInput = document.getElementById('gsc-lookup-q');
+const gscLookupResults = document.getElementById('gsc-lookup-results');
+
+if (gscLookupBtn && gscLookupInput) {
+  gscLookupBtn.addEventListener('click', async () => {
+    const query = gscLookupInput.value.trim();
+    if (!query) return;
+
+    gscLookupResults.innerHTML = renderSkeletonCard();
+    const r = await fetch(`/api/search?q=${encodeURIComponent(query)}&platform=gsc`);
+    const data = await r.json();
+
+    if (data.results && data.results.length) {
+      gscLookupResults.innerHTML = data.results.map(item => `
+        <div style="padding:8px; background:#fff; border:1px solid #ccd6e5; border-radius:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong>${esc(item.name)}</strong>
+            <div style="font-size:11px; color:#69758a;">User: ${esc(item.google_login)}</div>
+          </div>
+          <button class="btn btn-use-gsc" data-login="${esc(item.google_login)}" data-url="${esc(item.name)}" style="font-size:11px; padding:4px 8px; background:#c5221f!important;">Auto-Populate Bulk Form</button>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.btn-use-gsc').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.getElementById('gsc-bulk-account').value = btn.dataset.login;
+          const textArea = document.getElementById('gsc-bulk-text');
+          const cleanUrl = btn.dataset.url;
+          textArea.value = `${cleanUrl} | ${cleanUrl.replace(/\/$/, '')}/sitemap.xml`;
+          showToast("Loaded property & sitemap into bulk deployer!", "success");
+        });
+      });
+    } else {
+      gscLookupResults.innerHTML = '<span style="font-size:12px; color:#c5221f;">No Search Console properties found.</span>';
+    }
+  });
 }
 
 const gtmModalClose = document.getElementById('gtm-modal-close');
@@ -523,40 +635,15 @@ if (presetSelect) {
   applyPresetDates('last_month');
 }
 
-async function search() {
-  if (!q) return;
-  const value = q.value.trim();
-  if (!value) {
-    if (document.getElementById('box-analytics')) document.getElementById('box-analytics').style.display = 'none';
-    if (document.getElementById('box-gmb')) document.getElementById('box-gmb').style.display = 'none';
-    if (document.getElementById('box-gsc')) document.getElementById('box-gsc').style.display = 'none';
-    statusEl.textContent = 'Start typing to search all connected accounts.';
-    return;
-  }
-  statusEl.textContent = 'Searching all connected Google accounts…';
-  const r = await fetch(`/api/search?q=${encodeURIComponent(value)}&platform=${encodeURIComponent(platform)}`);
-  const data = await r.json();
-  if (!r.ok) {
-    statusEl.textContent = data.error || 'Search failed.';
-    return;
-  }
-  const items = data.results || [];
-  const problemCount = (data.errors || []).length;
-  statusEl.textContent = `${items.length} match${items.length === 1 ? '' : 'es'}${problemCount ? ` · ${problemCount} account refresh error${problemCount === 1 ? '' : 's'}` : ''}`;
-  draw(items);
+const filterBtns = document.querySelectorAll('.filter');
+if (filterBtns.length) {
+  filterBtns.forEach(btn => btn.addEventListener('click', () => {
+    filterBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    platform = btn.dataset.platform;
+    search();
+  }));
 }
-
-if (q) q.addEventListener('input', () => {
-  clearTimeout(timer);
-  timer = setTimeout(search, 250);
-});
-
-document.querySelectorAll('.filter').forEach(btn => btn.addEventListener('click', () => {
-  document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  platform = btn.dataset.platform;
-  search();
-}));
 
 const refresh = document.getElementById('refresh');
 if (refresh) refresh.addEventListener('click', async () => {
@@ -727,11 +814,6 @@ Key Events: ${m2.keyEvents.toLocaleString()}
             </table>
           </div>
         ` : ''}
-
-        <div style="margin-top:14px; padding:12px; background:#eaf2ff; border:1px solid #b8d2f8; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
-          <span style="font-size:13px; color:#1a2e58; font-weight:600;">Would you like to save this report for future comparison and automated alerts?</span>
-          <button id="btn-open-save-modal" class="btn" style="padding:6px 12px; font-size:12px;">Save Report & Setup Alerts</button>
-        </div>
       </div>
     `;
 
@@ -743,10 +825,6 @@ Key Events: ${m2.keyEvents.toLocaleString()}
       copyBtn.textContent = '✓ Copied!';
       showToast("Copied analysis text to clipboard!", "success");
       setTimeout(() => { copyBtn.textContent = '📋 Copy Analysis'; }, 2000);
-    });
-
-    document.getElementById('btn-open-save-modal').addEventListener('click', () => {
-      document.getElementById('save-modal').style.display = 'flex';
     });
   });
 }
@@ -789,7 +867,7 @@ function renderChart(data) {
   });
 }
 
-// Saved Reports & Audit Log Search Handlers
+// Saved Reports & Audit Log Search
 async function fetchSavedReports(query='') {
   const listEl = document.getElementById('saved-reports-list');
   if (!listEl) return;
