@@ -159,7 +159,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname === '/projects' ||
     url.pathname === '/projects.html' ||
     url.pathname === '/diagnostics' ||
-    url.pathname.startsWith('/api/campaign') ||
+    (url.pathname.startsWith('/api/campaign') && url.pathname !== '/api/campaign-search') ||
     url.pathname.startsWith('/api/campaigns') ||
     url.pathname.startsWith('/api/project') ||
     url.pathname.startsWith('/api/build/') ||
@@ -1194,11 +1194,27 @@ const server = http.createServer(async (req, res) => {
             refs.push(f);
           } catch { /* skip a bad reference */ }
         }
+        // On a revision, the previous image becomes the primary reference so
+        // the edit builds on the last result rather than starting fresh. This
+        // is what makes "make the sky darker" iterate instead of re-roll.
+        if (body.reviseInstruction && body.previousUrl) {
+          try {
+            const rel = String(body.previousUrl).replace(/^\/files\//, '');
+            const prev = path.join(OUT, rel);
+            if (fs.existsSync(prev)) {
+              fs.mkdirSync(cacheDir, { recursive: true });
+              const f = path.join(cacheDir, `prev-${Date.now().toString(36)}.png`);
+              fs.copyFileSync(prev, f);
+              refs.unshift(f);
+            }
+          } catch { /* fall back to a fresh generation with the instruction */ }
+        }
         const cand = await generateHero(
           {
             business: body.business ?? '', promoting: body.promoting ?? '', objective: body.objective,
             landing: body.landingAnalysis, benefit: body.benefit, offer: body.offer,
             palette: body.palette, referenceImages: refs,
+            reviseInstruction: body.reviseInstruction,
           },
           { cacheDir },
         );
@@ -1344,6 +1360,32 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // Team-facing search from the intake page. Gated by the intake code (not
+    // the admin token), so the embedded form can offer "search past campaigns"
+    // without exposing the admin API. Returns a trimmed, link-ready shape.
+    if (route === 'GET /api/campaign-search') {
+      const cors = corsHeaders(req.headers.origin);
+      if (!intakeCodeOk(req)) return json(res, 401, { error: 'A valid team access code is required.' }, cors);
+      const q = url.searchParams;
+      const found = projects.search({ q: q.get('q') ?? undefined, limit: Number(q.get('limit') ?? 25) });
+      return json(res, 200, {
+        results: found.map((p: any) => ({
+          requestId: p.requestId,
+          projectName: p.projectName,
+          client: p.client,
+          campaignName: p.campaignName,
+          domain: p.domain,
+          contact: p.contact,
+          email: p.email,
+          status: p.status,
+          updatedAt: p.updatedAt,
+          proofUrl: `/proof/${p.requestId}`,
+          overviewUrl: `/overview/${p.requestId}`,
+          delivered: p.delivered?.length ? p.delivered[p.delivered.length - 1] : null,
+        })),
+      }, cors);
+    }
+
     const projMatch = url.pathname.match(/^\/api\/project\/([\w.-]+)$/);
     if (projMatch) {
       if (req.method === 'GET') {
@@ -1361,6 +1403,14 @@ const server = http.createServer(async (req, res) => {
     if (route === 'GET /projects' || route === 'GET /projects.html') {
       const file = path.join(PUBLIC, 'projects.html');
       if (!fs.existsSync(file)) return json(res, 404, { error: 'Projects screen not built' });
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(file, 'utf8'));
+    }
+
+    /* --------------------------------------------------- campaign search page */
+    if (route === 'GET /search' || route === 'GET /search.html') {
+      const file = path.join(PUBLIC, 'search.html');
+      if (!fs.existsSync(file)) return json(res, 404, { error: 'Search screen not built' });
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(file, 'utf8'));
     }

@@ -267,7 +267,7 @@ export class ProjectStore {
         const hay = [
           p.projectName, p.client, p.campaignName, p.domain,
           p.landingPage ?? '', p.requestId, p.status,
-          p.contact ?? '', p.email ?? '',
+          p.contact ?? '',
           ...(p.keywords ?? []),
           p.landingAnalysis?.summary ?? '',
         ].join(' ').toLowerCase();

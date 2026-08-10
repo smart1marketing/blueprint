@@ -189,6 +189,18 @@
   .spinner { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(0,0,0,.15);
     border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -3px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .aicap { text-align: center; font-size: 13px; color: var(--ink-2); margin: 4px 0 0; min-height: 18px; }
+  .ai-actions { display: flex; gap: 10px; justify-content: center; margin-top: 10px; flex-wrap: wrap; }
+  .ai-actions button { padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; border: 1px solid var(--line); background: #fff; }
+  .ai-actions button.primary { background: var(--accent, #1F5FC0); color: #fff; border-color: var(--accent, #1F5FC0); }
+  .ai-modal { position: fixed; inset: 0; background: rgba(16,34,46,.5); display: none; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
+  .ai-modal.on { display: flex; }
+  .ai-modal .box { background: #fff; border-radius: 12px; padding: 22px; width: 100%; max-width: 440px; box-shadow: 0 12px 40px rgba(16,34,46,.3); }
+  .ai-modal h3 { margin: 0 0 4px; font-size: 16px; }
+  .ai-modal textarea { width: 100%; min-height: 84px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; box-sizing: border-box; resize: vertical; }
+  .ai-modal .row { display: flex; gap: 10px; margin-top: 14px; }
+  .ai-modal .row button { flex: 1; padding: 11px; border-radius: 8px; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: #fff; }
+  .ai-modal .row button.primary { background: var(--accent, #1F5FC0); color: #fff; border-color: var(--accent, #1F5FC0); }
 
   /* ---- upload dropzones ---- */
   .drop {
@@ -214,7 +226,13 @@
 <body>
 <div class="form" id="root">
   <h1>Request Your Display Ads</h1>
-  <p style="margin:4px 0 0"><a href="/projects" target="_blank" rel="noopener" style="font-size:13px;color:var(--signal,#1F5FC0);font-weight:600;text-decoration:none">Search existing campaigns →</a></p>
+  <div id="searchBar" style="max-width:620px;margin:12px auto 0">
+    <div style="display:flex;gap:8px">
+      <input type="text" id="campSearch" placeholder="Search past campaigns — company, URL, project name, campaign name, or number"
+        style="flex:1;padding:11px 14px;border:1px solid var(--line,#D8DEE6);border-radius:9px;font-size:14px;box-sizing:border-box">
+      <button type="button" id="campSearchGo" style="padding:11px 20px;white-space:nowrap">Search</button>
+    </div>
+  </div>
   <p class="lede">A few short steps. We handle the sizes, layouts and platform requirements from here.</p>
 
   <!-- team access gate: shown only when the server has INTAKE_CODE set -->
@@ -519,6 +537,18 @@
   </form>
 </div>
 
+<div class="ai-modal" id="aiModal">
+  <div class="box">
+    <h3>What would you like to change?</h3>
+    <p class="hint" style="margin:0 0 12px">Describe it in plain words — for example "make the sky darker", "move the player to the left", or "add more space on the right for text".</p>
+    <textarea id="ai-change-text" placeholder="Tell us what to change…"></textarea>
+    <div class="row">
+      <button id="ai-cancel">Cancel</button>
+      <button class="primary" id="ai-apply">Apply changes</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   'use strict';
@@ -803,10 +833,10 @@
     var results = document.getElementById('bgResults');
     if (mode === 'solid') { results.style.display = 'none'; results.innerHTML = ''; return; }
     results.style.display = '';
-    results.innerHTML = '<span class="hint"><span class="spinner"></span> ' +
-      (mode === 'ai' ? 'Generating an image from your landing page…' : 'Finding photos that fit your campaign…') + '</span>';
+    if (mode === 'ai') { runAiForge(results, null); return; }
+    results.innerHTML = '<span class="hint"><span class="spinner"></span> Finding photos that fit your campaign…</span>';
 
-    var endpoint = mode === 'ai' ? '/api/images/generate' : '/api/images/search';
+    var endpoint = '/api/images/search';
     fetch(API + endpoint, {
       method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify({
@@ -818,14 +848,12 @@
           secondary: discovered.brand.colors.secondary,
           accent: discovered.brand.colors.accent
         } : undefined,
-        // Uploaded photos become references so the AI hero reflects the real
-        // product/location, not a generic stock scene.
         referenceImages: (uploaded.image || []).map(function (x) { return x.url; })
       })
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        var cands = mode === 'ai' ? (data.candidate ? [data.candidate] : []) : (data.candidates || []);
+        var cands = data.candidates || [];
         if (!cands.length) {
           results.innerHTML = '<span class="hint">' + esc(data.reason || 'No images available right now. Your ad will use a solid background.') + '</span>';
           bgChoice = { mode: 'solid', url: null };
@@ -849,10 +877,107 @@
         bgChoice = { mode: 'solid', url: null };
       });
   }
+
+  // ---- AI background: plain loading + use-or-change loop ----
+  var AI_CAPTIONS = ['Creating your image\\u2026', 'This can take a moment\\u2026'];
+  function aiForgeMarkup() {
+    return '<p class="hint" style="margin:8px 0"><span class="spinner"></span> <span id="aicap">' + AI_CAPTIONS[0] + '</span></p>';
+  }
+  // reviseText === null means a fresh generation; a string means revise the
+  // current image with that instruction.
+  function runAiForge(results, reviseText) {
+    results.innerHTML = aiForgeMarkup();
+    var capEl = document.getElementById('aicap');
+    var ci = 0;
+    var capTimer = setInterval(function () {
+      ci = (ci + 1) % AI_CAPTIONS.length;
+      if (capEl) capEl.textContent = AI_CAPTIONS[ci];
+    }, 1800);
+
+    fetch(API + '/api/images/generate', {
+      method: 'POST', headers: codeHeaders({ 'content-type': 'application/json' }),
+      body: JSON.stringify({
+        business: val('business'), promoting: val('promoting'),
+        objective: val('objective'), landingAnalysis: suggestions || undefined,
+        benefit: val('benefit'), offer: val('offer'),
+        palette: (discovered.brand && discovered.brand.colors) ? {
+          primary: discovered.brand.colors.primary,
+          secondary: discovered.brand.colors.secondary,
+          accent: discovered.brand.colors.accent
+        } : undefined,
+        referenceImages: (uploaded.image || []).map(function (x) { return x.url; }),
+        reviseInstruction: reviseText || undefined,
+        previousUrl: reviseText && window.__aiCurrent ? window.__aiCurrent : undefined
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        clearInterval(capTimer);
+        if (!data.candidate) {
+          results.innerHTML = '<span class="hint">' + esc(data.reason || 'The image could not be generated. Your ad will use a solid background.') + '</span>';
+          bgChoice = { mode: 'solid', url: null };
+          return;
+        }
+        window.__aiCurrent = data.candidate.url;
+        showAiResult(results, data.candidate.url);
+      })
+      .catch(function () {
+        clearInterval(capTimer);
+        results.innerHTML = '<span class="hint">Could not reach the image service. Your ad will use a solid background.</span>';
+        bgChoice = { mode: 'solid', url: null };
+      });
+  }
+  function showAiResult(results, url) {
+    // Selecting it also stages it as the chosen background straight away.
+    bgChoice = { mode: 'ai', url: url };
+    results.innerHTML =
+      '<img src="' + API + url + '" class="bg-thumb on" alt="Your AI background" style="max-width:320px;width:100%">' +
+      '<p class="hint" style="margin:8px 0 0">Happy with this image, or want changes?</p>' +
+      '<div class="ai-actions">' +
+      '<button type="button" class="primary" id="aiUse">Use this image</button>' +
+      '<button type="button" id="aiChange">Make changes</button>' +
+      '<button type="button" id="aiRedo">Start over</button></div>';
+    document.getElementById('aiUse').addEventListener('click', function () {
+      results.querySelector('.aicap') && results.querySelector('.aicap').remove();
+      var note = document.createElement('p'); note.className = 'hint';
+      note.style.cssText = 'margin:8px 0 0;color:var(--accent,#1F5FC0);font-weight:600';
+      note.textContent = '\\u2713 This image will be used as your background.';
+      results.appendChild(note);
+      bgChoice = { mode: 'ai', url: url };
+    });
+    document.getElementById('aiChange').addEventListener('click', function () { openAiModal(results); });
+    document.getElementById('aiRedo').addEventListener('click', function () { window.__aiCurrent = null; runAiForge(results, null); });
+  }
+  function openAiModal(results) {
+    var modal = document.getElementById('aiModal');
+    modal.classList.add('on');
+    var ta = document.getElementById('ai-change-text'); ta.value = ''; ta.focus();
+    document.getElementById('ai-cancel').onclick = function () { modal.classList.remove('on'); };
+    document.getElementById('ai-apply').onclick = function () {
+      var txt = (ta.value || '').trim();
+      if (!txt) { ta.focus(); return; }
+      modal.classList.remove('on');
+      runAiForge(results, txt); // regenerate with the change, loop repeats
+    };
+  }
   var bgOpts = document.querySelectorAll('.bg-opt');
   for (var bi = 0; bi < bgOpts.length; bi++) {
     bgOpts[bi].addEventListener('click', function () { selectBgMode(this.dataset.bg, this); });
   }
+
+  /* ---------------------------------- search past campaigns (main page) */
+  // Results open on their own page (/search), not inline on the intake form.
+  var campSearchInput = document.getElementById('campSearch');
+  var campSearchBtn = document.getElementById('campSearchGo');
+  function goToSearch() {
+    var q = (campSearchInput && campSearchInput.value || '').trim();
+    var url = '/search' + (q ? '?q=' + encodeURIComponent(q) : '');
+    // Same-origin staff tool; keep the opener link so the search page can
+    // inherit the already-entered access code from this tab.
+    window.open(url, '_blank');
+  }
+  if (campSearchBtn) campSearchBtn.addEventListener('click', goToSearch);
+  if (campSearchInput) campSearchInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); goToSearch(); } });
 
   nextBtn.addEventListener('click', function () {
     if (validateStep(current)) showStep(current + 1);

@@ -51,6 +51,9 @@ export interface ImageQuery {
    *  photos). When present, the generator is told to match their look, and —
    *  where the model supports it — they are sent as visual references. */
   referenceImages?: string[];
+  /** A plain-English change to apply to an existing image, e.g. "make the
+   *  sky darker" or "move the player to the left". Present only on a revise. */
+  reviseInstruction?: string;
 }
 
 /**
@@ -173,12 +176,24 @@ export function buildHeroPrompt(q: ImageQuery): { prompt: string; negative: stri
     setting,
     composition,
     style,
-  ].join(' ');
+    // A revision keeps the same scene but applies the customer's change on top.
+    q.reviseInstruction ? `Apply this change while keeping the same overall scene: ${q.reviseInstruction}.` : '',
+    // The overlay copy is added by our renderer, never by the image model.
+    // This is stated positively AND up front because a single negative clause
+    // is not reliably honoured — a background with baked-in words is unusable.
+    'CRITICAL: the image must contain absolutely no text, letters, words, numbers, ' +
+    'captions, labels, logos, watermarks, or signage of any kind. It is a purely ' +
+    'photographic background; all wording is added separately afterwards. ' +
+    'Any visible text makes the image unusable.',
+  ].filter(Boolean).join(' ');
 
   // 5. Negative prompt — keep the model from producing anything that fights
-  //    the overlaid copy or looks artificial.
+  //    the overlaid copy or looks artificial. Text terms are listed first and
+  //    repeated because no-wording is the hard requirement here.
   const negative =
-    'text, typography, letters, words, embedded logos, watermarks, signage, ' +
+    'text, words, letters, lettering, typography, captions, labels, numbers, ' +
+    'writing, handwriting, fonts, signage, street signs, banners with text, ' +
+    'embedded logos, brand marks, watermarks, ' +
     'cluttered background, busy patterns behind text, distorted or extra limbs, ' +
     'oversaturated colours, harsh high-contrast shadows in the copy area, ' +
     'collage, borders, low resolution, noise artifacts';
@@ -196,8 +211,9 @@ export async function generateHero(
 
   const { prompt, negative } = buildHeroPrompt(q);
   // gpt-image-1 has no separate negative-prompt field, so fold it in as an
-  // explicit exclusion clause the model honours well in practice.
-  const fullPrompt = `${prompt} Do not include: ${negative}.`;
+  // explicit exclusion clause the model honours well in practice. End with a
+  // final no-text reminder — models weight the closing instruction heavily.
+  const fullPrompt = `${prompt} Do not include: ${negative}. Remember: zero text or wording anywhere in the image.`;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 90_000);
