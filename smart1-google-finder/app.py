@@ -72,7 +72,6 @@ def get_db():
             os.makedirs(db_dir, exist_ok=True)
         g.db = sqlite3.connect(TOKEN_DB_PATH)
         g.db.row_factory = sqlite3.Row
-        # Enable Write-Ahead Logging for high concurrency
         g.db.execute("PRAGMA journal_mode=WAL;")
         init_db(g.db)
     return g.db
@@ -547,19 +546,30 @@ def generate_ga4_ai_analysis(p1_name, p2_name, m1, m2, dimension_breakdown, tone
     }
 
 
+# ROUTE PAGE HANDLERS
 @app.route("/")
 def index():
-    return render_template("index.html", accounts=connected_accounts())
+    return render_template("index.html", accounts=connected_accounts(), current_page="home")
 
+@app.route("/ga-tools")
+def view_ga_tools():
+    return render_template("ga_tools.html", accounts=connected_accounts(), current_page="ga")
 
-@app.route("/reports")
-def view_reports_page():
-    return render_template("reports.html")
+@app.route("/gtm-tools")
+def view_gtm_tools():
+    return render_template("gtm_tools.html", accounts=connected_accounts(), current_page="gtm")
 
+@app.route("/webmaster-tools")
+def view_webmaster_tools():
+    return render_template("webmaster_tools.html", accounts=connected_accounts(), current_page="webmaster")
 
-@app.route("/gtm-logs")
-def view_gtm_logs_page():
-    return render_template("gtm_logs.html")
+@app.route("/gmb-tools")
+def view_gmb_tools():
+    return render_template("gmb_tools.html", accounts=connected_accounts(), current_page="gmb")
+
+@app.route("/history")
+def view_history_page():
+    return render_template("history.html", accounts=connected_accounts(), current_page="history")
 
 
 @app.route("/login")
@@ -868,12 +878,76 @@ def gtm_deploy_event():
         return jsonify({"error": f"GTM Tag deployment failed: {exc}"}), 500
 
 
+@app.route("/api/gtm/deploy-pixel", methods=["POST"])
+def gtm_deploy_pixel():
+    data = request.json or {}
+    account_id = data.get("account_id", "").strip()
+    container_id = data.get("container_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+    tag_name = data.get("tag_name", "").strip()
+    pixel_code = data.get("pixel_code", "").strip()
+
+    if not account_id or not container_id or not google_login or not tag_name or not pixel_code:
+        return jsonify({"error": "Account ID, Container ID, Login Email, Tag Name, and Pixel Code are required."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(google_login, account["refresh_token"])
+        ws_url = f"https://tagmanager.googleapis.com/tagmanager/v2/accounts/{account_id}/containers/{container_id}/workspaces"
+        workspaces = google_get(access_token, ws_url).get("workspace", [])
+        if not workspaces:
+            return jsonify({"error": "No active workspaces found in container."}), 404
+        ws_path = workspaces[0]["path"]
+
+        triggers = google_get(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/triggers").get("trigger", [])
+        all_pages_trigger = next((tr for tr in triggers if tr.get("type") == "pageview"), None)
+        
+        trigger_id_list = [all_pages_trigger["triggerId"]] if all_pages_trigger else []
+
+        tag_body = {
+            "name": tag_name,
+            "type": "html",
+            "firingTriggerId": trigger_id_list,
+            "parameter": [
+                {"type": "TEMPLATE", "key": "html", "value": pixel_code},
+                {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
+            ]
+        }
+        
+        created_tag = google_post(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/tags", tag_body)
+
+        now = int(time.time())
+        conn = get_db()
+        conn.execute(
+            """
+            INSERT INTO gtm_change_logs (google_login, account_id, container_id, action_type, tag_name, details, created_at)
+            VALUES (?, ?, ?, 'PIXEL_DEPLOYED', ?, ?, ?)
+            """,
+            (
+                google_login,
+                account_id,
+                container_id,
+                tag_name,
+                json.dumps({"created_tag_id": created_tag.get("tagId"), "code_length": len(pixel_code)}),
+                now
+            )
+        )
+        conn.commit()
+
+        return jsonify({"ok": True, "created_tag_id": created_tag["tagId"], "message": f"Successfully deployed custom pixel '{tag_name}' to GTM container {container_id}."})
+    except Exception as exc:
+        logger.warning("Failed deploying custom pixel to GTM: %s", exc)
+        return jsonify({"error": f"Pixel deployment failed: {exc}"}), 500
+
+
 @app.route("/api/gsc/bulk-add", methods=["POST"])
 def api_gsc_bulk_add():
-    """Bulk adds properties and sitemaps across Search Console accounts."""
     data = request.json or {}
     google_login = data.get("google_login", "").strip().lower()
-    entries = data.get("entries", []) # List of { site_url, sitemap_url }
+    entries = data.get("entries", [])
 
     if not google_login or not entries:
         return jsonify({"error": "Missing login email or domain list."}), 400
@@ -915,7 +989,6 @@ def api_gsc_bulk_add():
 
 @app.route("/api/ga4/anomalies", methods=["POST"])
 def api_ga4_anomalies():
-    """Detects unusual traffic drops or spikes (>20% change) for a property."""
     data = request.json or {}
     property_id = data.get("property_id", "").strip()
     google_login = data.get("google_login", "").strip().lower()
@@ -931,7 +1004,6 @@ def api_ga4_anomalies():
         access_token = refresh_access_token(google_login, account["refresh_token"])
         url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
         
-        # Recent 7 days vs Prior 7 days
         req_body = {
             "dateRanges": [
                 {"startDate": "7daysAgo", "endDate": "yesterday"},
@@ -963,6 +1035,97 @@ def api_ga4_anomalies():
         return jsonify({"anomalies": anomalies})
     except Exception as exc:
         return jsonify({"error": f"Anomaly detection failed: {exc}"}), 500
+
+
+@app.route("/api/ga4/ask", methods=["POST"])
+def api_ga4_ask():
+    data = request.json or {}
+    property_id = data.get("property_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+    question = data.get("question", "").strip().lower()
+
+    if not property_id or not google_login or not question:
+        return jsonify({"error": "Missing Property ID, Login Email, or Question."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(google_login, account["refresh_token"])
+        
+        if "device" in question or "mobile" in question or "desktop" in question:
+            dimension = "deviceCategory"
+        elif "landing" in question or "page" in question or "url" in question:
+            dimension = "pagePath"
+        elif "city" in question or "location" in question or "geo" in question:
+            dimension = "city"
+        elif "country" in question:
+            dimension = "country"
+        else:
+            dimension = "sessionSourceMedium"
+
+        req_body = {
+            "dateRanges": [{"startDate": "30daysAgo", "endDate": "yesterday"}],
+            "dimensions": [{"name": dimension}],
+            "metrics": [
+                {"name": "sessions"},
+                {"name": "activeUsers"},
+                {"name": "keyEvents"}
+            ],
+            "limit": 10
+        }
+
+        url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+        report = google_post(access_token, url, req_body)
+
+        rows = report.get("rows", [])
+        if not rows:
+            return jsonify({"answer": "No traffic records were found for that query in the last 30 days."})
+
+        results = []
+        for r in rows:
+            dim_val = r["dimensionValues"][0]["value"]
+            sess = int(r["metricValues"][0]["value"])
+            users = int(r["metricValues"][1]["value"])
+            convs = int(r["metricValues"][2]["value"])
+            results.append(f"• **{dim_val}**: {sess:,} sessions ({users:,} users, {convs:,} key events)")
+
+        answer_text = f"**Query Results (Last 30 Days by {dimension}):**\n" + "\n".join(results)
+        return jsonify({"answer": answer_text})
+    except Exception as exc:
+        logger.warning("Ask Analytics failed: %s", exc)
+        return jsonify({"error": f"Failed to execute question lookup: {exc}"}), 500
+
+
+@app.route("/api/ga4/channels", methods=["POST"])
+def api_ga4_channels():
+    data = request.json or {}
+    property_id = data.get("property_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+
+    if not property_id or not google_login:
+        return jsonify({"channels": []})
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"channels": []})
+
+    try:
+        access_token = refresh_access_token(google_login, account["refresh_token"])
+        url = f"https://analyticsdata.googleapis.com/v1beta/properties/{property_id}:runReport"
+        req_body = {
+            "dateRanges": [{"startDate": "30daysAgo", "endDate": "yesterday"}],
+            "dimensions": [{"name": "sessionSourceMedium"}],
+            "metrics": [{"name": "sessions"}],
+            "limit": 50
+        }
+        report = google_post(access_token, url, req_body)
+        channels = [row["dimensionValues"][0]["value"] for row in report.get("rows", [])]
+        return jsonify({"channels": sorted(channels)})
+    except Exception as exc:
+        logger.warning("Failed fetching GA4 channels for property %s: %s", property_id, exc)
+        return jsonify({"channels": []})
 
 
 @app.route("/api/ga4/compare", methods=["POST"])
@@ -1282,76 +1445,53 @@ def health():
         checks["google_client_secret_configured"],
         checks["token_encryption_key_configured"],
     ])
-    return checks, (200 if checks["ok"] else 500)
+    return jsonify(checks), (200 if checks["ok"] else 500)
+
+
+@app.route("/debug/accounts")
+def debug_accounts():
+    diagnostics = []
+    try:
+        accounts = connected_accounts()
+        if not accounts:
+            return jsonify({"connected_account_count": 0, "diagnostics": [], "status": "No connected accounts found."})
+
+        for acc in accounts:
+            email = acc.get("email", "unknown")
+            info = {"email": email, "refresh_token_present": bool(acc.get("refresh_token"))}
+            
+            try:
+                access_token = refresh_access_token(email, acc["refresh_token"])
+                info["token_refresh_status"] = "SUCCESS"
+            except Exception as exc:
+                info["token_refresh_status"] = f"FAILED: {exc}"
+                diagnostics.append(info)
+                continue
+
+            try:
+                google_get(access_token, "https://analyticsadmin.googleapis.com/v1beta/accountSummaries", params={"pageSize": 1})
+                info["ga4_api_status"] = "SUCCESS"
+            except Exception as exc:
+                info["ga4_api_status"] = f"FAILED: {exc}"
+
+            try:
+                google_get(access_token, "https://tagmanager.googleapis.com/tagmanager/v2/accounts")
+                info["gtm_api_status"] = "SUCCESS"
+            except Exception as exc:
+                info["gtm_api_status"] = f"FAILED: {exc}"
+
+            try:
+                google_get(access_token, "https://www.googleapis.com/webmasters/v3/sites")
+                info["gsc_api_status"] = "SUCCESS"
+            except Exception as exc:
+                info["gsc_api_status"] = f"FAILED: {exc}"
+
+            diagnostics.append(info)
+
+        return jsonify({"connected_account_count": len(accounts), "diagnostics": diagnostics})
+    except Exception as exc:
+        return jsonify({"connected_account_count": 0, "diagnostics": [], "error": str(exc)}), 500
 
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "10000")))
-    @app.route("/api/gtm/deploy-pixel", methods=["POST"])
-def gtm_deploy_pixel():
-    """Deploys a Custom HTML tracking pixel/script to a GTM workspace."""
-    data = request.json or {}
-    account_id = data.get("account_id", "").strip()
-    container_id = data.get("container_id", "").strip()
-    google_login = data.get("google_login", "").strip().lower()
-    tag_name = data.get("tag_name", "").strip()
-    pixel_code = data.get("pixel_code", "").strip()
-    trigger_type = data.get("trigger_type", "ALL_PAGES") # ALL_PAGES or custom
-
-    if not account_id or not container_id or not google_login or not tag_name or not pixel_code:
-        return jsonify({"error": "Account ID, Container ID, Login Email, Tag Name, and Pixel Code are required."}), 400
-
-    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
-    if not account:
-        return jsonify({"error": f"Account {google_login} is not connected."}), 404
-
-    try:
-        access_token = refresh_access_token(google_login, account["refresh_token"])
-        ws_url = f"https://tagmanager.googleapis.com/tagmanager/v2/accounts/{account_id}/containers/{container_id}/workspaces"
-        workspaces = google_get(access_token, ws_url).get("workspace", [])
-        if not workspaces:
-            return jsonify({"error": "No active workspaces found in container."}), 404
-        ws_path = workspaces[0]["path"]
-
-        # 1. Fetch default All Pages trigger ID
-        triggers = google_get(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/triggers").get("trigger", [])
-        all_pages_trigger = next((tr for tr in triggers if tr.get("type") == "pageview"), None)
-        
-        trigger_id_list = [all_pages_trigger["triggerId"]] if all_pages_trigger else []
-
-        # 2. Build Custom HTML Tag Body (GTM Type: html)
-        tag_body = {
-            "name": tag_name,
-            "type": "html",
-            "firingTriggerId": trigger_id_list,
-            "parameter": [
-                {"type": "TEMPLATE", "key": "html", "value": pixel_code},
-                {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
-            ]
-        }
-        
-        created_tag = google_post(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/tags", tag_body)
-
-        # 3. Log to Change Audit History
-        now = int(time.time())
-        conn = get_db()
-        conn.execute(
-            """
-            INSERT INTO gtm_change_logs (google_login, account_id, container_id, action_type, tag_name, details, created_at)
-            VALUES (?, ?, ?, 'PIXEL_DEPLOYED', ?, ?, ?)
-            """,
-            (
-                google_login,
-                account_id,
-                container_id,
-                tag_name,
-                json.dumps({"created_tag_id": created_tag.get("tagId"), "code_length": len(pixel_code)}),
-                now
-            )
-        )
-        conn.commit()
-
-        return jsonify({"ok": True, "created_tag_id": created_tag["tagId"], "message": f"Successfully deployed custom pixel '{tag_name}' to GTM container {container_id}."})
-    except Exception as exc:
-        logger.warning("Failed deploying custom pixel to GTM: %s", exc)
-        return jsonify({"error": f"Pixel deployment failed: {exc}"}), 500
