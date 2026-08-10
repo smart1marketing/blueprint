@@ -24,18 +24,19 @@ function showToast(message, type='success') {
 window.addEventListener('DOMContentLoaded', async () => {
   if (statusEl) {
     statusEl.textContent = 'Auto-refreshing Google accounts in background...';
-  }
-  
-  try {
-    const r = await fetch('/api/refresh', { method: 'POST' });
-    const data = await r.json();
-    if (statusEl) {
+    try {
+      const r = await fetch('/api/refresh', { method: 'POST' });
+      const data = await r.json();
       statusEl.textContent = `Google accounts refreshed (${data.count || 0} assets indexed). Start typing to search...`;
-    }
-  } catch (err) {
-    if (statusEl) {
+    } catch (err) {
       statusEl.textContent = 'Start typing to search all connected accounts.';
     }
+  }
+
+  // Load history if on History page
+  if (document.getElementById('saved-reports-list')) {
+    fetchSavedReports();
+    fetchGtmLogs();
   }
 });
 
@@ -62,7 +63,7 @@ function renderCard(x) {
       </div>
       <div style="display:flex; flex-direction:column; gap:6px;">
         ${x.open_url ? `<a class="open" target="_blank" rel="noopener" href="${esc(x.open_url)}">Open</a>` : ''}
-        ${x.platform === 'Google Analytics' ? `<button class="btn btn-auto-all" data-id="${esc(x.resource_id)}" data-login="${esc(x.google_login)}" data-name="${esc(x.name)}" data-extra="${esc(x.search_extra)}" style="font-size:12px; padding:6px 10px; background:#1a2e58!important;">⚡ Auto-Populate All Tools</button>` : ''}
+        ${x.platform === 'Google Analytics' ? `<button class="btn btn-auto-all" data-id="${esc(x.resource_id)}" data-login="${esc(x.google_login)}" data-name="${esc(x.name)}" data-extra="${esc(x.search_extra)}" style="font-size:12px; padding:6px 10px; background:#1a2e58!important;">⚡ Auto-Populate GA Tools</button>` : ''}
         ${x.platform === 'Google Tag Manager' ? `<button class="btn btn-inspect-gtm" data-account="${esc(x.account_id)}" data-container="${esc(x.internal_container_id || x.resource_id)}" data-login="${esc(x.google_login)}" style="font-size:12px; padding:6px 10px; background:#24519c!important;">Inspect GTM Tags</button>` : ''}
       </div>
     </article>
@@ -79,10 +80,10 @@ function draw(items) {
   const resGsc = document.getElementById('results-gsc');
 
   if (!items.length) {
-    boxAnalytics.style.display = 'none';
-    boxGmb.style.display = 'none';
-    boxGsc.style.display = 'none';
-    statusEl.textContent = 'No matches found.';
+    if (boxAnalytics) boxAnalytics.style.display = 'none';
+    if (boxGmb) boxGmb.style.display = 'none';
+    if (boxGsc) boxGsc.style.display = 'none';
+    if (statusEl) statusEl.textContent = 'No matches found.';
     return;
   }
 
@@ -90,41 +91,39 @@ function draw(items) {
   const gmbItems = items.filter(x => x.platform === 'Google Business Profile');
   const gscItems = items.filter(x => x.platform === 'Search Console');
 
-  // Update Badge Counters
-  document.getElementById('cnt-all').textContent = `(${items.length})`;
-  document.getElementById('cnt-ga').textContent = `(${analyticsItems.length})`;
-  document.getElementById('cnt-gsc').textContent = `(${gscItems.length})`;
-  document.getElementById('cnt-gmb').textContent = `(${gmbItems.length})`;
+  const cntAll = document.getElementById('cnt-all');
+  if (cntAll) cntAll.textContent = `(${items.length})`;
+  const cntGa = document.getElementById('cnt-ga');
+  if (cntGa) cntGa.textContent = `(${analyticsItems.length})`;
+  const cntGsc = document.getElementById('cnt-gsc');
+  if (cntGsc) cntGsc.textContent = `(${gscItems.length})`;
+  const cntGmb = document.getElementById('cnt-gmb');
+  if (cntGmb) cntGmb.textContent = `(${gmbItems.length})`;
 
   if (analyticsItems.length && (platform === 'all' || platform === 'analytics')) {
-    resAnalytics.innerHTML = analyticsItems.map(renderCard).join('');
-    boxAnalytics.style.display = 'block';
-  } else {
+    if (resAnalytics) resAnalytics.innerHTML = analyticsItems.map(renderCard).join('');
+    if (boxAnalytics) boxAnalytics.style.display = 'block';
+  } else if (boxAnalytics) {
     boxAnalytics.style.display = 'none';
   }
 
   if (gmbItems.length && (platform === 'all' || platform === 'gmb')) {
-    resGmb.innerHTML = gmbItems.map(renderCard).join('');
-    boxGmb.style.display = 'block';
-  } else {
+    if (resGmb) resGmb.innerHTML = gmbItems.map(renderCard).join('');
+    if (boxGmb) boxGmb.style.display = 'block';
+  } else if (boxGmb) {
     boxGmb.style.display = 'none';
   }
 
   if (gscItems.length && (platform === 'all' || platform === 'gsc')) {
-    resGsc.innerHTML = gscItems.map(renderCard).join('');
-    boxGsc.style.display = 'block';
-  } else {
+    if (resGsc) resGsc.innerHTML = gscItems.map(renderCard).join('');
+    if (boxGsc) boxGsc.style.display = 'block';
+  } else if (boxGsc) {
     boxGsc.style.display = 'none';
   }
 
   document.querySelectorAll('.btn-auto-all').forEach(btn => {
     btn.addEventListener('click', () => {
-      autoPopulateAll(
-        btn.dataset.id, 
-        btn.dataset.login, 
-        btn.dataset.name, 
-        btn.dataset.extra
-      );
+      window.location.href = `/ga-tools?id=${encodeURIComponent(btn.dataset.id)}&login=${encodeURIComponent(btn.dataset.login)}`;
     });
   });
 
@@ -185,76 +184,93 @@ function renderSkeletonCard() {
   `;
 }
 
-async function autoPopulateAll(propertyId, loginEmail, propertyName='', extraData='') {
-  document.getElementById('comp-property-id').value = propertyId;
-  document.getElementById('comp-login').value = loginEmail;
-  document.getElementById('comp-date-preset').value = 'last_month';
+// Auto-fill URL params on GA Tools Page
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('id') && document.getElementById('comp-property-id')) {
+  document.getElementById('comp-property-id').value = urlParams.get('id');
+  document.getElementById('comp-login').value = urlParams.get('login');
   applyPresetDates('last_month');
-
-  const gtmUrlInput = document.getElementById('gtm-gen-url');
-  if (gtmUrlInput) {
-    let cleanUrl = propertyName;
-    if (cleanUrl.includes('http') || cleanUrl.includes('.com') || cleanUrl.includes('.org')) {
-      gtmUrlInput.value = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;
-    } else if (extraData.includes('http') || extraData.includes('.com')) {
-      gtmUrlInput.value = extraData.startsWith('http') ? extraData : `https://${extraData}`;
-    }
-  }
-
-  const manualGmbInput = document.getElementById('manual-q');
-  if (manualGmbInput) {
-    manualGmbInput.value = propertyName;
-  }
-
-  const compCard = document.querySelector('.ai-comparator-card');
-  if (compCard) {
-    compCard.scrollIntoView({ behavior: 'smooth' });
-  }
-
-  const sourceSelect = document.getElementById('comp-source-medium');
-  sourceSelect.innerHTML = '<option value="">Loading available channels...</option>';
-
-  try {
-    const resp = await fetch('/api/ga4/channels', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ property_id: propertyId, google_login: loginEmail })
-    });
-    const data = await resp.json();
-    if (resp.ok && data.channels && data.channels.length) {
-      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>' +
-        data.channels.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-    } else {
-      sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
-    }
-  } catch (err) {
-    sourceSelect.innerHTML = '<option value="">All Sources / Mediums (No Filter)</option>';
-  }
-
-  // Check for anomalies automatically
-  checkAnomalies(propertyId, loginEmail);
-  showToast("Auto-populated GA4 Property & Tools!", "success");
 }
 
-async function checkAnomalies(property_id, google_login) {
-  try {
-    const resp = await fetch('/api/ga4/anomalies', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ property_id, google_login })
-    });
-    const data = await resp.json();
-    if (resp.ok && data.anomalies && data.anomalies.length) {
-      data.anomalies.forEach(a => {
-        showToast(`⚠️ Anomaly: ${a.message}`, 'error');
-      });
-    }
-  } catch (e) {}
+const gtmModalClose = document.getElementById('gtm-modal-close');
+if (gtmModalClose) {
+  gtmModalClose.addEventListener('click', () => {
+    document.getElementById('gtm-modal').style.display = 'none';
+  });
 }
 
-document.getElementById('gtm-modal-close').addEventListener('click', () => {
-  document.getElementById('gtm-modal').style.display = 'none';
-});
+// Diagnostics Modal Handler
+const btnOpenDiagnostics = document.getElementById('btn-open-diagnostics');
+const diagnosticsModal = document.getElementById('diagnostics-modal');
+const diagnosticsClose = document.getElementById('diagnostics-modal-close');
+const diagnosticsBody = document.getElementById('diagnostics-modal-body');
+
+if (btnOpenDiagnostics) {
+  btnOpenDiagnostics.addEventListener('click', async (e) => {
+    e.preventDefault();
+    diagnosticsModal.style.display = 'flex';
+    diagnosticsBody.innerHTML = renderSkeletonCard();
+
+    try {
+      const [healthRes, debugRes] = await Promise.all([
+        fetch('/health').then(async r => {
+          const text = await r.text();
+          try { return JSON.parse(text); } catch(e) { return { ok: false, error: text }; }
+        }),
+        fetch('/debug/accounts').then(async r => {
+          const text = await r.text();
+          try { return JSON.parse(text); } catch(e) { return { error: text, diagnostics: [] }; }
+        })
+      ]);
+
+      let html = `
+        <div style="font-size:13px;">
+          <h4 style="margin:0 0 8px; color:#1a2e58;">System Environment Status:</h4>
+          <div style="background:#f8fafc; padding:12px; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:16px; line-height:1.6;">
+            <div>Overall System Health: <b>${healthRes.ok ? '🟢 Operational' : '🔴 Issue Detected'}</b></div>
+            <div>Google Client ID: ${healthRes.google_client_id_configured ? '🟢 Configured' : '🔴 Missing'}</div>
+            <div>Google Client Secret: ${healthRes.google_client_secret_configured ? '🟢 Configured' : '🔴 Missing'}</div>
+            <div>Token Encryption Key: ${healthRes.token_encryption_key_configured ? '🟢 Configured' : '🔴 Missing'}</div>
+            <div>Database Path: <code>${esc(healthRes.token_db_path)}</code></div>
+            <div>Connected Accounts Count: <b>${healthRes.connected_account_count}</b></div>
+          </div>
+
+          <h4 style="margin:0 0 8px; color:#1a2e58;">Connected Account Diagnostics:</h4>
+      `;
+
+      if (!debugRes.diagnostics || !debugRes.diagnostics.length) {
+        html += '<div style="color:#69758a; font-style:italic;">No Google accounts currently connected to test.</div>';
+      } else {
+        html += debugRes.diagnostics.map(acc => `
+          <div style="background:#fff; border:1px solid #d8e0eb; border-radius:8px; padding:12px; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="color:#1a2e58; font-size:14px;">${esc(acc.email)}</strong>
+              <span style="font-size:11px; background:${acc.token_refresh_status === 'SUCCESS' ? '#e6f4ea' : '#fce8e6'}; color:${acc.token_refresh_status === 'SUCCESS' ? '#137333' : '#c5221f'}; padding:2px 8px; border-radius:4px; font-weight:bold;">
+                OAuth Token: ${esc(acc.token_refresh_status)}
+              </span>
+            </div>
+            <div style="font-size:12px; color:#58677e; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; background:#f0f4f9; padding:8px; border-radius:6px;">
+              <div>GA4 Admin: <b>${acc.ga4_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
+              <div>GTM API: <b>${acc.gtm_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
+              <div>Search Console: <b>${acc.gsc_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      html += '</div>';
+      diagnosticsBody.innerHTML = html;
+    } catch (err) {
+      diagnosticsBody.innerHTML = `<div style="color:#c5221f; font-size:13px;">Failed to fetch system diagnostics: ${esc(err.message)}</div>`;
+    }
+  });
+}
+
+if (diagnosticsClose) {
+  diagnosticsClose.addEventListener('click', () => {
+    diagnosticsModal.style.display = 'none';
+  });
+}
 
 // Bulk Search Console Deployer
 const btnRunGscBulk = document.getElementById('btn-run-gsc-bulk');
@@ -303,6 +319,44 @@ if (btnRunGscBulk) {
       </div>
     `;
     showToast("Bulk Search Console deployment completed!", "success");
+  });
+}
+
+// Custom Pixel Deployer Listener
+const btnDeployPixel = document.getElementById('btn-deploy-pixel');
+const pixelResults = document.getElementById('pixel-deploy-results');
+
+if (btnDeployPixel) {
+  btnDeployPixel.addEventListener('click', async () => {
+    const google_login = document.getElementById('pixel-login').value.trim();
+    const account_id = document.getElementById('pixel-account-id').value.trim();
+    const container_id = document.getElementById('pixel-container-id').value.trim();
+    const tag_name = document.getElementById('pixel-tag-name').value.trim();
+    const pixel_code = document.getElementById('pixel-code-input').value.trim();
+
+    if (!google_login || !account_id || !container_id || !tag_name || !pixel_code) {
+      showToast("Please fill in all pixel form fields including the script code.", "error");
+      return;
+    }
+
+    pixelResults.innerHTML = renderSkeletonCard();
+
+    const resp = await fetch('/api/gtm/deploy-pixel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        google_login, account_id, container_id, tag_name, pixel_code
+      })
+    });
+
+    const data = await resp.json();
+    if (resp.ok) {
+      pixelResults.innerHTML = `<div style="color:#137333; font-size:13px; font-weight:bold;">✓ ${esc(data.message)}</div>`;
+      showToast(`Custom pixel '${tag_name}' deployed successfully!`, "success");
+    } else {
+      pixelResults.innerHTML = `<div style="color:#c5221f; font-size:13px;">Error: ${esc(data.error)}</div>`;
+      showToast("Failed to deploy pixel.", "error");
+    }
   });
 }
 
@@ -427,7 +481,6 @@ if (askBtn && askInput) {
   });
 }
 
-// Preset Date Calculator Handler
 function applyPresetDates(presetKey) {
   const now = new Date();
   const formatDate = d => d.toISOString().split('T')[0];
@@ -456,7 +509,7 @@ function applyPresetDates(presetKey) {
     p1End = new Date(now.getTime() - 86400000);
   }
 
-  if (p1Start && p1End) {
+  if (p1Start && p1End && document.getElementById('p1-start')) {
     document.getElementById('p1-start').value = formatDate(p1Start);
     document.getElementById('p1-end').value = formatDate(p1End);
   }
@@ -474,9 +527,9 @@ async function search() {
   if (!q) return;
   const value = q.value.trim();
   if (!value) {
-    document.getElementById('box-analytics').style.display = 'none';
-    document.getElementById('box-gmb').style.display = 'none';
-    document.getElementById('box-gsc').style.display = 'none';
+    if (document.getElementById('box-analytics')) document.getElementById('box-analytics').style.display = 'none';
+    if (document.getElementById('box-gmb')) document.getElementById('box-gmb').style.display = 'none';
+    if (document.getElementById('box-gsc')) document.getElementById('box-gsc').style.display = 'none';
     statusEl.textContent = 'Start typing to search all connected accounts.';
     return;
   }
@@ -536,7 +589,6 @@ if (scopeSelect) {
   });
 }
 
-// GA4 Comparison Engine Run Trigger with Chart Rendering
 const runCompBtn = document.getElementById('run-ga4-comp');
 if (runCompBtn) {
   runCompBtn.addEventListener('click', async () => {
@@ -618,7 +670,6 @@ Key Events: ${m2.keyEvents.toLocaleString()}
           ${ai.insights.map(i => `<li>${i.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/`(.*?)`/g, '<code>$1</code>')}</li>`).join('')}
         </ul>
 
-        <!-- VISUAL CHART CANVAS -->
         <div style="background:#fff; padding:12px; border-radius:8px; border:1px solid #d8e0eb; margin-bottom:12px;">
           <canvas id="ga4CompareChart" height="120"></canvas>
         </div>
@@ -684,7 +735,6 @@ Key Events: ${m2.keyEvents.toLocaleString()}
       </div>
     `;
 
-    // Render Chart
     renderChart(data);
 
     document.getElementById('btn-copy-analysis').addEventListener('click', () => {
@@ -739,69 +789,76 @@ function renderChart(data) {
   });
 }
 
-const enableAlertsEl = document.getElementById('modal-enable-alerts');
-if (enableAlertsEl) {
-  enableAlertsEl.addEventListener('change', (e) => {
-    document.getElementById('alert-options-box').style.display = e.target.value === 'yes' ? 'block' : 'none';
+// Saved Reports & Audit Log Search Handlers
+async function fetchSavedReports(query='') {
+  const listEl = document.getElementById('saved-reports-list');
+  if (!listEl) return;
+
+  const resp = await fetch(`/api/reports/search?q=${encodeURIComponent(query)}`);
+  const data = await resp.json();
+  
+  if (!data.reports || !data.reports.length) {
+    listEl.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; font-size:13px; color:#69758a;">No historical reports found.</div>';
+    return;
+  }
+
+  listEl.innerHTML = data.reports.map(r => `
+    <div style="padding:12px 14px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:10px; font-size:13px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong style="font-size:15px; color:#1a2e58;">${esc(r.customer_name)}</strong>
+        <span style="color:#8a95a7; font-size:12px;">Saved on ${new Date(r.created_at * 1000).toLocaleDateString()}</span>
+      </div>
+      <div style="margin-top:4px; color:#58677e;">
+        <b>Summary Title:</b> ${esc(r.summary_title)} | <b>Property ID:</b> <code>${esc(r.property_id)}</code> | <b>User:</b> ${esc(r.google_login)}
+      </div>
+    </div>
+  `).join('');
+}
+
+const btnSearchSaved = document.getElementById('btn-search-saved');
+if (btnSearchSaved) {
+  btnSearchSaved.addEventListener('click', () => {
+    fetchSavedReports(document.getElementById('search-saved-q').value);
   });
 }
 
-const cancelBtn = document.getElementById('modal-cancel');
-if (cancelBtn) {
-  cancelBtn.addEventListener('click', () => {
-    document.getElementById('save-modal').style.display = 'none';
-  });
+async function fetchGtmLogs(query='') {
+  const listEl = document.getElementById('gtm-logs-list');
+  if (!listEl) return;
+
+  const resp = await fetch(`/api/gtm/logs/search?q=${encodeURIComponent(query)}`);
+  const data = await resp.json();
+  
+  if (!data.logs || !data.logs.length) {
+    listEl.innerHTML = '<div style="padding:16px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; font-size:13px; color:#69758a;">No recorded GTM change logs found.</div>';
+    return;
+  }
+
+  listEl.innerHTML = data.logs.map(log => {
+    const dateStr = new Date(log.created_at * 1000).toLocaleString();
+    return `
+      <div style="padding:12px 14px; background:#fff; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:10px; font-size:13px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <span style="background:#eaf2ff; color:#24519c; font-weight:bold; padding:3px 8px; border-radius:4px; font-size:12px;">${esc(log.action_type)}</span>
+            <strong style="margin-left:8px; color:#1a2e58; font-size:14px;">${esc(log.tag_name)}</strong>
+          </div>
+          <span style="color:#8a95a7; font-size:12px;">${esc(dateStr)}</span>
+        </div>
+        <div style="margin-top:6px; color:#58677e;">
+          <b>Container ID:</b> <code>${esc(log.container_id)}</code> | 
+          <b>Account ID:</b> <code>${esc(log.account_id)}</code> | 
+          <b>Executed By:</b> ${esc(log.google_login)}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
-const confirmSaveBtn = document.getElementById('modal-confirm-save');
-if (confirmSaveBtn) {
-  confirmSaveBtn.addEventListener('click', async () => {
-    const customer_name = document.getElementById('modal-cust-name').value.trim();
-    const summary_title = document.getElementById('modal-sum-title').value.trim();
-    const enableAlerts = document.getElementById('modal-enable-alerts').value === 'yes';
-
-    if (!customer_name || !summary_title) {
-      showToast("Please enter both customer name and summary title.", "error");
-      return;
-    }
-
-    const saveResp = await fetch('/api/reports/save', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        customer_name,
-        summary_title,
-        property_id: currentReportPayload.property_id,
-        google_login: document.getElementById('comp-login').value.trim(),
-        report_data: currentReportPayload
-      })
-    });
-
-    const saveRes = await saveResp.json();
-    if (!saveResp.ok) {
-      showToast("Error saving report: " + saveRes.error, "error");
-      return;
-    }
-
-    if (enableAlerts) {
-      const notification_email = document.getElementById('modal-alert-email').value.trim();
-      const frequency = document.getElementById('modal-alert-freq').value;
-      const ghl_webhook_url = document.getElementById('modal-ghl-url').value.trim();
-
-      await fetch('/api/reports/subscribe', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          report_id: saveRes.report_id,
-          notification_email,
-          frequency,
-          ghl_webhook_url
-        })
-      });
-    }
-
-    document.getElementById('save-modal').style.display = 'none';
-    showToast("Report saved successfully!", "success");
+const btnSearchGtmLogs = document.getElementById('btn-search-gtm-logs');
+if (btnSearchGtmLogs) {
+  btnSearchGtmLogs.addEventListener('click', () => {
+    fetchGtmLogs(document.getElementById('search-gtm-logs-q').value);
   });
 }
 
@@ -830,108 +887,5 @@ if (manualBtn && manualInput) {
         <a href="${gmbClaimUrl}" target="_blank" rel="noopener" class="open" style="padding: 6px 10px; font-size: 12px; background: #137333!important;">Claim/Add on GMB</a>
       </div>
     `;
-  });
-}
-// System Diagnostics Dashboard Modal Handler
-const btnOpenDiagnostics = document.getElementById('btn-open-diagnostics');
-const diagnosticsModal = document.getElementById('diagnostics-modal');
-const diagnosticsClose = document.getElementById('diagnostics-modal-close');
-const diagnosticsBody = document.getElementById('diagnostics-modal-body');
-
-if (btnOpenDiagnostics) {
-  btnOpenDiagnostics.addEventListener('click', async (e) => {
-    e.preventDefault();
-    diagnosticsModal.style.display = 'flex';
-    diagnosticsBody.innerHTML = renderSkeletonCard();
-
-    try {
-      const [healthRes, debugRes] = await Promise.all([
-        fetch('/health').then(r => r.json()),
-        fetch('/debug/accounts').then(r => r.json())
-      ]);
-
-      let html = `
-        <div style="font-size:13px;">
-          <h4 style="margin:0 0 8px; color:#1a2e58;">System Environment & Health Status:</h4>
-          <div style="background:#f8fafc; padding:12px; border:1px solid #d8e0eb; border-radius:8px; margin-bottom:16px; line-height:1.6;">
-            <div>Overall System Health: <b>${healthRes.ok ? '🟢 Operational' : '🔴 Issue Detected'}</b></div>
-            <div>Google Client ID: ${healthRes.google_client_id_configured ? '🟢 Configured' : '🔴 Missing'}</div>
-            <div>Google Client Secret: ${healthRes.google_client_secret_configured ? '🟢 Configured' : '🔴 Missing'}</div>
-            <div>Token Encryption Key: ${healthRes.token_encryption_key_configured ? '🟢 Configured' : '🔴 Missing'}</div>
-            <div>Database Path: <code>${esc(healthRes.token_db_path)}</code></div>
-            <div>Connected Accounts Count: <b>${healthRes.connected_account_count}</b></div>
-          </div>
-
-          <h4 style="margin:0 0 8px; color:#1a2e58;">Connected Account API Connection Diagnostics:</h4>
-      `;
-
-      if (!debugRes.diagnostics || !debugRes.diagnostics.length) {
-        html += '<div style="color:#69758a; font-style:italic;">No Google accounts currently connected to test.</div>';
-      } else {
-        html += debugRes.diagnostics.map(acc => `
-          <div style="background:#fff; border:1px solid #d8e0eb; border-radius:8px; padding:12px; margin-bottom:10px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-              <strong style="color:#1a2e58; font-size:14px;">${esc(acc.email)}</strong>
-              <span style="font-size:11px; background:${acc.token_refresh_status === 'SUCCESS' ? '#e6f4ea' : '#fce8e6'}; color:${acc.token_refresh_status === 'SUCCESS' ? '#137333' : '#c5221f'}; padding:2px 8px; border-radius:4px; font-weight:bold;">
-                OAuth Token: ${esc(acc.token_refresh_status)}
-              </span>
-            </div>
-            <div style="font-size:12px; color:#58677e; display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; background:#f0f4f9; padding:8px; border-radius:6px;">
-              <div>GA4 Admin API: <b>${acc.ga4_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
-              <div>GTM API: <b>${acc.gtm_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
-              <div>Search Console API: <b>${acc.gsc_api_status === 'SUCCESS' ? '🟢 OK' : '🔴 Failed'}</b></div>
-            </div>
-          </div>
-        `).join('');
-      }
-
-      html += '</div>';
-      diagnosticsBody.innerHTML = html;
-    } catch (err) {
-      diagnosticsBody.innerHTML = `<div style="color:#c5221f; font-size:13px;">Failed to fetch system diagnostics: ${esc(err.message)}</div>`;
-    }
-  });
-}
-
-if (diagnosticsClose) {
-  diagnosticsClose.addEventListener('click', () => {
-    diagnosticsModal.style.display = 'none';
-  });
-}
-// Deploy Custom Pixel Code Listener
-const btnDeployPixel = document.getElementById('btn-deploy-pixel');
-const pixelResults = document.getElementById('pixel-deploy-results');
-
-if (btnDeployPixel) {
-  btnDeployPixel.addEventListener('click', async () => {
-    const google_login = document.getElementById('pixel-login').value.trim();
-    const account_id = document.getElementById('pixel-account-id').value.trim();
-    const container_id = document.getElementById('pixel-container-id').value.trim();
-    const tag_name = document.getElementById('pixel-tag-name').value.trim();
-    const pixel_code = document.getElementById('pixel-code-input').value.trim();
-
-    if (!google_login || !account_id || !container_id || !tag_name || !pixel_code) {
-      showToast("Please fill in all pixel form fields including the script code.", "error");
-      return;
-    }
-
-    pixelResults.innerHTML = renderSkeletonCard();
-
-    const resp = await fetch('/api/gtm/deploy-pixel', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        google_login, account_id, container_id, tag_name, pixel_code
-      })
-    });
-
-    const data = await resp.json();
-    if (resp.ok) {
-      pixelResults.innerHTML = `<div style="color:#137333; font-size:13px; font-weight:bold;">✓ ${esc(data.message)}</div>`;
-      showToast(`Custom pixel '${tag_name}' deployed successfully!`, "success");
-    } else {
-      pixelResults.innerHTML = `<div style="color:#c5221f; font-size:13px;">Error: ${esc(data.error)}</div>`;
-      showToast("Failed to deploy pixel.", "error");
-    }
   });
 }
