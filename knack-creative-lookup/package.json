@@ -1,6 +1,6 @@
 {
   "name": "knack-creative-lookup",
-  "version": "10.0.0",
+  "version": "11.0.0",
   "private": true,
   "dependencies": { "serve": "^14.2.0" },
   "scripts": {
