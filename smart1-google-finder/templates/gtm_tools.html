@@ -21,7 +21,7 @@
         </div>
       </div>
 
-      <!-- TOP NAVIGATION MENU -->
+      <!-- CLEAN NAVIGATION MENU -->
       <nav class="nav-anchor-bar">
         <a href="/">🔍 Quick Search</a>
         <a href="/ga-tools">📊 GA Tools</a>
@@ -30,6 +30,17 @@
         <a href="/gmb-tools">📍 GMB Tools</a>
         <a href="/history">📜 History & Logs</a>
       </nav>
+
+      <!-- STANDALONE GTM LOOKUP & AUTO-POPULATE BAR -->
+      <div class="manual-lookup-card" style="margin-top:20px; background:#eaf2ff; border-color:#b8d2f8;">
+        <h3 style="color:#1a2e58;">🔍 Find GTM Container & Auto-Populate Tools</h3>
+        <p style="color:#24519c;">Type a client name or public GTM ID to load container parameters directly into the forms below:</p>
+        <div class="manual-input-group">
+          <input id="gtm-lookup-q" placeholder="Type client name or container ID (e.g. GTM-XXXXXX)...">
+          <button id="gtm-lookup-btn" class="btn" style="background:#24519c!important;">Search GTM Accounts</button>
+        </div>
+        <div id="gtm-lookup-results" style="margin-top:10px;"></div>
+      </div>
 
       <!-- AI GTM EVENT GENERATOR -->
       <div id="gtm-generator" class="manual-lookup-card" style="margin-top:20px;">
