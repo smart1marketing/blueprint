@@ -28,7 +28,7 @@ function loginScreen(mount, message) {
       <h2>Sign in</h2>
       <p class="muted small">${esc(message || 'This studio spends real API credits, so it stays behind a password. Ask your Smart 1 admin if you need it.')}</p>
       <form id="loginForm">
-        <label class="field"><span class="lbl">Your name</span><input type="text" name="who" placeholder="Sara" autocomplete="name"></label>
+        <label class="field"><span class="lbl">Your name</span><input type="text" name="who" placeholder="Your name" autocomplete="name"></label>
         <label class="field"><span class="lbl">Studio password</span><input type="password" name="password" autocomplete="current-password" required autofocus></label>
         <div id="loginError"></div>
         <div class="actions"><button class="btn" type="submit" style="width:100%">Sign in</button></div>

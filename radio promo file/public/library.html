@@ -10,7 +10,6 @@
 <header class="rack">
   <div class="rack-inner">
     <div class="brandmark"><span class="one">S1</span><span class="rest">Radio Studio</span><span class="sub">library</span></div>
-    <a class="statusdot" id="s1status" href="/diagnostics.html" title="System status"><i></i><span>Checking…</span></a>
     <nav class="rack-links"><a href="/">Studio</a><a href="/how-it-works.html">How it works</a><a href="/diagnostics.html">Diagnostics</a></nav>
   </div>
 </header>
@@ -26,10 +25,9 @@
 </main>
 
 <script type="module">
-import { ensureAuth, esc, mountStatus } from '/js/auth.js';
+import { ensureAuth, esc } from '/js/auth.js';
 const results = document.getElementById('results');
 await ensureAuth(results);
-mountStatus();
 
 async function load(q='') {
   results.innerHTML = '<div class="panel flat"><p class="small muted mono">Searching…</p></div>';
@@ -43,7 +41,7 @@ async function load(q='') {
     }
     results.innerHTML = data.results.map(r => `
       <div class="panel">
-        <div class="eyebrow">${esc(r.teamMember || '')} · ${new Date(r.createdAt).toLocaleDateString()}</div>
+        <div class="eyebrow">${esc(r.projectNumber || '')} · ${esc(r.teamMember || '')} · ${new Date(r.createdAt).toLocaleDateString()}</div>
         <h2>${esc(r.company || r.customerName)}</h2>
         <p class="small muted">${esc(r.projectName)} — ${r.spotCount} spot${r.spotCount === 1 ? '' : 's'} · ${esc(r.customerName)}, ${esc(r.email)}</p>
         <div class="tags" style="margin:10px 0">
@@ -55,6 +53,8 @@ async function load(q='') {
         <div class="actions">
           <a class="btn ghost sm" href="${esc(r.homeUrl || '#')}" target="_blank" rel="noopener">Client site</a>
           <button class="btn sm" data-open="${esc(r.projectId)}">See the spots</button>
+          <a class="btn ghost sm" href="/#p=${esc(r.projectId)}&s=6">Edit this project</a>
+          <a class="btn sm" href="/#clone=${esc(r.projectId)}">Clone this project</a>
         </div>
         <div data-detail="${esc(r.projectId)}"></div>
       </div>`).join('');

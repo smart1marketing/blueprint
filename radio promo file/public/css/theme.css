@@ -333,3 +333,11 @@ details summary::-webkit-details-marker { color: var(--cyan); }
 /* when the badge is present the ON AIR lamp no longer needs the auto margin */
 .statusdot ~ .onair{margin-left:10px}
 @media(max-width:620px){.statusdot span{display:none}.statusdot{padding:6px 9px}}
+
+/* bed level slider */
+input[type=range]{ -webkit-appearance:none; appearance:none; height:6px; border-radius:3px;
+  background:var(--edge); outline:none; }
+input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:20px; height:20px;
+  border-radius:50%; background:var(--cyan); border:2px solid #fff; box-shadow:0 1px 4px rgba(27,46,78,.3); cursor:pointer; }
+input[type=range]::-moz-range-thumb{ width:18px; height:18px; border-radius:50%; background:var(--cyan);
+  border:2px solid #fff; cursor:pointer; }

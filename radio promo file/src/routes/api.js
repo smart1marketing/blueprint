@@ -231,7 +231,7 @@ api.post('/beds/generate', wrap(async (req, res) => {
       publicId: `${cdn.slug(name)}-${Date.now().toString(36)}`,
       resourceType: 'video',
       tags: ['music-bed', 'generated-bed'],
-      context: { name, prompt: prompt.slice(0, 400) }
+      context: { name, prompt: prompt.slice(0, 400), project: String(req.body.project || '').slice(0, 80) }
     });
     return {
       publicId: uploaded.public_id,
@@ -261,7 +261,7 @@ api.post('/beds/upload', wrap(async (req, res) => {
     publicId: `${cdn.slug(name)}-${Date.now().toString(36)}`,
     resourceType: 'video',
     tags: ['music-bed', 'uploaded-bed'],
-    context: { name }
+    context: { name, project: String(req.body.project || '').slice(0, 80) }
   });
 
   ok(res, {
@@ -345,6 +345,9 @@ api.post('/projects/:projectId/settings', wrap(async (req, res) => {
   const patch = {};
   if (req.body.musicBed !== undefined) patch.musicBed = req.body.musicBed;
   if (req.body.singleVoice !== undefined) patch.singleVoice = Boolean(req.body.singleVoice);
+  if (req.body.bedPercent !== undefined) {
+    patch.bedPercent = Math.max(2, Math.min(60, Number(req.body.bedPercent) || 25));
+  }
   store.update(project.projectId, patch);
   ok(res, { project: store.get(project.projectId) });
 }));
@@ -769,7 +772,8 @@ function startRender(projectId, spotId, voice) {
     // 3. Bed, duck, normalize to broadcast loudness, pad to the slot.
     const produced = await audio.postProduce(raw, {
       targetSeconds: s.seconds,
-      bedUrl: p.musicBed?.url || null
+      bedUrl: p.musicBed?.url || null,
+      bedPercent: p.bedPercent ?? 25
     });
 
     // 4. File it.
@@ -799,6 +803,7 @@ function startRender(projectId, spotId, voice) {
       t.speechChanges = changes;
       t.postProduced = produced.postProduced;
       t.bedName = p.musicBed?.name || null;
+      t.bedPercent = p.musicBed ? (p.bedPercent ?? 25) : null;
       t.audioStatus = 'ready';
       if (rate) proj.measuredRate = rate;
     });
@@ -927,7 +932,8 @@ api.post('/projects/:projectId/approval', wrap(async (req, res) => {
 
 api.get('/library', (req, res) => {
   const results = store.library(req.query.q || '').map((p) => ({
-    projectId: p.projectId, createdAt: p.createdAt, updatedAt: p.updatedAt, status: p.status,
+    projectId: p.projectId, projectNumber: p.projectNumber,
+    createdAt: p.createdAt, updatedAt: p.updatedAt, status: p.status,
     customerName: p.customer?.customerName, company: p.customer?.company || p.brand?.name || '',
     email: p.customer?.email, teamMember: p.customer?.teamMember, projectName: p.customer?.projectName,
     homeUrl: p.customer?.homeUrl, tones: p.tones, spotCount: p.playlist?.length || 0,

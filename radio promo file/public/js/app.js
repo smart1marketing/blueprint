@@ -103,7 +103,10 @@ function goto(step) {
 
 function slugLabel() {
   const c = state.project?.customer;
-  document.getElementById('projectSlug').textContent = c ? `${c.company || c.customerName} · ${c.projectName}` : 'new session';
+  const num = state.project?.projectNumber;
+  document.getElementById('projectSlug').textContent = c
+    ? `${num ? num + ' · ' : ''}${c.company || c.customerName} · ${c.projectName}`
+    : 'new session';
 }
 
 /* ------------------------------------------------------------------ */
@@ -112,6 +115,15 @@ function slugLabel() {
 
 const panel = (eyebrow, title, inner) =>
   `<div class="panel"><div class="eyebrow">${esc(eyebrow)}</div><h2>${esc(title)}</h2>${inner}</div>`;
+
+/** Step back a station without losing anything already done. */
+const backBar = () => state.step > 1
+  ? `<button class="linkbtn" id="stepBack" style="padding-left:0;margin-bottom:10px">&larr; Back to ${esc(STATIONS[state.step - 2].call)}</button>`
+  : '';
+
+function wireBack() {
+  document.getElementById('stepBack')?.addEventListener('click', () => goto(state.step - 1));
+}
 
 const field = (name, label, opts = {}) => `
   <label class="field">
@@ -542,11 +554,15 @@ function paintCopy() {
       </div>`).join('')}
 
     ${allApproved ? `
-      <div class="notice">Both lengths are approved for ${esc(toneLabel(state.currentTone))}. They're waiting in the studio.</div>
-      <div class="actions">
-        <button class="btn ghost" id="addAnother">Add another commercial</button>
-        <span class="spacer"></span>
-        <button class="btn" id="toStudio">Take these to the recording studio</button>
+      <div class="panel flat" style="margin-top:16px">
+        <div class="eyebrow">Before we roll</div>
+        <h3>Is this everything you want to record?</h3>
+        <p class="small muted">${(state.project.commercials || []).filter((c) => c.status === 'approved').length} approved spot(s). Casting them all at once keeps the voice consistent.</p>
+        <div class="actions">
+          <button class="btn ghost" id="addAnother">No — add another tone</button>
+          <span class="spacer"></span>
+          <button class="btn" id="toStudio">Yes, take me to the studio</button>
+        </div>
       </div>` : ''}
   `;
 
@@ -557,7 +573,7 @@ function paintCopy() {
   box.querySelectorAll('[data-hear]').forEach((b) => b.addEventListener('click', () => speechPreview(b.dataset.hear)));
   box.querySelectorAll('[data-history]').forEach((b) => b.addEventListener('click', () => showHistory(b.dataset.history)));
   document.getElementById('addAnother')?.addEventListener('click', () => goto(2));
-  document.getElementById('toStudio')?.addEventListener('click', confirmStudio);
+  document.getElementById('toStudio')?.addEventListener('click', () => goto(4));
 }
 
 async function decide(spotId, decision) {
@@ -702,25 +718,6 @@ function askRevision(spotId) {
   });
 }
 
-function confirmStudio() {
-  const approved = (state.project.commercials || []).filter((c) => c.status === 'approved');
-  const box = document.getElementById('copyBox');
-  box.insertAdjacentHTML('beforeend', `
-    <div class="panel flat" id="studioCheck" style="margin-top:16px">
-      <div class="eyebrow">Before we roll</div>
-      <h3>Is this everything you want to record?</h3>
-      <p class="small muted">${approved.length} approved spot${approved.length === 1 ? '' : 's'}: ${approved.map((c) => `${esc(c.toneLabel)} :${c.seconds}`).join(', ')}. Casting them all at once keeps the voice consistent.</p>
-      <div class="actions">
-        <button class="btn ghost" id="notYet">No — add another tone</button>
-        <span class="spacer"></span>
-        <button class="btn" id="yesStudio">Yes, take me to the studio</button>
-      </div>
-    </div>`);
-  document.getElementById('notYet').addEventListener('click', () => goto(2));
-  document.getElementById('yesStudio').addEventListener('click', () => goto(4));
-  document.getElementById('studioCheck').scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
 /* ------------------------------------------------------------------ */
 /* Station 4 — Cast                                                    */
 /* ------------------------------------------------------------------ */
@@ -786,7 +783,7 @@ async function loadBeds() {
     state.beds = beds;
     state.bedNote = note || null;
     // Nothing in the library yet? Land on Compose rather than an empty list.
-    if (!state.bedTab) state.bedTab = beds.length ? 'library' : 'generate';
+    if (!state.bedTab) state.bedTab = 'generate';
     paintBeds();
   } catch (err) {
     box.innerHTML = `<div class="notice warn">${esc(err.message)}</div>`;
@@ -802,9 +799,9 @@ function paintBeds() {
     <p class="small muted">The bed sits under the read and ducks out of its way. Everything is mastered to broadcast loudness afterward.</p>
 
     <div class="tabrow">
-      <button class="tabbtn ${tab === 'library' ? 'on' : ''}" data-bedtab="library">Library${state.beds.length ? ` (${state.beds.length})` : ''}</button>
       <button class="tabbtn ${tab === 'generate' ? 'on' : ''}" data-bedtab="generate">Compose one</button>
       <button class="tabbtn ${tab === 'upload' ? 'on' : ''}" data-bedtab="upload">Upload a track</button>
+      <button class="tabbtn ${tab === 'library' ? 'on' : ''}" data-bedtab="library">Library${state.beds.length ? ` (${state.beds.length})` : ''}</button>
     </div>
 
     <div id="bedPanel"></div>
@@ -831,7 +828,8 @@ function paintBedLibrary(panel_, chosen) {
     <div class="options">
       ${radioCard('bed', '', 'No music', 'Dry voice only', !chosen)}
       ${state.beds.map((b) => radioCard('bed', b.publicId, b.name,
-        [b.seconds ? `${Math.round(b.seconds)}s` : '', b.source === 'generated' ? 'composed' : b.source === 'uploaded' ? 'yours' : ''].filter(Boolean).join(' · '),
+        [b.project || '', b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '', b.seconds ? `${Math.round(b.seconds)}s` : '']
+          .filter(Boolean).join(' · '),
         chosen === b.publicId)).join('')}
     </div>
     <div id="bedPreview"></div>`;
@@ -903,13 +901,15 @@ async function composeBed(ev) {
   const body = form(ev.target);
   const out = document.getElementById('bedGenResult');
   try {
+    body.project = state.project.customer.projectName;
     const { jobId } = await api('/beds/generate', { method: 'POST', body });
     const bed = await withLoader(out, 'compose-bed', jobId);
     state.beds = [bed, ...state.beds];
     out.innerHTML = `
       <div class="rowcard" style="margin-top:12px">
         <div style="flex:1">
-          <h3>${esc(bed.name)} <span class="tag good">composed</span></h3>
+          <h3>${esc(bed.name)}</h3>
+          <p class="small muted">${esc(state.project.customer.projectName)} · ${new Date().toLocaleDateString()}</p>
           <audio controls preload="auto" src="${esc(bed.url)}"></audio>
           <div class="actions">
             <button class="btn sm" id="useBed">Use this bed</button>
@@ -962,12 +962,13 @@ async function uploadBed(ev) {
       r.onerror = () => reject(new Error('Could not read that file.'));
       r.readAsDataURL(file);
     });
-    const { bed } = await api('/beds/upload', { method: 'POST', body: { dataUrl, name } });
+    const { bed } = await api('/beds/upload', { method: 'POST', body: { dataUrl, name, project: state.project.customer.projectName } });
     state.beds = [bed, ...state.beds];
     out.innerHTML = `
       <div class="rowcard" style="margin-top:12px">
         <div style="flex:1">
-          <h3>${esc(bed.name)} <span class="tag good">yours</span></h3>
+          <h3>${esc(bed.name)}</h3>
+          <p class="small muted">${esc(state.project.customer.projectName)} · ${new Date().toLocaleDateString()}</p>
           <audio controls preload="none" src="${esc(bed.url)}"></audio>
           <div class="actions"><button class="btn sm" id="useUploaded">Use this bed</button></div>
         </div>
@@ -1167,6 +1168,24 @@ function renderBooth() {
         ? `<audio controls preload="auto" src="${esc(s.audioUrl)}"></audio>`
         : stalled ? '' : '<div class="loader" id="audioLoader"></div>'}</div>
 
+      ${s.bedName ? `
+        <div class="subpanel" style="margin-top:14px">
+          <div class="grouplabel">Music bed level — ${esc(s.bedName)}</div>
+          <div class="options" id="bedLevels">
+            ${[[15, 'Low'], [25, 'Default'], [35, 'Strong']].map(([v, label]) =>
+              radioCard('bedlevel', String(v), `${label} ${v}%`, '', (state.project.bedPercent ?? 25) === v)).join('')}
+            <label class="opt">
+              <input type="radio" name="bedlevel" value="custom" ${![15, 25, 35].includes(state.project.bedPercent ?? 25) ? 'checked' : ''}>
+              <span class="face"><b>Custom</b><em>set it by hand</em></span>
+            </label>
+          </div>
+          <div id="bedSlider" ${[15, 25, 35].includes(state.project.bedPercent ?? 25) ? 'hidden' : ''} style="margin-top:12px">
+            <input type="range" id="bedRange" min="5" max="50" step="1" value="${state.project.bedPercent ?? 25}" style="width:100%;max-width:360px">
+            <div class="small muted mono" id="bedReadout">${state.project.bedPercent ?? 25}% of the voice</div>
+          </div>
+          <div class="actions"><button class="btn sm" id="applyBed">Apply and re-record</button></div>
+        </div>` : ''}
+
       ${(s.speechChanges || []).length ? `<details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">${s.speechChanges.length} thing${s.speechChanges.length === 1 ? '' : 's'} were re-spelled for the read</summary>
         <table class="data" style="margin-top:8px"><tr><th>Written</th><th>Read as</th></tr>
         ${s.speechChanges.map((c) => `<tr><td class="mono small">${esc(c.from)}</td><td class="small">${esc(c.to)}</td></tr>`).join('')}</table></details>` : ''}
@@ -1188,6 +1207,30 @@ function renderBooth() {
   document.getElementById('tighten')?.addEventListener('click', () => tightenSpot(s.id));
   document.getElementById('extend')?.addEventListener('click', () => extendSpot(s.id));
   document.getElementById('rerender')?.addEventListener('click', () => rerenderSpot(s.id));
+
+  // bed level: presets, custom slider, then re-record with the new mix
+  const levels = document.getElementById('bedLevels');
+  if (levels) {
+    const slider = document.getElementById('bedSlider');
+    const range = document.getElementById('bedRange');
+    const readout = document.getElementById('bedReadout');
+    levels.querySelectorAll('input[name=bedlevel]').forEach((input) => {
+      input.addEventListener('change', () => {
+        const custom = input.value === 'custom';
+        slider.hidden = !custom;
+        if (!custom) { range.value = input.value; readout.textContent = `${input.value}% of the voice`; }
+      });
+    });
+    range.addEventListener('input', () => { readout.textContent = `${range.value}% of the voice`; });
+    document.getElementById('applyBed').addEventListener('click', async () => {
+      const picked = levels.querySelector('input[name=bedlevel]:checked')?.value;
+      const pct = picked === 'custom' ? Number(range.value) : Number(picked);
+      await api(`/projects/${state.projectId}/settings`, { method: 'POST', body: { bedPercent: pct } });
+      await refreshProject();
+      toast(`Bed set to ${pct}%. Re-recording.`);
+      await rerenderSpot(s.id);
+    });
+  }
 
   document.getElementById('rebuildBanner')?.addEventListener('click', async () => {
     const holder = document.getElementById('bannerBox');
@@ -1343,6 +1386,7 @@ function paintPackage(notices) {
 
     <table class="data" style="margin:16px 0">
       <tr><th>Client</th><td>${esc(c.company || c.customerName)} — ${esc(c.customerName)}, ${esc(c.email)}</td></tr>
+      <tr><th>Project number</th><td class="mono">${esc(p.projectNumber || '')}</td></tr>
       <tr><th>Project</th><td>${esc(c.projectName)}</td></tr>
       <tr><th>Smart 1</th><td>${esc(c.teamMember)}</td></tr>
       <tr><th>Offer</th><td>${esc(p.analysis?.offer || c.promotion || '—')}</td></tr>
@@ -1359,7 +1403,8 @@ function paintPackage(notices) {
           <div class="slug" style="margin-bottom:6px">
             <span class="timecode${i.seconds === 30 ? ' alt' : ''}">:${i.seconds}</span>
             <b>${esc(i.toneLabel)}</b>
-            <span class="tag">${esc(i.voiceName || '')}</span>
+            <span class="tag">Voice #: ${esc(i.voiceName || '')}${i.voiceId ? ` (${esc(String(i.voiceId).slice(0, 8))})` : ''}</span>
+            ${i.bedName ? `<span class="tag">Bed: ${esc(i.bedName)}${i.bedPercent ? ` at ${i.bedPercent}%` : ''}</span>` : '<span class="tag">No bed</span>'}
             ${i.durationGrade ? `<span class="tag ${i.durationGrade.status === 'good' ? 'good' : 'hot'}">${esc(i.durationGrade.label.split('—')[0].trim())}</span>` : ''}
           </div>
           <p class="small">${esc(i.script)}</p>
@@ -1456,6 +1501,16 @@ async function refreshProject() {
 
 function render() {
   writeHash();
+  const painted = paintStation();
+  // Every station gets a way back, added after the station has drawn.
+  if (state.step > 1 && !document.getElementById('stepBack')) {
+    stage.insertAdjacentHTML('afterbegin', backBar());
+    wireBack();
+  }
+  return painted;
+}
+
+function paintStation() {
   switch (state.step) {
     case 1: return renderSetup();
     case 2: return renderBrief();
@@ -1468,12 +1523,23 @@ function render() {
   }
 }
 
+/**
+ * When the studio is framed by the marketing site, a cross-origin iframe
+ * cannot size itself. Post our height on every change so the host page can.
+ */
+function reportHeight() {
+  if (window.parent === window) return;
+  const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+  window.parent.postMessage({ source: 's1-radio-studio', height: h }, '*');
+}
+
 (async function boot() {
   paintDial();
+  new ResizeObserver(reportHeight).observe(document.body);
+  setInterval(reportHeight, 1200);
   await ensureAuth(stage);
 
   document.getElementById('signOut')?.addEventListener('click', signOut);
-  mountStatus();
 
   try {
     const catalog = await api('/catalog');
@@ -1496,6 +1562,24 @@ function render() {
     stage.innerHTML = `<div class="panel"><div class="notice bad">The studio can't reach its own API: ${esc(err.message)}</div>
       <p class="small muted">Check <a href="/diagnostics.html">Diagnostics</a> for what's not connected.</p></div>`;
     return;
+  }
+
+  // Cloning: same client and settings, new project name and promotion.
+  const cloneMatch = location.hash.match(/clone=([\w-]+)/);
+  if (cloneMatch) {
+    try {
+      const { settings } = await api(`/library/${cloneMatch[1]}/settings`);
+      state.reuse = settings;
+      state.brand = settings.brand;
+      history.replaceState(null, '', location.pathname);
+      state.step = 1;
+      paintDial();
+      render();
+      toast(`Cloned from ${settings.sourceProjectName}. Change the project name and promotion, then go.`);
+      return;
+    } catch {
+      history.replaceState(null, '', location.pathname);
+    }
   }
 
   // Pick a project back up after a refresh, a dropped signal, or a restart.

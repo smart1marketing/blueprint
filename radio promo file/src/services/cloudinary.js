@@ -76,14 +76,15 @@ const textSafe = (s = '') => String(s).replace(/[\r\n]+/g, ' ').trim().slice(0, 
 /**
  * Companion banner, to a fixed template:
  *
- *      logo            top centre, on a contrast-checked plate
- *      headline        centre, 3-4 words summarising the campaign
- *      support line    directly beneath, the offer or deadline
- *      root domain     bottom centre, in a brand-accent bar
+ *      logo         top centre, on a contrast-checked plate
+ *      headline     centre, 3-4 words, on a solid panel
+ *      support      directly beneath, on the same panel
+ *      root domain  bottom centre, in a brand-accent bar
  *
- * Nothing here is assumed legible. The scrim strength is solved from the
- * artwork's own predominant colours, the logo plate is chosen from the
- * logo's colours, and the URL bar's text colour is chosen from the accent.
+ * Legibility is not left to chance. The artwork is blurred to an abstract
+ * wash so no detail competes with the type, the scrim strength is solved
+ * from the artwork's own colours, and every text element sits on a SOLID
+ * background rather than floating over the picture.
  */
 export function bannerUrl(artPublicId, {
   width, height, logoUrl, logoPublicId, headline, support, cta, offer,
@@ -100,21 +101,21 @@ export function bannerUrl(artPublicId, {
   const title = (headline || cta || '').trim();
   const sub = (support || offer || '').trim();
   const domain = rootDomain(homeUrl, landingUrl);
-
-  // Solve the scrim against this artwork rather than using a fixed one.
   const scrim = solveScrim(artColors, { target: 7 });
   const plate = plateFor(logoColors);
 
-  // Long headlines step down in size so they never overflow the safe area.
-  const titleSize = title.length <= 14 ? 30 : title.length <= 20 ? 26 : title.length <= 28 ? 22 : 19;
+  const titleSize = title.length <= 14 ? 28 : title.length <= 20 ? 24 : title.length <= 28 ? 20 : 17;
 
   const transformation = [
     { width, height, crop: 'fill', gravity: 'auto' },
+    // Blur the artwork into a wash. It still carries the mood and the brand
+    // colours, but there is no detail left to fight the type.
+    { effect: `blur:${Math.round(600 * scale)}` },
     { effect: `brightness:${scrim.brightness}` },
     { effect: `colorize:${scrim.colorize}`, color: '#0B1220' }
   ];
 
-  // 1. LOGO — top centre, on a plate chosen for its own colouring.
+  // 1. LOGO — top centre, plate chosen from the logo's own colouring.
   const logoLayer = logoPublicId
     ? String(logoPublicId).replace(/\//g, ':')
     : logoUrl ? `fetch:${b64url(logoUrl)}` : null;
@@ -122,48 +123,48 @@ export function bannerUrl(artPublicId, {
   if (logoLayer) {
     transformation.push({
       overlay: logoLayer,
-      width: px(164), height: px(58),
+      width: px(162), height: px(56),
       crop: 'pad', background: plate.plate,
       radius: px(8),
-      gravity: 'north', y: px(18)
+      gravity: 'north', y: px(16)
     });
   }
 
-  // 2. HEADLINE — centred below the logo, the dominant element.
+  // 2. HEADLINE — centred, on a solid dark panel so it always reads.
   if (title) {
     transformation.push({
       overlay: { font_family: 'Montserrat', font_size: px(titleSize), font_weight: 'bold', text: textSafe(title) },
-      color: scrim.textColor === WHITE ? 'white' : 'rgb:0B1220',
-      gravity: 'center', y: px(sub ? -4 : 6),
-      width: px(252), crop: 'fit'
+      color: 'white',
+      background: 'rgb:0B1220',
+      gravity: 'center', y: px(sub ? -8 : 2),
+      width: px(244), crop: 'fit'
     });
   }
 
-  // 3. SUPPORT LINE — directly beneath the headline, in the accent.
+  // 3. SUPPORT LINE — beneath the headline, accent on the same solid panel.
   if (sub) {
     transformation.push({
-      overlay: { font_family: 'Montserrat', font_size: px(14), font_weight: 'bold', text: textSafe(sub) },
+      overlay: { font_family: 'Montserrat', font_size: px(13), font_weight: 'bold', text: textSafe(sub) },
       color: `rgb:${accentHex}`,
-      gravity: 'center', y: px(30),
-      width: px(252), crop: 'fit'
+      background: 'rgb:0B1220',
+      gravity: 'center', y: px(26),
+      width: px(244), crop: 'fit'
     });
   }
 
-  // 4. ROOT DOMAIN — bottom centre, accent bar, contrast-checked text.
+  // 4. ROOT DOMAIN — bottom bar, accent fill, contrast-checked text.
   if (domain) {
     transformation.push({
       overlay: { font_family: 'Montserrat', font_size: px(15), font_weight: 'bold', text: textSafe(domain) },
       color: barText,
       background: `rgb:${accentHex}`,
-      gravity: 'south', y: px(16),
+      gravity: 'south', y: px(14),
       crop: 'fit'
     });
   }
 
-  // A hairline edge so the banner reads as a unit on a white page.
-  transformation.push({ border: `1px_solid_rgb:0B122033` });
+  transformation.push({ border: '1px_solid_rgb:0B122033' });
   transformation.push({ quality: 'auto', fetch_format: 'auto' });
-
   return cl.url(artPublicId, { transformation, secure: true });
 }
 
@@ -218,6 +219,7 @@ export async function listBeds() {
       source: (r.tags || []).includes('generated-bed') ? 'generated'
         : (r.tags || []).includes('uploaded-bed') ? 'uploaded' : 'library',
       prompt: r.context?.custom?.prompt || null,
+      project: r.context?.custom?.project || null,
       createdAt: r.created_at || null
     }))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));

@@ -65,7 +65,22 @@ async function download(url, file) {
  *
  * @returns {{buffer:Buffer, rawSeconds:number, finalSeconds:number, bedUsed:boolean, postProduced:boolean}}
  */
-export async function postProduce(voBuffer, { targetSeconds, bedUrl, bedDb = config.audio.bedDb }) {
+/**
+ * Bed level is chosen as a percentage of the voice, which is how people
+ * think about it, and converted to the dB the mixer actually needs.
+ * 25% is the default: present, but never fighting the read.
+ */
+export const bedPercentToDb = (pct) => {
+  const p = Math.max(2, Math.min(60, Number(pct) || 25));
+  return Math.round(20 * Math.log10(p / 100) * 10) / 10;
+};
+
+export async function postProduce(voBuffer, { targetSeconds, bedUrl, bedPercent, bedDb }) {
+  if (bedDb === undefined || bedDb === null) {
+    bedDb = bedPercent !== undefined && bedPercent !== null
+      ? bedPercentToDb(bedPercent)
+      : config.audio.bedDb;
+  }
   const voFile = tmp('vo.mp3');
   await fs.writeFile(voFile, voBuffer);
   const cleanup = [voFile];

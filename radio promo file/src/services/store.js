@@ -35,6 +35,18 @@ function persist() {
 
 const reviewToken = () => crypto.randomBytes(18).toString('base64url');
 
+/** Human-quotable job number: S1-YYMM-0042, sequential within the month. */
+function nextProjectNumber() {
+  const now = new Date();
+  const stamp = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const used = Object.values(db.projects)
+    .map((p) => p.projectNumber)
+    .filter((n) => typeof n === 'string' && n.startsWith(`S1-${stamp}-`))
+    .map((n) => Number(n.split('-')[2]) || 0);
+  const next = (used.length ? Math.max(...used) : 0) + 1;
+  return `S1-${stamp}-${String(next).padStart(4, '0')}`;
+}
+
 export const id = (prefix = 'id') =>
   `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
@@ -44,6 +56,7 @@ export const store = {
     const now = new Date().toISOString();
     db.projects[projectId] = {
       projectId,
+      projectNumber: nextProjectNumber(),
       createdAt: now,
       updatedAt: now,
       status: 'draft',
@@ -58,6 +71,7 @@ export const store = {
       voiceCharacteristics: null,
       pronunciations: [],    // client-specific "say it like this" overrides
       musicBed: null,        // { publicId, url, name } or null for a dry read
+      bedPercent: 25,        // bed level as a share of the voice
       singleVoice: true,     // one voice across the campaign unless turned off
       playlist: [],
       cloudinaryFolder: null,
@@ -105,6 +119,8 @@ export const store = {
     project.playlist ||= [];
     project.commercials ||= [];
     if (project.singleVoice === undefined) project.singleVoice = true;
+    if (project.bedPercent === undefined) project.bedPercent = 25;
+    if (!project.projectNumber) { project.projectNumber = nextProjectNumber(); persist(); }
     if (!project.reviewToken) {
       project.reviewToken = reviewToken();
       persist();
@@ -144,6 +160,7 @@ export const store = {
       .filter((p) => {
         if (!q) return true;
         const hay = [
+          p.projectNumber,
           p.customer?.customerName,
           p.customer?.company,
           p.customer?.email,
