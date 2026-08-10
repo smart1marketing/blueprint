@@ -1287,3 +1287,71 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "10000")))
+    @app.route("/api/gtm/deploy-pixel", methods=["POST"])
+def gtm_deploy_pixel():
+    """Deploys a Custom HTML tracking pixel/script to a GTM workspace."""
+    data = request.json or {}
+    account_id = data.get("account_id", "").strip()
+    container_id = data.get("container_id", "").strip()
+    google_login = data.get("google_login", "").strip().lower()
+    tag_name = data.get("tag_name", "").strip()
+    pixel_code = data.get("pixel_code", "").strip()
+    trigger_type = data.get("trigger_type", "ALL_PAGES") # ALL_PAGES or custom
+
+    if not account_id or not container_id or not google_login or not tag_name or not pixel_code:
+        return jsonify({"error": "Account ID, Container ID, Login Email, Tag Name, and Pixel Code are required."}), 400
+
+    account = next((a for a in connected_accounts() if a["email"] == google_login), None)
+    if not account:
+        return jsonify({"error": f"Account {google_login} is not connected."}), 404
+
+    try:
+        access_token = refresh_access_token(google_login, account["refresh_token"])
+        ws_url = f"https://tagmanager.googleapis.com/tagmanager/v2/accounts/{account_id}/containers/{container_id}/workspaces"
+        workspaces = google_get(access_token, ws_url).get("workspace", [])
+        if not workspaces:
+            return jsonify({"error": "No active workspaces found in container."}), 404
+        ws_path = workspaces[0]["path"]
+
+        # 1. Fetch default All Pages trigger ID
+        triggers = google_get(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/triggers").get("trigger", [])
+        all_pages_trigger = next((tr for tr in triggers if tr.get("type") == "pageview"), None)
+        
+        trigger_id_list = [all_pages_trigger["triggerId"]] if all_pages_trigger else []
+
+        # 2. Build Custom HTML Tag Body (GTM Type: html)
+        tag_body = {
+            "name": tag_name,
+            "type": "html",
+            "firingTriggerId": trigger_id_list,
+            "parameter": [
+                {"type": "TEMPLATE", "key": "html", "value": pixel_code},
+                {"type": "BOOLEAN", "key": "supportDocumentWrite", "value": "false"}
+            ]
+        }
+        
+        created_tag = google_post(access_token, f"https://tagmanager.googleapis.com/tagmanager/v2/{ws_path}/tags", tag_body)
+
+        # 3. Log to Change Audit History
+        now = int(time.time())
+        conn = get_db()
+        conn.execute(
+            """
+            INSERT INTO gtm_change_logs (google_login, account_id, container_id, action_type, tag_name, details, created_at)
+            VALUES (?, ?, ?, 'PIXEL_DEPLOYED', ?, ?, ?)
+            """,
+            (
+                google_login,
+                account_id,
+                container_id,
+                tag_name,
+                json.dumps({"created_tag_id": created_tag.get("tagId"), "code_length": len(pixel_code)}),
+                now
+            )
+        )
+        conn.commit()
+
+        return jsonify({"ok": True, "created_tag_id": created_tag["tagId"], "message": f"Successfully deployed custom pixel '{tag_name}' to GTM container {container_id}."})
+    except Exception as exc:
+        logger.warning("Failed deploying custom pixel to GTM: %s", exc)
+        return jsonify({"error": f"Pixel deployment failed: {exc}"}), 500
