@@ -18,7 +18,6 @@
         </div>
         <div class="auth">
           <a class="btn" href="/login">+ Add Google Account</a>
-          {% if accounts %}<a href="/logout">Disconnect all</a>{% endif %}
         </div>
       </div>
 
@@ -81,7 +80,7 @@
           <div class="account-chip" data-email="{{ acc.email }}">
             <span class="check">{% if acc.status == 'ACTIVE' %}✓{% else %}⚠️{% endif %}</span>
             <span>{{ acc.email }}</span>
-            <button class="disconnect" data-email="{{ acc.email }}" title="Disconnect">×</button>
+            <button class="disconnect" data-email="{{ acc.email }}" title="Disconnect Account">×</button>
           </div>
           {% endfor %}
         {% else %}
