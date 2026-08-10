@@ -1,30 +1,44 @@
 # Client Lookup (Smart 1 Marketing)
 
-Prebuilt static app, six sections via the top buttons. One data file
-(build/data/products.json) powers them all.
+Prebuilt static app, seven sections via the top buttons, plus a global Refresh.
+Two data files power everything: build/data/products.json (object_135) and
+build/data/websites.json (object_153).
 
 ## Sections
-1. Client Lookup — creative IO folders (5-across), current year open, prior
-   years lazy accordions, PDF/Drive/Dropbox/file placeholders. Excludes SEM,
-   Website SEO/Listings, Email Blast.
-2. Salesperson Lookup — by field_2496/2655; grid/table toggle; churn section;
-   Overview + IO Detail CSV.
-3. Partner Lookup — same, by field_2307.
-4. Live Products — status = Live, grouped by IO, monthly + contract totals.
-5. Dashboards — one card per client with a dashboard URL (field_2978); click to
-   open; Dashboards CSV export.
-6. QA Report — active clients with NO dashboard (new); products that ran last
-   month but aren't live this month by salesperson and partner; lost/gained
-   totals; salesperson + partner scorecards; CSV exports.
+1. Client Lookup — creative IO folders by year (5-across), placeholders for
+   PDF/Drive/Dropbox/file. Excludes SEM, Website SEO/Listings, Email Blast.
+2. Salesperson Lookup — on-demand (pick a salesperson); year-grouped grid /
+   table toggle; churn CSV; Overview + IO Detail CSV.
+3. Partner Lookup — same, on-demand, by partner.
+4. Live Products — By-IO view (status = Live) with budget totals, plus a
+   "Search by product" mode listing every client running a chosen product.
+5. Dashboards — clients with a dashboard AND live products (dead ones hidden).
+6. Websites (object_153) — scorecards + reports + wildcard lookup (below).
+7. QA Report — run-on-demand: active clients w/ no dashboard (90d), no live
+   product in 90d, SEO clients; plus month-over-month lost/gained scorecards.
 
-## Current seed
-10,390 products · 495 clients · 74 salespeople · 48 partners · 395 live ·
-336 client dashboards · 56 active clients missing a dashboard ($157,728/mo).
+## Websites section
+Scorecards (active = client status Active):
+  Total active · Smart 1 Sites · WordPress · Other platform · Web billing (H&M/mo)
+Reports (buttons): Sites without platform · Active sites without H&M$ ·
+  Domains we purchased · Sites by partner · Cancelled sites.
+Wildcard search lists sites; click a row to see ONLY the filled-in fields.
+Field map: platform field_2927 · status field_3193 · site name field_3112 ·
+  partner field_3113 · H&M field_3050 (+freq field_3157, normalized to monthly) ·
+  domain field_2925 · domain-purchased field_2964.
+Current seed: 610 sites, 477 active, $24,113/mo H&M.
 
 ## Refresh (seed now, refresh later)
+The "↻ Refresh" button in the header re-loads the JSON files from the server
+(picks up whatever the latest committed data is). To pull NEW data from Knack:
+
   REACT_APP_KNACK_API_KEY=xxx REACT_APP_KNACK_APP_ID=yyy npm run refresh
-  git add build/data/products.json && git commit -m "refresh" && git push
-Server-side only (local or GitHub Action) — Knack blocks browser calls.
+  git add build/data/*.json && git commit -m "refresh" && git push
+
+This re-pulls object_135 AND object_153 and overwrites the JSON (full replace,
+so status flips / price edits / new records all reflect). Runs server-side only
+— Knack blocks browser calls and the API key must stay private. A nightly
+GitHub Action can automate it.
 
 ## Deploy
 Push to main; Render serves the prebuilt folder. No build step, no OOM.
