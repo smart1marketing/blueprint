@@ -39,11 +39,8 @@ from db import (
     query_projects,
     save_meta,
     set_lifecycle,
-    set_plan_cost,
-    set_platform_cost,
     upsert_project,
 )
-from costs import parse_charges
 from simvoly_client import SimvolyClient, SimvolyError, unwrap_data
 from sync_service import (
     discover_customer,
@@ -63,12 +60,6 @@ app.config.update(
 )
 
 init_db()
-
-# Auto-populate an empty database from a committed seed file (seed/portfolio.json).
-# No-op once projects exist; never blocks startup on a bad/missing seed.
-from seed_boot import seed_if_empty
-seed_if_empty()
-
 client = SimvolyClient()
 
 
@@ -105,24 +96,11 @@ def status_class(status):
     }.get((status or "").upper(), "muted")
 
 
-def login_url(host):
-    """Public login page for a customer's site: https://<host>/login.
-    A bare subdomain label (no dot) is expanded to <label>.smart1sites.com."""
-    h = (host or "").strip().rstrip("/")
-    if not h:
-        return ""
-    h = h.split("://")[-1]  # drop any scheme
-    if "." not in h:
-        h = f"{h}.smart1sites.com"
-    return f"https://{h}/login"
-
-
 @app.context_processor
 def inject_context():
     return {
         "money": money,
         "status_class": status_class,
-        "login_url": login_url,
         "settings": SETTINGS,
     }
 
@@ -282,7 +260,16 @@ def dashboard():
     except ValueError:
         page = 1
 
-    rows, count = query_projects(q, status, plan, partner, page, 50)
+    # By default (no search/filter) show only the 10 most recent active sites
+    # instead of pre-loading the whole portfolio.
+    preview = not (q or status or plan or partner)
+    if preview:
+        rows, count = query_projects("", "ACTIVE", "", "", 1, 10)
+        pages = 1
+    else:
+        rows, count = query_projects(q, status, plan, partner, page, 50)
+        pages = max(1, math.ceil(count / 50))
+
     total, statuses, plans, allmeta, last, template_count = metrics()
 
     revenue = 0.0
@@ -301,28 +288,36 @@ def dashboard():
             if row["platform_cost"] is not None
             else (row["bg_monthly_price"] or 0)
         )
-        status_up = (row["status"] or "").upper()
-        if status_up == "ACTIVE":
+        if row["status"] == "ACTIVE":
             revenue += client_price or 0
             cost += platform_cost or 0
-        pname = row["partner"] or infer_partner(row["name"])
-        stat = partner_stats.setdefault(
-            pname, {"active": 0, "trial": 0, "expired": 0, "total": 0}
-        )
-        if status_up == "ACTIVE":
-            stat["active"] += 1
-        elif status_up == "TRIAL":
-            stat["trial"] += 1
-        elif status_up == "EXPIRED":
-            stat["expired"] += 1
-        stat["total"] += 1
+        p = row["partner"] or infer_partner(row["name"])
+        st = partner_stats.setdefault(p, {"active": 0, "total": 0})
+        st["total"] += 1
+        if row["status"] == "ACTIVE":
+            st["active"] += 1
+
+    # Partners with at least one active client, sorted by active count (desc).
+    active_partners = sorted(
+        (
+            {"name": k, "active": v["active"], "total": v["total"]}
+            for k, v in partner_stats.items()
+            if v["active"] > 0
+        ),
+        key=lambda x: (-x["active"], -x["total"], x["name"].lower()),
+    )
+    partners_main = [p for p in active_partners if p["total"] >= 2]
+    partners_more = [p for p in active_partners if p["total"] < 2]
+    # Everything with zero active clients rolls up into one "Non-Active" group.
+    non_active_total = sum(v["total"] for v in partner_stats.values() if v["active"] == 0)
 
     return render_template(
         "dashboard.html",
         rows=rows,
         count=count,
         page=page,
-        pages=max(1, math.ceil(count / 50)),
+        pages=pages,
+        preview=preview,
         q=q,
         status=status,
         plan=plan,
@@ -336,7 +331,9 @@ def dashboard():
         cost=cost,
         margin=revenue - cost,
         alerts=alert_rows(8),
-        partners=sorted(partner_stats.items(), key=lambda x: -x[1]["total"]),
+        partners_main=partners_main,
+        partners_more=partners_more,
+        non_active_total=non_active_total,
     )
 
 
@@ -503,110 +500,18 @@ def inventory_refresh_known():
     return redirect(url_for("dashboard"))
 
 
-@app.route("/packages", methods=["GET", "POST"])
-@login_required
-def packages():
-    plans = list_plans_for_ui()
-    if request.method == "POST":
-        require_csrf()
-        updated = 0
-        for pl in plans:
-            val = request.form.get(f"cost_{pl['plan_id']}", "").strip()
-            if val == "":
-                continue
-            try:
-                set_plan_cost(pl["plan_id"], float(Decimal(val)))
-                updated += 1
-            except (InvalidOperation, ValueError):
-                pass
-        flash(f"Saved package platform costs for {updated} plan(s).", "success")
-        return redirect(url_for("packages"))
-    return render_template("packages.html", plans=list_plans_for_ui())
-
-
-@app.post("/costs/import")
-@login_required
-def costs_import():
-    require_csrf()
-    raw = request.form.get("payload", "").strip()
-    upload = request.files.get("file")
-    if upload and upload.filename:
-        raw = upload.read().decode("utf-8", errors="replace")
-    if not raw:
-        flash("Paste the invoice text (or a JSON map of project id → cost), or choose a file.", "danger")
-        return redirect(url_for("packages"))
-    try:
-        costs = None
-        # Accept a JSON map { "project_id": cost, ... } as well as raw invoice text.
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                costs = {str(k): float(v) for k, v in parsed.items()}
-        except (ValueError, TypeError):
-            costs = None
-        if costs is None:
-            costs, _ = parse_charges(raw)
-        applied = 0
-        for pid, cost in costs.items():
-            set_platform_cost(pid, cost)
-            applied += 1
-        flash(f"Applied actual platform cost to {applied} site(s) as per-site overrides.", "success")
-    except Exception as exc:
-        flash(f"Cost import failed: {exc}", "danger")
-    return redirect(url_for("packages"))
-
-
 @app.get("/projects/<pid>")
 @login_required
 def project_detail(pid):
     p = get_project(pid)
     if not p:
         abort(404)
-    websites = get_websites(pid)
-    # Auto-populate websites/domain from Simvoly on first view (read-only GET),
-    # so the domain and Login link appear without clicking "Refresh from Simvoly".
-    if not websites and not SETTINGS.mock_mode:
-        try:
-            sync_project(pid)
-            websites = get_websites(pid)
-            p = get_project(pid) or p
-        except Exception:
-            pass
-    # Show the auto-inferred partner (from the name prefix) when no manual
-    # partner override has been saved, matching the Accounts list.
-    p["partner_display"] = p.get("partner") or infer_partner(p.get("name"))
     return render_template(
         "project_detail.html",
         p=p,
-        websites=websites,
+        websites=get_websites(pid),
         plans=list_plans_for_ui(),
     )
-
-
-@app.post("/websites/<website_id>/check-limits")
-@login_required
-def website_check_limits(website_id):
-    # Read-only right-sizing check: asks the Platform API whether this site fits
-    # within the limits of the selected plan. Uses GET, so it works even when
-    # write actions are disabled.
-    require_csrf()
-    w = get_website(website_id)
-    if not w:
-        abort(404)
-    plan_id = request.form.get("plan_id", "").strip()
-    if not plan_id:
-        flash("Choose a plan to check limits against.", "danger")
-        return redirect(url_for("project_detail", pid=w["project_id"]))
-    try:
-        result = client.check_limits(website_id, plan_id)
-        if isinstance(result, dict):
-            msg = result.get("message") or json.dumps(result)
-        else:
-            msg = str(result)
-        flash(f"Plan limit check ({plan_id}): {msg}", "success")
-    except Exception as exc:
-        flash(f"Limit check failed: {exc}", "danger")
-    return redirect(url_for("project_detail", pid=w["project_id"]))
 
 
 @app.post("/projects/<pid>/refresh")
