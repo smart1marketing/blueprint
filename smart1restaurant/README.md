@@ -53,10 +53,17 @@ files to keep in sync. This keeps the form reliable when embedded in the Smart 1
 
 ### New in this release (product/process hardening)
 
-- **Two-POST lead capture.** A partial-lead webhook (`report_status: "new"`) fires the
-  moment a valid email is entered or the form is submitted (`/api/lead`), so the lead is
-  saved even if OpenAI fails or the visitor leaves. The `completed` webhook follows with
-  the report + PDF. Both carry the same `lead_id` so GHL can correlate/update one opportunity.
+- **True partial lead capture.** `/api/lead` fires as soon as the visitor advances past
+  step 1 (restaurant name / website / ZIP) and again on `pagehide` / tab-hidden — no email
+  required. Contact-less payloads are forwarded with `report_status: "partial"`; once a
+  valid email is entered (or the form is submitted) the same endpoint fires again with
+  `report_status: "new"` (at most one send per stage). UTM/click attribution
+  (`utm_*`, `gclid`, `fbclid`, `referrer_url`, `landing_page_url`) is merged into every
+  payload. The `completed` webhook follows with the report + PDF. All carry the same
+  `lead_id` so GHL can correlate/update one opportunity.
+- **Download PDF button.** The browser polls `GET /api/report/<id>` after the on-screen
+  report renders and swaps in a "Download PDF" button as soon as the background thread
+  has uploaded the PDF (the stored report JSON carries `report_pdf_url`).
 - **Faster on-screen report.** `/api/analyze` returns the interactive report as soon as the
   model responds; PDF render, Cloudinary upload, JSON persistence, and the completed webhook
   run in a background thread.
@@ -80,7 +87,7 @@ files to keep in sync. This keeps the form reliable when embedded in the Smart 1
 | Route | Purpose |
 |---|---|
 | `GET /` | The multi-step form |
-| `POST /api/lead` | Partial-lead capture (fires `new` webhook) |
+| `POST /api/lead` | Partial-lead capture (`partial` webhook without contact, `new` with a valid email) |
 | `POST /api/analyze` | Generate report; returns immediately, finalizes in background |
 | `GET /r/<id>` | Read-only shared report view |
 | `GET /api/report/<id>` | JSON for a stored report (used by `/r/<id>`) |
@@ -93,9 +100,9 @@ files to keep in sync. This keeps the form reliable when embedded in the Smart 1
 
 The AI picks one of four fixed price tiers for each report based on market size, competitive
 density, and the number of daypart/occasion opportunities in the restaurant's trade area
-(lunch, happy hour, dinner, delivery, events, catering). These live in the `SMART 1 PACKAGE MENU`
-inside `app.py` — edit the prices/names there, then update the matching `PACKAGES` array in
-`templates/index.html` so the package grid stays in sync:
+(lunch, happy hour, dinner, delivery, events, catering). Prices/names live ONLY in the
+`PACKAGES` list in `app.py`; the template's package grid is injected from it at render time
+(`window.__PACKAGES__`), so edit `app.py` and the front end stays in sync automatically:
 
 | Package | Monthly Investment | Best fit |
 |---|---|---|
@@ -141,11 +148,13 @@ inside `app.py` — edit the prices/names there, then update the matching `PACKA
 ## PDF report (Cloudinary)
 
 Every completed report is rendered to a branded PDF (via `reportlab`, pure Python — no
-system libraries) and uploaded to Cloudinary as a `raw` asset under
-`REPORT_NAME/<restaurant-slug>-<timestamp>.pdf`. The Cloudinary `secure_url` is sent to GHL
-in the webhook as `report_pdf_url`, so your team can link or attach it with
-`{{contact.report_pdf_url}}`. Set `ENABLE_PDF=0` to turn this off. If `CLOUDINARY_URL` is
-absent, the app falls back to `static/reports/` on Render's ephemeral disk (dev/testing only).
+system libraries) and uploaded to Cloudinary as an `image` asset with `format: pdf` by
+default (inline browser preview; set `PDF_RESOURCE_TYPE=raw` for a raw asset) under
+`REPORT_NAME/<restaurant-slug>-<timestamp>`. The Cloudinary `secure_url` is sent to GHL
+in the webhook as `report_pdf_url` and served to the browser as a "Download PDF" button,
+so your team can link or attach it with `{{contact.report_pdf_url}}`. Set `ENABLE_PDF=0`
+to turn this off. If `CLOUDINARY_URL` is absent, the app falls back to `static/reports/`
+on Render's ephemeral disk (dev/testing only).
 
 ## GoHighLevel fields
 
@@ -158,8 +167,6 @@ Recommended custom fields:
 - Cuisine Types
 - Service Style
 - Campaign Objective
-- Monthly Budget
-- Known Competitors
 - Notes
 - Estimated Frequent-Diner Households
 - Restaurant Market Summary

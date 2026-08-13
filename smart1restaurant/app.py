@@ -67,7 +67,10 @@ HONEYPOT_FIELD = "company_website"          # hidden in the form; humans leave i
 MIN_FILL_SECONDS = int(os.getenv("MIN_FILL_SECONDS", "3"))
 RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "12"))
 RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
-_rate_hits: dict = defaultdict(deque)
+# Separate buckets so partial-lead capture can never exhaust the budget that
+# protects the expensive AI endpoint (and vice versa).
+_rate_buckets: dict = {"ai": defaultdict(deque), "lead": defaultdict(deque)}
+_rate_last_prune: dict = {"ai": 0.0, "lead": 0.0}
 _rate_lock = threading.Lock()
 
 # Single source of truth for the package menu. The AI prompt and the front-end grid
@@ -275,10 +278,22 @@ def _client_ip() -> str:
     return request.remote_addr or "unknown"
 
 
-def rate_ok(ip: str) -> bool:
+def _prune_rate_hits(now: float, bucket: str) -> None:
+    """Drop IP keys whose hits have all aged out so the registry can't grow forever."""
+    if now - _rate_last_prune[bucket] < RATE_LIMIT_WINDOW * 5:
+        return
+    _rate_last_prune[bucket] = now
+    hits = _rate_buckets[bucket]
+    stale = [ip for ip, dq in hits.items() if not dq or now - dq[-1] > RATE_LIMIT_WINDOW]
+    for ip in stale:
+        del hits[ip]
+
+
+def rate_ok(ip: str, bucket: str = "ai") -> bool:
     now = time.time()
     with _rate_lock:
-        dq = _rate_hits[ip]
+        _prune_rate_hits(now, bucket)
+        dq = _rate_buckets[bucket][ip]
         while dq and now - dq[0] > RATE_LIMIT_WINDOW:
             dq.popleft()
         if len(dq) >= RATE_LIMIT_MAX:
@@ -332,6 +347,21 @@ def clean_payload(data: dict) -> dict:
     # lead_id lets GHL correlate the partial lead POST with the completed report POST.
     cleaned["lead_id"] = str(data.get("lead_id", "")).strip()[:64] or uuid.uuid4().hex[:16]
     return cleaned
+
+
+ATTRIBUTION_KEYS = (
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "gclid", "fbclid", "referrer_url", "landing_page_url",
+)
+
+
+def merge_attribution(payload: dict, data: dict) -> dict:
+    """Copy click/attribution fields from the raw request into the webhook payload."""
+    for key in ATTRIBUTION_KEYS:
+        value = str(data.get(key, "")).strip()[:300]
+        if value:
+            payload[key] = value
+    return payload
 
 
 def _valid_contact(payload: dict) -> bool:
@@ -506,9 +536,18 @@ def _cloudinary_upload(data: bytes, public_id: str, resource_type: str, fmt: str
 
 
 def _store_report_json(report: dict, report_id: str) -> bool:
-    """Persist the report JSON in Cloudinary so /r/<id> can serve it later."""
+    """Persist the report JSON in Cloudinary so /r/<id> can serve it later.
+    Without Cloudinary, fall back to local (ephemeral) storage so /api/report/<id>
+    still works for the PDF-download polling on the same instance."""
     if not CLOUDINARY_URL:
-        return False
+        try:
+            os.makedirs(REPORT_DIR, exist_ok=True)
+            with open(os.path.join(REPORT_DIR, f"{report_id}.json"), "w", encoding="utf-8") as fh:
+                json.dump(report, fh)
+            return True
+        except Exception:
+            app.logger.exception("Local report JSON store failed")
+            return False
     try:
         _cloudinary_upload(
             json.dumps(report).encode("utf-8"),
@@ -524,6 +563,13 @@ def _store_report_json(report: dict, report_id: str) -> bool:
 
 def _fetch_report_json(report_id: str):
     if not CLOUDINARY_URL:
+        path = os.path.join(REPORT_DIR, f"{report_id}.json")
+        try:
+            if os.path.isfile(path):
+                with open(path, "r", encoding="utf-8") as fh:
+                    return json.load(fh)
+        except Exception:
+            app.logger.exception("Local report JSON read failed")
         return None
     cloud = _cloud_name()
     if not cloud:
@@ -545,9 +591,21 @@ def _fetch_report_json(report_id: str):
 NAVY = colors.HexColor("#0a2240")
 BLUE = colors.HexColor("#009ed2")
 GREEN = colors.HexColor("#2dbb72")
+GOLD = colors.HexColor("#f0b429")
 LINE = colors.HexColor("#dbe5ed")
 MUTED = colors.HexColor("#68798c")
 AQUA = colors.HexColor("#eff9fc")
+
+PDF_FOOTER_TEXT = "Smart 1 Marketing · (614) 536-0768 · smart1marketing.com"
+
+
+def _pdf_footer(canvas, doc):
+    """Draw the brand footer line at the bottom of every PDF page."""
+    canvas.saveState()
+    canvas.setFont("Helvetica", 7.5)
+    canvas.setFillColor(MUTED)
+    canvas.drawCentredString(letter[0] / 2.0, 0.35 * inch, PDF_FOOTER_TEXT)
+    canvas.restoreState()
 
 
 def _money_to_int(value: str):
@@ -574,6 +632,78 @@ def _pdf_styles():
     cell = ParagraphStyle("s1cell", parent=body, fontSize=8, leading=10.5)
     cellw = ParagraphStyle("s1cellw", parent=cell, textColor=colors.white)
     return dict(body=body, h2=h2, title=title, eyebrow=eyebrow, small=small, cell=cell, cellw=cellw)
+
+
+def _gbb_table(report: dict, st: dict) -> Table:
+    """Good/Better/Best 3-column pricing table; the recommended tier's column is
+    shaded brand-blue (mirrors the on-screen GBB cards)."""
+    rp = report.get("recommended_package", {}) or {}
+    rec_name = (rp.get("package_name") or "").strip().lower()
+    rec_price = (rp.get("monthly_investment") or "").strip()
+    idx = next((i for i, p in enumerate(PACKAGES)
+                if p["name"].lower() == rec_name or p["price"] == rec_price), 1)
+    start = max(0, min(idx - 1, len(PACKAGES) - 3))
+    trio = PACKAGES[start:start + 3]
+    rec_col = idx - start
+    labels = ["GOOD", "BETTER", "BEST"]
+    header_row, body_row = [], []
+    for i, p in enumerate(trio):
+        cs = st["cellw"] if i == rec_col else st["cell"]
+        header_row.append(Paragraph(f"<b>{labels[i]}</b>", cs))
+        monthly = _money_to_int(p["price"])
+        annual = f"${monthly * 12:,}/yr" if monthly else ""
+        rec_tag = "<br/><font size=6.5><b>RECOMMENDED FOR YOUR MARKET</b></font>" if i == rec_col else ""
+        body_row.append(Paragraph(
+            f"<font size=13><b>{str(p['price']).split('/')[0]}</b></font> /month<br/>"
+            f"<b>{p['name']}</b><br/><font size=7>{annual}</font><br/>"
+            f"<font size=7>{p.get('blurb', '')}</font>{rec_tag}", cs))
+    t = Table([header_row, body_row], colWidths=[2.4 * inch] * 3)
+    style = [
+        ("GRID", (0, 0), (-1, -1), 0.5, LINE),
+        ("BACKGROUND", (0, 0), (-1, 0), AQUA),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        # Shade the recommended column brand-blue (header + body).
+        ("BACKGROUND", (rec_col, 0), (rec_col, -1), BLUE),
+        ("BOX", (rec_col, 0), (rec_col, -1), 1, NAVY),
+    ]
+    t.setStyle(TableStyle(style))
+    return t
+
+
+def _pacing_bar_table(report: dict, st: dict) -> Table:
+    """Colored 3-bar budget-pacing visual (Peak / Shoulder / Slow) built from
+    tables with proportional colored cell widths."""
+    rp = report.get("recommended_package", {}) or {}
+    monthly = _money_to_int(rp.get("monthly_investment", "")) or 3000
+    tiers = [("Peak months", 1.00, GREEN), ("Shoulder months", 0.60, BLUE), ("Slow months", 0.35, GOLD)]
+    max_bar = 3.6 * inch
+    rows = []
+    for label, frac, col in tiers:
+        bar = Table([[""]], colWidths=[max(0.3 * inch, max_bar * frac)], rowHeights=[11])
+        bar.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), col),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        rows.append([
+            Paragraph(f"<b>{label}</b> — {int(frac * 100)}%", st["cell"]),
+            bar,
+            Paragraph(f"<b>${monthly * frac:,.0f}</b>/mo", st["cell"]),
+        ])
+    t = Table(rows, colWidths=[1.7 * inch, 3.8 * inch, 1.4 * inch])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (1, 0), (1, -1), "LEFT"),
+        ("LEFTPADDING", (1, 0), (1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    return t
 
 
 _LOGO_CACHE: dict = {}
@@ -654,6 +784,16 @@ def build_report_pdf(report: dict, restaurant: str, base_url: str) -> str:
         story.append(Paragraph(f"<b>{rp.get('monthly_investment','')} — {rp.get('package_name','')}</b>", st["body"]))
         story.append(Paragraph(rp.get("description", ""), st["small"]))
 
+        story.append(Paragraph("Suggested Investment — Good / Better / Best", st["h2"]))
+        story.append(_gbb_table(report, st))
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("Suggested budgets, not a quote — the highlighted tier is our recommendation for a market this size.", st["small"]))
+
+        story.append(Paragraph("Budget Pacing Across the Year", st["h2"]))
+        story.append(_pacing_bar_table(report, st))
+        story.append(Spacer(1, 2))
+        story.append(Paragraph("Spend the full tier in peak months, about 60% in shoulder months, and 35% in your slowest months (see the month-by-month plan).", st["small"]))
+
         chans = report.get("media_channels", []) or []
         if chans:
             story.append(Paragraph("Recommended Media Channels", st["h2"]))
@@ -717,7 +857,7 @@ def build_report_pdf(report: dict, restaurant: str, base_url: str) -> str:
         doc = SimpleDocTemplate(buffer, pagesize=letter, title=f"{restaurant} Market Report",
                                 leftMargin=0.6 * inch, rightMargin=0.6 * inch,
                                 topMargin=0.6 * inch, bottomMargin=0.6 * inch)
-        doc.build(story)
+        doc.build(story, onFirstPage=_pdf_footer, onLaterPages=_pdf_footer)
         pdf_bytes = buffer.getvalue()
 
         # Primary path: store in Cloudinary and return its hosted URL.
@@ -797,8 +937,10 @@ def _finalize_report(payload: dict, report: dict, base_url: str, report_id: str)
     build+store the PDF, persist the report JSON, and send the completed webhook."""
     try:
         pdf_url = build_report_pdf(report, payload.get("restaurant_name", "Market Report"), base_url)
-        # Persist the restaurant name inside the report so /r/<id> can title the shared view.
+        # Persist the restaurant name inside the report so /r/<id> can title the shared view,
+        # and the PDF URL so the browser can poll /api/report/<id> and offer a download button.
         report["_restaurant"] = payload.get("restaurant_name", "")
+        report["report_pdf_url"] = pdf_url
         stored = _store_report_json(report, report_id)
         base = (PUBLIC_BASE_URL or base_url or "").rstrip("/")
         report_view_url = f"{base}/r/{report_id}" if (stored and base) else ""
@@ -872,18 +1014,24 @@ def api_lead():
     data = request.get_json(silent=True) or {}
     if is_bot(data):
         return jsonify({"ok": True})  # silently accept, do nothing
-    if not rate_ok(_client_ip()):
+    if not rate_ok(_client_ip(), bucket="lead"):
         return jsonify({"ok": False, "error": "Too many requests."}), 429
     try:
         payload = clean_payload(data)
     except ValueError:
-        # Don't hard-fail lead capture on a bad ZIP; keep what we can.
+        # Don't hard-fail lead capture on a bad ZIP/website; salvage EVERY field we can.
         payload = {k: str(data.get(k, "")).strip()[:1500] for k in
-                   ("restaurant_name", "restaurant_zip", "contact_name", "contact_email", "contact_phone")}
+                   ("restaurant_name", "website", "restaurant_zip", "target_radius",
+                    "cuisine_types", "service_style", "campaign_objective", "notes",
+                    "contact_name", "contact_email", "contact_phone")}
         payload["lead_id"] = str(data.get("lead_id", "")).strip()[:64] or uuid.uuid4().hex[:16]
-    if not _valid_contact(payload):
+    merge_attribution(payload, data)
+    # Need at least something identifying before forwarding.
+    if not (payload.get("restaurant_name") or payload.get("website") or payload.get("restaurant_zip")):
         return jsonify({"ok": True, "lead_id": payload.get("lead_id", "")})
-    _send_webhook_async(payload, None, "new")
+    # No valid contact yet? Still forward — that's the point of partial capture.
+    status = "new" if _valid_contact(payload) else "partial"
+    _send_webhook_async(payload, None, status)
     return jsonify({"ok": True, "lead_id": payload.get("lead_id", "")})
 
 
@@ -899,13 +1047,17 @@ def analyze():
     try:
         payload = clean_payload(data)
         report = generate_report(payload)
+        merge_attribution(payload, data)  # after the AI call so attr never leaks into the prompt
         report_id = uuid.uuid4().hex[:16]
         base_url = PUBLIC_BASE_URL or request.url_root
+        # Serialize the response from a shallow copy BEFORE starting the background
+        # thread, so its mutations of `report` can never leak into this response.
+        response = jsonify({"ok": True, "report": dict(report), "report_id": report_id})
         # Return the interactive report to the browser immediately; do the heavy
         # PDF/Cloudinary/webhook work in the background.
         threading.Thread(target=_finalize_report,
                          args=(payload, report, base_url, report_id), daemon=True).start()
-        return jsonify({"ok": True, "report": report, "report_id": report_id})
+        return response
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception as exc:
