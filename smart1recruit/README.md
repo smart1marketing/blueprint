@@ -8,7 +8,9 @@ A multi-step Smart 1 Marketing lead tool for companies that are hiring. It creat
 - A recommended monthly media budget (tiered package)
 - A month-by-month activation and budget-pacing plan
 - Smart 1 Suite webhook payload
-- Print-to-PDF report
+- Server-side branded PDF report (reportlab) uploaded to Cloudinary, with a
+  "Download PDF Report" button in the on-screen report (window.print stays as a
+  secondary option)
 
 ## Important limitation
 
@@ -78,15 +80,17 @@ or Blueprint; the Root-Directory web service above ignores it.
 
 ## PDF report &amp; Cloudinary storage
 
-Every completed report is rendered to a branded PDF (via `reportlab`, pure
-Python — no system libraries needed) and named **`<Company>-Recruitment - report`**
-(e.g. `Example Manufacturing-Recruitment - report`).
+Every completed report is rendered server-side to a branded PDF (via
+`reportlab`, pure Python — no system libraries needed) and named
+**`<Company>-Recruitment - report`** (e.g. `Example Manufacturing-Recruitment - report`).
 
 If `CLOUDINARY_URL` is set, the PDF is uploaded to Cloudinary (into the
-`CLOUDINARY_FOLDER`, default `recruitment-reports`) and its permanent secure URL
-is what gets sent to the webhook as `report_pdf_url` — so your team can link or
-attach it with `{{contact.report_pdf_url}}`. The webhook also includes
-`report_name` (the display name above).
+`CLOUDINARY_FOLDER`, default `recruitment-reports`) with a timestamp-suffixed
+`public_id`, so repeat leads from the same company never overwrite each other's
+report. Its permanent secure URL is sent to the webhook as `report_pdf_url` — so
+your team can link or attach it with `{{contact.report_pdf_url}}` — and returned
+to the browser, where the on-screen report shows a "Download PDF Report" button.
+The webhook also includes `report_name` (the display name above).
 
 If Cloudinary is **not** configured, the app falls back to hosting the PDF
 locally under `static/reports/` and sends that URL instead (using
@@ -104,6 +108,16 @@ Cloudinary dashboard): `cloudinary://<api_key>:<api_secret>@<cloud_name>`.
   lands in GoHighLevel with `report_status = new_lead` even if generation is slow,
   fails, or the visitor closes the tab. `POST /api/analyze` later updates the same
   contact with `report_status = completed` (GHL upserts by email).
+- **Partial lead capture** — `POST /api/partial-lead` fires when the visitor
+  advances past step 1 (company name / ZIP / website known) and again on
+  `pagehide` / tab-hidden via `sendBeacon`, sending whatever fields are filled
+  with `report_status = partial`. It requires no email and no strict ZIP, is
+  honeypot-checked, and uses its own light per-IP rate bucket (separate from the
+  AI endpoint). Every payload (`partial`, `new_lead`, `completed`, `failed`)
+  carries the same client-generated `lead_id` so GHL can merge the events into
+  one contact record; a `consent: "yes"` flag is included on full submissions.
+- **Failed-report guard** — the `report_status = failed` webhook omits empty
+  report keys so a failure never blanks out report fields GHL already holds.
 - **Marketing attribution** — UTM params, `gclid`/`fbclid`, referrer, and the
   landing-page URL are captured on page load and passed through to the webhook on
   every lead, so each contact is tied to the campaign that produced it.
@@ -132,6 +146,7 @@ Recommended custom fields:
 - Recommended Package
 - Recommended Investment
 - Report Status
+- Lead ID (`lead_id` — shared across partial / new_lead / completed / failed events)
 - Report Name
 - Report PDF URL (Cloudinary link to the generated PDF)
 - Report JSON (large text field, optional)

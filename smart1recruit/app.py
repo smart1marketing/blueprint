@@ -48,6 +48,8 @@ ENABLE_PDF = os.getenv("ENABLE_PDF", "1").strip() not in ("0", "false", "False",
 REPORT_DIR = os.path.join(app.static_folder, "reports")
 # Booking / consultation link surfaced as the call-to-action in the report + PDF.
 BOOKING_URL = os.getenv("BOOKING_URL", "https://smart1marketing.com/free-consultation").strip()
+# Comma-separated list of origins allowed to call the API cross-origin ("*" = any).
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").strip()
 
 # Cloudinary storage. The library auto-reads the CLOUDINARY_URL env var; we just
 # confirm it is present so we know whether to upload or fall back to local files.
@@ -235,6 +237,44 @@ TRACKING_FIELDS = [
 # Hidden honeypot field name. Real users never see or fill it; bots do.
 HONEYPOT_FIELD = "website_hp"
 
+# Additive metadata fields passed straight through to the webhook when present.
+# lead_id lets GoHighLevel merge the partial, new_lead, and completed events for
+# the same visitor; consent records the report-estimates acknowledgement.
+META_FIELDS = ["lead_id", "consent"]
+
+LEAD_FIELDS = [
+    "company_name",
+    "website",
+    "company_zip",
+    "target_radius",
+    "role_types",
+    "hiring_volume",
+    "campaign_objective",
+    "contact_name",
+    "contact_email",
+    "contact_phone",
+    "notes",
+]
+
+
+@app.after_request
+def apply_cors(response):
+    """Simple CORS middleware driven by ALLOWED_ORIGINS (declared in render.yaml)."""
+    origin = request.headers.get("Origin")
+    if not origin:
+        return response
+    allowed = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+    if "*" in allowed:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    elif origin in allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    else:
+        return response
+    response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    response.headers.setdefault("Access-Control-Allow-Headers", "Content-Type")
+    return response
+
 
 def is_spam(data: dict) -> bool:
     """True when the hidden honeypot field was filled (bot submission)."""
@@ -242,28 +282,50 @@ def is_spam(data: dict) -> bool:
 
 
 def clean_payload(data: dict) -> dict:
-    fields = [
-        "company_name",
-        "website",
-        "company_zip",
-        "target_radius",
-        "role_types",
-        "hiring_volume",
-        "campaign_objective",
-        "contact_name",
-        "contact_email",
-        "contact_phone",
-        "notes",
-    ]
-    cleaned = {k: str(data.get(k, "")).strip()[:1500] for k in fields}
-    # Pass through marketing attribution fields (best-effort; never required).
-    for k in TRACKING_FIELDS:
+    cleaned = {k: str(data.get(k, "")).strip()[:1500] for k in LEAD_FIELDS}
+    # Pass through marketing attribution + additive metadata (best-effort; never required).
+    for k in TRACKING_FIELDS + META_FIELDS:
         val = str(data.get(k, "")).strip()[:600]
         if val:
             cleaned[k] = val
     if not re.fullmatch(r"\d{5}(-\d{4})?", cleaned["company_zip"]):
         raise ValueError("A valid U.S. ZIP code is required.")
     return cleaned
+
+
+def salvage_partial(data: dict) -> dict:
+    """Lenient cleaner for partial leads: no email requirement, no strict ZIP
+    validation. Keeps every known field that has a value — never drops website."""
+    cleaned = {}
+    for k in LEAD_FIELDS:
+        val = str(data.get(k, "")).strip()[:1500]
+        if val:
+            cleaned[k] = val
+    for k in TRACKING_FIELDS + META_FIELDS:
+        val = str(data.get(k, "")).strip()[:600]
+        if val:
+            cleaned[k] = val
+    return cleaned
+
+
+# Light in-memory rate bucket for /api/partial-lead ONLY. It deliberately does
+# NOT share a budget with the expensive AI endpoint.
+_PARTIAL_HITS: dict = {}
+_PARTIAL_WINDOW_SECONDS = 60
+_PARTIAL_MAX_PER_WINDOW = 10
+
+
+def partial_rate_ok(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _PARTIAL_HITS.get(ip, []) if now - t < _PARTIAL_WINDOW_SECONDS]
+    if len(hits) >= _PARTIAL_MAX_PER_WINDOW:
+        _PARTIAL_HITS[ip] = hits
+        return False
+    hits.append(now)
+    _PARTIAL_HITS[ip] = hits
+    if len(_PARTIAL_HITS) > 5000:  # bound memory
+        _PARTIAL_HITS.clear()
+    return True
 
 
 def generate_report(payload: dict) -> Any:
@@ -437,6 +499,44 @@ def build_report_pdf(report: dict, company: str) -> str:
         story.append(Spacer(1, 8))
         story.append(stat)
 
+        # Talent pool funnel — simple horizontal bars built from base estimates
+        # (brand-colored table cells; mirrors the on-screen funnel).
+        funnel_items = [
+            ("Local workforce", m.get("estimated_workforce_base"), NAVY),
+            ("Qualified candidates", m.get("estimated_qualified_candidates_base"), BLUE),
+            ("Active job seekers", m.get("estimated_active_jobseekers_base"), GREEN),
+        ]
+        max_val = max([v for _, v, _ in funnel_items if v] or [0])
+        if max_val:
+            story.append(Paragraph("Talent Pool Funnel", st["h2"]))
+            bar_area = 4.0 * inch
+            rows = []
+            for label, val, bar_color in funnel_items:
+                frac = max(0.04, min(0.985, (val or 0) / max_val))
+                bar = Table([["", ""]],
+                            colWidths=[bar_area * frac, bar_area * (1 - frac)],
+                            rowHeights=[0.18 * inch])
+                bar.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (0, 0), bar_color),
+                    ("BACKGROUND", (1, 0), (1, 0), AQUA),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]))
+                rows.append([Paragraph(label, st["cell"]), bar,
+                             Paragraph(f"<b>{fmt(val)}</b>", st["cell"])])
+            ft = Table(rows, colWidths=[1.6 * inch, bar_area + 0.1 * inch, 1.2 * inch])
+            ft.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            story.append(Spacer(1, 2))
+            story.append(ft)
+            story.append(Paragraph("Base-case AI planning estimates within the target radius.", st["small"]))
+
         story.append(Paragraph("Your Hiring Opportunity", st["h2"]))
         story.append(Paragraph(report.get("market_opportunity", ""), st["body"]))
 
@@ -518,6 +618,8 @@ def build_report_pdf(report: dict, company: str) -> str:
 
         story.append(Spacer(1, 12))
         story.append(Paragraph(report.get("disclaimer", ""), st["small"]))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("Smart 1 Marketing · (614) 536-0768 · smart1marketing.com", st["small"]))
 
         doc = SimpleDocTemplate(path, pagesize=letter, title=report_display_name(company),
                                 leftMargin=0.6 * inch, rightMargin=0.6 * inch,
@@ -536,11 +638,13 @@ def upload_pdf_to_cloudinary(path: str, company: str) -> str:
     if not (path and _CLOUDINARY_AVAILABLE and CLOUDINARY_URL):
         return ""
     try:
+        # Timestamp suffix keeps the public_id unique so two leads from the same
+        # company never overwrite each other's report.
         result = cloudinary.uploader.upload(
             path,
             resource_type="raw",             # keep the .pdf intact and directly linkable
             folder=CLOUDINARY_FOLDER,
-            public_id=report_display_name(company),
+            public_id=f"{report_display_name(company)}-{int(time.time())}",
             use_filename=False,
             unique_filename=False,
             overwrite=True,
@@ -592,6 +696,13 @@ def send_webhook(payload: dict, report: Any, status: str, pdf_url: str = "") -> 
         "report_pdf_url": pdf_url,
         "report_json": json.dumps(report, separators=(",", ":"))[:60000],
     }
+    if status == "failed":
+        # No report exists on failure — omit empty report keys entirely so the
+        # webhook doesn't blank out fields GHL already holds for this contact.
+        # Sends only meta + non-empty lead fields + report_status.
+        body.pop("report_json", None)
+        body = {k: v for k, v in body.items() if v not in ("", None)}
+        body["report_status"] = "failed"
     try:
         requests.post(WEBHOOK_URL, json=body, timeout=12)
     except requests.RequestException:
@@ -600,7 +711,7 @@ def send_webhook(payload: dict, report: Any, status: str, pdf_url: str = "") -> 
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", booking_url=BOOKING_URL)
 
 
 @app.get("/health")
@@ -623,6 +734,37 @@ def lead():
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     send_webhook(payload, None, "new_lead")
+    return jsonify({"ok": True})
+
+
+@app.post("/api/partial-lead")
+def partial_lead():
+    """Partial lead capture (SPEC §3). Fired by the page when the visitor
+    advances past step 1 or abandons the tab. No email requirement, no strict
+    ZIP validation — salvage whatever came in (never drop website). Uses its own
+    light rate bucket, never the AI endpoint's budget. Always responds ok:true."""
+    data = request.get_json(silent=True, force=True) or {}
+    if is_spam(data):
+        return jsonify({"ok": True})
+    ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+          or request.remote_addr or "?")
+    if not partial_rate_ok(ip):
+        return jsonify({"ok": True})
+    cleaned = salvage_partial(data)
+    # Need at least something identifying before bothering the CRM.
+    if not (cleaned.get("website") or cleaned.get("company_name")):
+        return jsonify({"ok": True})
+    if WEBHOOK_URL:
+        body = {
+            "source": "Smart 1 Precision Recruitment Intelligence",
+            "report_status": "partial",
+            "lead_id": cleaned.get("lead_id", ""),
+            **cleaned,
+        }
+        try:
+            requests.post(WEBHOOK_URL, json=body, timeout=8)
+        except requests.RequestException:
+            app.logger.exception("Partial-lead webhook delivery failed")
     return jsonify({"ok": True})
 
 
