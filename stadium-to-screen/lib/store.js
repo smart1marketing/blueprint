@@ -3,7 +3,9 @@
    If CLOUDINARY_URL isn't set, it falls back to in-memory only (ephemeral). */
 
 const READY = (process.env.CLOUDINARY_URL || "").startsWith("cloudinary://");
-const PUBLIC_ID = "stadium-leads/leads-store.json";
+/* SECURITY: the raw JSON store is publicly readable at a predictable Cloudinary
+   URL. Set STORE_PUBLIC_ID to a long random value in production. */
+const PUBLIC_ID = process.env.STORE_PUBLIC_ID || "stadium-leads/leads-store.json";
 
 let _cloudinary = null;
 function cl() { if (!_cloudinary) _cloudinary = require("cloudinary").v2; return _cloudinary; }

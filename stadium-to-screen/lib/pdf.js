@@ -6,8 +6,9 @@
 const PDFDocument = require("pdfkit");
 
 /* palette */
-const NAVY="#17284d", NAVY_BOX="#22345c", INK="#2b3547", GRAY="#8a94a3", GRAYL="#a9b2c0",
-      RULE="#dfe4ec", CARDBRD="#e6eaf1", TEAL="#2fd0c0", CYAN="#29b6e8",
+/* canonical Smart 1 brand tokens (see SPEC §1): navy #0A2240, blue #009ED2 */
+const NAVY="#0A2240", NAVY_BOX="#16325C", INK="#2b3547", GRAY="#8a94a3", GRAYL="#a9b2c0",
+      RULE="#dfe4ec", CARDBRD="#e6eaf1", TEAL="#2fd0c0", CYAN="#009ED2",
       YELLOW="#f5b400", GREEN="#15a88a", WHITE="#ffffff";
 
 const PAGE_W=612, ML=54, MR=558, CW=MR-ML, TOP=90, BOTTOM=722;
@@ -278,7 +279,7 @@ function generateProposalPdf(d={}, rep={}){
       doc.switchToPage(i);
       doc.lineWidth(1).strokeColor(RULE).moveTo(ML,752).lineTo(MR,752).stroke();
       doc.fillColor(GRAYL).font("Helvetica").fontSize(7.5).text(
-        "Smart 1 Marketing  ·  Directional media plan based on information supplied. Figures are estimates; budgets are tailored on consult.",
+        "Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan",
         ML,760,{width:CW-46});
       doc.fillColor(GRAY).font("Helvetica-Bold").fontSize(8).text((i+1)+" / "+range.count,MR-46,760,{width:46,align:"right"});
     }

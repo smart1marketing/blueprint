@@ -363,6 +363,13 @@
   .device{background:rgba(6,15,29,.5);border:1px solid var(--line);border-radius:10px;padding:11px 8px;text-align:center}
   .device .n{font-family:'Archivo';font-weight:800;font-size:1.02rem;color:var(--electric-soft)}
   .device .l{font-size:.64rem;color:var(--steel);margin-top:3px}
+  /* horizontal device-mix bars (SPEC §8 — mirrors the PDF deviceMini chart) */
+  .dev-bars{display:grid;gap:7px;margin-top:12px}
+  .dev-bar-row{display:grid;grid-template-columns:96px 1fr 64px;gap:10px;align-items:center}
+  .dev-bar-row .lab{font-family:'JetBrains Mono';font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;color:var(--steel)}
+  .dev-bar-track{background:rgba(6,15,29,.6);border:1px solid var(--line);border-radius:6px;height:12px;overflow:hidden}
+  .dev-bar-track i{display:block;height:100%;border-radius:6px}
+  .dev-bar-row .val{font-family:'JetBrains Mono';font-size:.72rem;color:var(--electric-soft);text-align:right}
   .rec-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
   @media(max-width:560px){.rec-cols{grid-template-columns:1fr}}
   .rec-list{list-style:none;display:grid;gap:7px;padding:0}
@@ -374,7 +381,18 @@
   .badge.static{background:rgba(139,160,184,.14);color:var(--steel)}
   .prop-note{font-size:.88rem;color:var(--steel);margin-bottom:16px}
   .spinner{display:grid;place-items:center;min-height:340px;text-align:center;color:var(--steel)}
-  .spinner .ball{width:40px;height:40px;border-radius:50%;border:3px solid var(--line-strong);border-top-color:var(--turf);animation:spin .8s linear infinite;margin:0 auto 16px}
+  /* football-themed AI-analysis loader (SPEC §7b) — CSS keyframes so the global
+     prefers-reduced-motion rule below (animation:none) freezes it gracefully */
+  .fb-loader{width:120px;height:84px;margin:0 auto 14px}
+  .fb-loader .fb-ball{transform-origin:60px 38px;animation:fbSpinBob 1.6s ease-in-out infinite}
+  .fb-loader .fb-line{stroke-dasharray:26 40;animation:fbDash 1.1s linear infinite}
+  .fb-loader .fb-line.l2{animation-delay:.25s}
+  .fb-loader .fb-line.l3{animation-delay:.5s}
+  .fb-loader .fb-shadow{transform-origin:60px 74px;animation:fbShadow 1.6s ease-in-out infinite}
+  @keyframes fbSpinBob{0%,100%{transform:translateY(0) rotate(-14deg)}50%{transform:translateY(-9px) rotate(14deg)}}
+  @keyframes fbDash{to{stroke-dashoffset:-66}}
+  @keyframes fbShadow{0%,100%{transform:scaleX(1);opacity:.35}50%{transform:scaleX(.6);opacity:.15}}
+  .spin-cap{min-height:1.4em}
   @keyframes spin{to{transform:rotate(360deg)}}
 
   /* lead-capture form */
@@ -744,11 +762,15 @@
       <p>We track every yard — total transparency from impression to conversion.</p>
     </div>
     <div class="board">
+      <!-- SUBSTANTIATION NEEDED: the 96% / 2.5% / $18.50 / 10–18:1 figures below are
+           hard-coded illustrative marketing claims, not measured campaign results.
+           Back them with real campaign data (or keep the "typical/illustrative"
+           qualifiers) before using them as performance claims. -->
       <div class="gauges">
-        <div class="gauge"><div class="val g">96%</div><div class="lab">Audio Completion</div><div class="sub">Fans who heard the full message</div></div>
-        <div class="gauge"><div class="val b">2.5%</div><div class="lab">Banner CTR</div><div class="sub">Direct traffic to your site</div></div>
-        <div class="gauge"><div class="val g">$18.50</div><div class="lab">Cost Per Acquisition</div><div class="sub">Exact cost of a new lead</div></div>
-        <div class="gauge"><div class="val b">10–18:1</div><div class="lab">Return on Ad Spend</div><div class="sub">On multi-screen 1-2 punch</div></div>
+        <div class="gauge"><div class="val g">96%</div><div class="lab">Audio Completion</div><div class="sub">Typical — fans who heard the full message</div></div>
+        <div class="gauge"><div class="val b">2.5%</div><div class="lab">Banner CTR</div><div class="sub">Typical — direct traffic to your site</div></div>
+        <div class="gauge"><div class="val g">$18.50</div><div class="lab">Cost Per Acquisition</div><div class="sub">Illustrative cost of a new lead</div></div>
+        <div class="gauge"><div class="val b">10–18:1</div><div class="lab">Return on Ad Spend</div><div class="sub">Illustrative, on multi-screen 1-2 punch</div></div>
       </div>
       <div class="board-note">
         Because we target <b>high-intent, premium audiences</b> instead of broadcasting into the void, converting just a handful of these passionate fans can cover your entire monthly investment.
@@ -905,7 +927,7 @@
 </section>
 
 <footer>
-  <div class="wrap">Smart 1 Marketing · Stadium to Screen — College &amp; Pro Football Audio + CTV Packages · [Contact information / representative details]</div>
+  <div class="wrap">Stadium to Screen — College &amp; Pro Football Audio + CTV Packages<br>Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan</div>
 </footer>
 
 <script>
@@ -919,6 +941,11 @@
    const BACKEND_URL = "https://stadium-to-screen.onrender.com";
    (cross-origin also requires CORS enabled on the server — ask for the update)
    >>> Verify DMA_HOUSEHOLDS / STATES against current Nielsen & Census data.
+   ---------------------------------------------------------------------------
+   !!! DUPLICATION WARNING: the market data + computeMetrics below are an
+   INLINE COPY of public/data.js (which the server also require()s). Any change
+   to DMA_HOUSEHOLDS / STATES / multipliers / computeMetrics must be made in
+   BOTH places or the widget and the server/PDF will disagree.
 ============================================================================ */
 const BACKEND_URL = ""; // empty = curated lists only
 // Leads POST to BACKEND_URL + "/api/lead" (server builds the PDF, stores it in Cloudinary, forwards to GHL_WEBHOOK_URL).
@@ -1113,6 +1140,38 @@ function fallbackRecommendations(focus){
 /* ---------- state + helpers ---------- */
 let state = { league:"college", scope:"local", focus:"audio" };
 let lastRec=null;
+
+/* ---------- partial lead capture (SPEC §3) ---------- */
+const LEAD_ID = (crypto.randomUUID ? crypto.randomUUID() : Date.now()+'-'+Math.random().toString(16).slice(2));
+const ATTR = (() => { const q = new URLSearchParams(location.search); const keys=['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','fbclid']; const o={}; keys.forEach(k=>{const v=q.get(k); if(v) o[k]=v.slice(0,200);}); o.referrer_url=(document.referrer||'').slice(0,300); o.landing_page_url=(q.get('s1_ref')||location.href).slice(0,300); return o; })();
+let partialSent = false;
+let partialCtx = null;   // set once the report step is reached (team/league/scope known)
+function partialPayload(){
+  if(!partialCtx) return null;
+  const p={team:partialCtx.team,league:partialCtx.league,scope:partialCtx.scope,scopeLabel:partialCtx.scopeLabel,
+    focus:partialCtx.focus,dma:partialCtx.dma,city:partialCtx.city,
+    page:partialCtx.page,source:partialCtx.source};
+  const lf=document.getElementById("leadForm");
+  if(lf){ ["company_website","name","email","company","phone"].forEach(k=>{
+    const el=lf.querySelector('[name="'+k+'"]'); const v=el&&el.value?el.value.trim():"";
+    if(v) p[k]=v.slice(0,300);
+  }); }
+  return p;
+}
+function sendPartial(){
+  if(partialSent) return; const p=partialPayload();
+  if(!p||!p.team) return;                     // need at least the team context
+  partialSent=true;
+  const body=JSON.stringify(Object.assign({},p,ATTR,{lead_id:LEAD_ID,lead_stage:'partial'}));
+  const url=(BACKEND_URL||'').replace(/\/$/,'')+'/api/partial-lead';
+  try{
+    if(navigator.sendBeacon) navigator.sendBeacon(url,new Blob([body],{type:'application/json'}));
+    else fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:true});
+  }catch(e){}
+}
+window.addEventListener('pagehide',sendPartial);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') sendPartial(); });
+
 function fmt(n){
   if(n==null||isNaN(n)) return "—";
   if(n>=1e6) return (n/1e6).toFixed(n>=1e7?1:2).replace(/\.0+$/,"")+"M";
@@ -1157,8 +1216,37 @@ async function buildProposal(){
 
   const m=computeMetrics(team,state.scope);
   const pkg=recommendPackage(state.focus);
-  box.innerHTML=`<div class="spinner"><div class="ball"></div><div>Sizing the ${m.scopeLabel} audience and matching inventory…</div></div>`;
-  const _warm=setTimeout(()=>{const t=box.querySelector(".spinner div:last-child");if(t)t.textContent="Waking up the server… first load can take up to 30s";},4500);
+  const CAPTIONS=[
+    `Sizing the ${m.scopeLabel} audience…`,
+    "Scouting streaming & podcast inventory…",
+    "Matching sports networks to your fans…",
+    "Drawing up the game plan…"
+  ];
+  box.innerHTML=`<div class="spinner">
+    <svg class="fb-loader" viewBox="0 0 120 84" aria-hidden="true" role="presentation">
+      <g stroke="#4fbef2" stroke-width="2.4" stroke-linecap="round" opacity=".55">
+        <line class="fb-line"    x1="6"  y1="28" x2="34" y2="28"/>
+        <line class="fb-line l2" x1="2"  y1="38" x2="30" y2="38"/>
+        <line class="fb-line l3" x1="8"  y1="48" x2="32" y2="48"/>
+      </g>
+      <ellipse class="fb-shadow" cx="60" cy="74" rx="26" ry="5" fill="#060f1d" opacity=".35"/>
+      <g class="fb-ball">
+        <path d="M32 38 Q60 16 88 38 Q60 60 32 38 Z" fill="#2fd07a" opacity=".25"/>
+        <path d="M32 38 Q60 16 88 38 Q60 60 32 38 Z" fill="none" stroke="#5ee39a" stroke-width="2"/>
+        <path d="M41 33 Q39 38 41 44" stroke="#eaf6ff" stroke-width="2" fill="none" opacity=".9"/>
+        <path d="M79 33 Q81 38 79 44" stroke="#eaf6ff" stroke-width="2" fill="none" opacity=".9"/>
+        <line x1="49" y1="38" x2="71" y2="38" stroke="#eaf6ff" stroke-width="2"/>
+        <g stroke="#eaf6ff" stroke-width="1.8" opacity=".9">
+          <line x1="53" y1="35" x2="53" y2="41"/><line x1="58" y1="34" x2="58" y2="42"/>
+          <line x1="63" y1="34" x2="63" y2="42"/><line x1="68" y1="35" x2="68" y2="41"/>
+        </g>
+      </g>
+    </svg>
+    <div class="spin-cap" id="spinCap">${CAPTIONS[0]}</div>
+  </div>`;
+  let _ci=0;
+  const _rot=setInterval(()=>{const c=document.getElementById("spinCap");if(c){_ci=(_ci+1)%CAPTIONS.length;c.textContent=CAPTIONS[_ci];}},2200);
+  const _warm=setTimeout(()=>{clearInterval(_rot);const t=document.getElementById("spinCap");if(t)t.textContent="Waking up the server… first load can take up to 30s";},4500);
   box.scrollIntoView({behavior:'smooth',block:'center'});
 
   let rec, aiGenerated=false;
@@ -1170,7 +1258,7 @@ async function buildProposal(){
   }catch(e){ rec=fallbackRecommendations(state.focus); aiGenerated=false; }
   lastRec=rec;
 
-  clearTimeout(_warm);
+  clearTimeout(_warm); clearInterval(_rot);
   render(team,m,pkg,rec,aiGenerated);
   gtm("proposal_built",{team:team.name,league:state.league,scope:state.scope,focus:state.focus});
 }
@@ -1187,6 +1275,15 @@ function downloadPdf(b64, filename){
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),2000);
   }catch(e){ console.error("download failed",e); }
+}
+
+/* horizontal device-mix bars — same data as the PDF's "device mix in scope" chart */
+function deviceBars(devices){
+  const items=[["Phones",devices.phones],["Computers",devices.computers],["Tablets",devices.tablets],["Connected TV",devices.connectedTV]];
+  const max=Math.max(1,...items.map(i=>i[1]||0));
+  return '<div class="dev-bars">'+items.map(([lab,v],i)=>
+    `<div class="dev-bar-row"><span class="lab">${lab}</span><span class="dev-bar-track"><i style="width:${Math.max(3,Math.round((v||0)/max*100))}%;background:${i%2?'var(--turf)':'var(--electric)'}"></i></span><span class="val">${fmt(v)}</span></div>`
+  ).join('')+'</div>';
 }
 
 function render(team,m,pkg,rec,ai){
@@ -1223,6 +1320,7 @@ function render(team,m,pkg,rec,ai){
             <div class="device"><div class="n">${fmt(m.devices.tablets)}</div><div class="l">Tablets</div></div>
             <div class="device"><div class="n">${fmt(m.devices.connectedTV)}</div><div class="l">Connected TV</div></div>
           </div>
+          ${deviceBars(m.devices)}
           <div class="metrics" style="margin-top:10px">
             <div class="metric wide"><div class="n">${rangeFmt(m.matchable)}</div><div class="l">Realistically matchable programmatic audience (devices)</div></div>
           </div>
@@ -1252,6 +1350,7 @@ function render(team,m,pkg,rec,ai){
           <div class="lf-field"><label>Full name *</label><input type="text" name="name" autocomplete="name" placeholder="Jane Smith"></div>
           <div class="lf-field"><label>Work email *</label><input type="text" name="email" autocomplete="email" placeholder="jane@company.com"></div>
           <div class="lf-field"><label>Company *</label><input type="text" name="company" autocomplete="organization" placeholder="Company name"></div>
+          <div class="lf-field"><label>Company website</label><input type="text" name="company_website" autocomplete="url" inputmode="url" placeholder="yourcompany.com"></div>
           <div class="lf-field"><label>Phone</label><input type="text" name="phone" autocomplete="tel" placeholder="(555) 555-5555"></div>
           <div class="lf-field"><label>Monthly budget</label><select name="budget"><option value="">Select…</option><option>$2,500–$4,500</option><option>$4,500–$6,000</option><option>$6,000+</option><option>Not sure yet</option></select></div>
           <div class="lf-field"><label>Timeline</label><select name="timeline"><option value="">Select…</option><option>ASAP / this season</option><option>Next 1–3 months</option><option>Just exploring</option></select></div>
@@ -1266,10 +1365,16 @@ function render(team,m,pkg,rec,ai){
       </form>
       <div class="disclaimer">
         Audience figures are <b>modeled planning estimates</b> — computed from baseline market data (Nielsen-style DMA / Census households) and industry-average device and match-rate assumptions, not guaranteed delivery. Streaming, podcast, network, and audience lists are ${ai?'AI-generated suggestions':'curated suggestions'} to validate against live DSP availability. A Smart 1 strategist confirms exact inventory, reach, and pricing for ${team.name} on your call.
+        <br><br>Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan
       </div>
     </div>`;
   const leadCtx={team:team.name,league:state.league,scope:state.scope,scopeLabel:m.scopeLabel,focus:state.focus,dma:team.dma,city:team.city,venue:team.venue,recommendedPackage:pkg.name,packagePrice:pkg.price,estFanBase:m.fanBase,estHouseholds:m.households,estMatchable:m.matchable,estDevicesTotal:m.devices.total,estDevicesPhones:m.devices.phones,estDevicesComputers:m.devices.computers,estDevicesTablets:m.devices.tablets,estDevicesCTV:m.devices.connectedTV,page:"football-audio-video-playbook",source:"Stadium to Screen proposal builder"};
   const lf=document.getElementById("leadForm");
+  // partial lead capture: the report step is reached — team/league/scope are known
+  partialCtx=leadCtx; partialSent=false; sendPartial();
+  // if the visitor then fills fields but abandons, allow one refreshed partial (debounced)
+  let _ptDeb=null;
+  lf.addEventListener("input",()=>{ clearTimeout(_ptDeb); _ptDeb=setTimeout(()=>{ partialSent=false; },800); });
   const gc=document.getElementById("gateCta");
   if(gc) gc.addEventListener("click",()=>{ const ft=document.getElementById("formTitle"); if(ft) ft.scrollIntoView({behavior:"smooth",block:"start"}); setTimeout(()=>{ try{ const ni=lf.querySelector('input[name="name"]'); ni&&ni.focus(); }catch(e){} },450); });
   lf.addEventListener("submit",async(ev)=>{
@@ -1283,7 +1388,7 @@ function render(team,m,pkg,rec,ai){
     const btn=document.getElementById("leadSubmit"); const label=btn.textContent; btn.disabled=true; btn.textContent="Unlocking…"; msg.innerHTML="";
     gtm("unlock_started",{team:leadCtx.team});
     const _sub=setTimeout(()=>{ if(btn) btn.textContent="Still working…"; },4500);
-    const payload=Object.assign({},d,leadCtx,{recommendations:lastRec,submittedAt:new Date().toISOString()});
+    const payload=Object.assign({},d,leadCtx,{recommendations:lastRec,lead_id:LEAD_ID,submittedAt:new Date().toISOString()});
     let pdfBase64=null,pdfUrl=null,reportFilename="company-stadium-report.pdf",calendarUrl=CALENDAR_URL;
     try{
       const r=await fetch((BACKEND_URL||"").replace(/\/$/,"")+"/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
@@ -1291,7 +1396,13 @@ function render(team,m,pkg,rec,ai){
       const j=await r.json(); pdfBase64=j.pdfBase64||null; pdfUrl=j.pdfUrl||null; if(j.reportFilename)reportFilename=j.reportFilename; if(j.calendarUrl)calendarUrl=j.calendarUrl;
     }catch(err){
       clearTimeout(_sub);
-      if(BACKEND_URL){ btn.disabled=false; btn.textContent=label; msg.innerHTML='<span class="lf-err">Couldn\u2019t submit just now — please try again in a moment.</span>'; return; }
+      // Don't lose the lead: retry once via sendBeacon (fire-and-forget), still
+      // unlock the report for UX, but warn and flag the failed delivery.
+      console.warn("Lead submit failed — retrying once via sendBeacon",err);
+      leadCtx.deliveryFailed=true;
+      try{
+        if(navigator.sendBeacon) navigator.sendBeacon((BACKEND_URL||"").replace(/\/$/,"")+"/api/lead",new Blob([JSON.stringify(payload)],{type:"application/json"}));
+      }catch(e2){ console.warn("sendBeacon retry failed",e2); }
     }
     clearTimeout(_sub);
     const gated=document.getElementById("gated"); if(gated) gated.classList.add("unlocked");

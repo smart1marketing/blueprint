@@ -5,6 +5,7 @@
    - GET  /api/health           config status
    - GET  /api/config           public widget config (calendar URL)
    - POST /api/recommendations  OpenAI-matched media lists (rate-limited)
+   - POST /api/partial-lead     salvage abandoned sessions -> GHL + store (light rate limit)
    - POST /api/lead             PDF -> Cloudinary -> email + notify + GHL, store (rate-limited)
    - GET  /leads  /api/leads    token-gated leads dashboard
 
@@ -20,6 +21,7 @@
 ============================================================================= */
 
 const path = require("path");
+const crypto = require("crypto");
 const express = require("express");
 const nodemailer = require("nodemailer");
 const DATA = require("./public/data.js");
@@ -135,6 +137,37 @@ app.post("/api/recommendations", rateLimit(30, 10 * 60 * 1000), async (req, res)
   }
 });
 
+/* ---------- partial lead capture (abandoned sessions) ----------
+   No validation beyond the honeypot — salvage whatever came in. Uses its own
+   (path-keyed) rate bucket so it never consumes the /api/lead or AI budget. */
+app.post("/api/partial-lead", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
+  const p = req.body || {};
+  // honeypot: bots fill the hidden "website" field — silently accept & drop
+  if (p.website) return res.json({ ok: true });
+  delete p.website;
+
+  const outbound = {
+    ...p,
+    source: p.source || "Stadium to Screen proposal builder",
+    lead_stage: "partial",
+    report_status: "partial",
+    lead_id: p.lead_id || "",
+    receivedAt: new Date().toISOString()
+  };
+
+  try {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    await store.addLead({ id, stage: "partial", ...outbound });
+  } catch (e) { console.error("partial lead store failed:", e.message); }
+
+  if (GHL_WEBHOOK_URL) {
+    try {
+      await fetch(GHL_WEBHOOK_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(outbound) });
+    } catch (e) { console.error("partial lead GHL forward failed:", e.message); }
+  }
+  res.json({ ok: true });
+});
+
 /* ---------- lead capture ---------- */
 function uploadPdfToCloudinary(buffer) {
   return new Promise((resolve, reject) => {
@@ -231,10 +264,15 @@ app.post("/api/lead", rateLimit(8, 10 * 60 * 1000), async (req, res) => {
 
 /* ---------- leads dashboard ---------- */
 app.get("/leads", (_req, res) => res.sendFile(path.join(__dirname, "public", "leads.html")));
-app.get("/api/leads", async (req, res) => {
+function tokenMatches(supplied, expected) {
+  const a = Buffer.from(String(supplied || ""));
+  const b = Buffer.from(String(expected || ""));
+  return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
+}
+app.get("/api/leads", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
   if (!ADMIN_TOKEN) return res.status(503).json({ error: "Leads dashboard disabled — set ADMIN_TOKEN in Render to enable." });
-  const token = req.get("x-admin-token") || req.query.token;
-  if (token !== ADMIN_TOKEN) return res.status(401).json({ error: "Unauthorized" });
+  const token = req.get("x-admin-token"); // header only — never accept tokens in the query string
+  if (!tokenMatches(token, ADMIN_TOKEN)) return res.status(401).json({ error: "Unauthorized" });
   res.json({ leads: await store.getLeads(), persistent: store.persistent });
 });
 

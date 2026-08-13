@@ -21,7 +21,15 @@ lists, and (2) handles lead capture → PDF → Cloudinary → GHL.
 
 - `GET  /api/health` — reports whether AI / Cloudinary / GHL are configured
 - `POST /api/recommendations` — OpenAI-matched media lists (falls back if no key)
-- `POST /api/lead` — builds the PDF, stores it in Cloudinary, forwards to GHL
+- `POST /api/partial-lead` — salvages abandoned sessions: the widget fires this
+  (via `sendBeacon`) when the report step is reached and again on page hide,
+  sending whatever is known so far (team/scope/focus plus any filled fields such
+  as `company_website`, `name`, `email`, `company`). No validation beyond the
+  honeypot; forwarded to GHL with `report_status: "partial"` + `lead_id` and
+  stored with `stage: "partial"`. Uses its own light rate bucket.
+- `POST /api/lead` — builds the PDF, stores it in Cloudinary, forwards to GHL.
+  Includes the same `lead_id` as the partial submission so GHL can merge the
+  records, and the new `company_website` field from the unlock form.
 
 ## Environment variables (set in Render)
 
@@ -32,7 +40,19 @@ lists, and (2) handles lead capture → PDF → Cloudinary → GHL.
 | `GHL_WEBHOOK_URL` | for lead capture | GoHighLevel Inbound Webhook URL (leads are forwarded here) |
 | `CLOUDINARY_URL` | for PDF storage | `cloudinary://api_key:api_secret@cloud_name` |
 | `ALLOWED_ORIGIN` | no | CORS origin; default `*` (can set to `https://smart1marketing.com`) |
+| `ADMIN_TOKEN` | for /leads | long random token for the leads dashboard (sent via `x-admin-token` header) |
+| `STORE_PUBLIC_ID` | recommended | Cloudinary raw JSON id for the lead store (see security note below) |
+| `NOTIFY_WEBHOOK_URL` / `SMTP_URL` / `MAIL_FROM` | no | rep notification / prospect email |
+| `REP_NAME` / `REP_EMAIL` / `REP_PHONE` / `CALENDAR_URL` | no | strategist block + book-a-call |
 | `PORT` | no | set automatically by Render |
+
+> **SECURITY — lead store exposure:** captured leads are mirrored to a
+> Cloudinary **raw JSON file that is publicly readable** at
+> `https://res.cloudinary.com/<cloud>/raw/upload/<STORE_PUBLIC_ID>`. The id
+> defaults to `stadium-leads/leads-store.json`, which is guessable — set
+> `STORE_PUBLIC_ID` to a long random value (e.g.
+> `stadium-leads/leads-store-9f3a1c77d2e64b0a.json`) so the URL is not
+> discoverable. For real PII protection, move the store to a database.
 
 > **Cloudinary note:** new Cloudinary accounts block PDF delivery by default.
 > Enable **Settings → Security → "Allow delivery of PDF and ZIP files"** so the

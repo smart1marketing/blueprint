@@ -1,7 +1,12 @@
 /* =============================================================================
    Stadium to Screen — market data + deterministic audience model
    -----------------------------------------------------------------------------
-   SINGLE SOURCE OF TRUTH. Loaded by the browser (window.S1_DATA) AND by the
+   !!! DUPLICATION WARNING: public/index.html inlines its OWN copy of this
+   market data + computeMetrics inside its <script> block. Any change here
+   (DMA_HOUSEHOLDS, STATES, multipliers, computeMetrics) must also be made in
+   that inline block, or the widget and the server/PDF will disagree.
+   -----------------------------------------------------------------------------
+   Loaded by the browser (window.S1_DATA) AND by the
    Node server (require). The AUDIENCE NUMBERS are computed here from real
    baseline data + transparent multipliers — NOT from any AI model.
 

@@ -7,6 +7,7 @@ services:
     plan: free
     buildCommand: npm install
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: OPENAI_API_KEY
         sync: false
@@ -34,3 +35,5 @@ services:
         sync: false
       - key: CALENDAR_URL
         sync: false   # "Book a strategy call" link
+      - key: STORE_PUBLIC_ID
+        sync: false   # Cloudinary raw JSON id for the lead store — set to a long random value
