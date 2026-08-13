@@ -75,7 +75,7 @@ For B2B clients it estimates establishments instead, at roughly 25 per 1,000 res
 
 Three things keep a busy accountant from abandoning a ten-minute form:
 
-- **Save and resume.** Every answer persists in the browser (localStorage) as it's typed. Returning to the page offers "Pick up where you left off" with the client's name; progress clears when the audit completes or on "Start over", and goes stale after 14 days. Nothing leaves the machine until submission.
+- **Save and resume.** Every answer persists in the browser (localStorage) as it's typed. Returning to the page offers "Pick up where you left off" with the client's name; progress clears when the audit completes or on "Start over", and goes stale after 14 days. Contact details never leave the machine until the results gate is submitted; once the client snapshot is complete (or the tab is closed mid-audit), the business fields already entered are sent to the webhook as a `"stage": "partial"` lead so an abandoned audit can still be followed up.
 - **A completeness check before the report.** "Calculate results" first lists what's blank and what each blank costs — "Without leads and customers, the report can't compute cost per lead" — with the choice to go back or generate anyway. This is why dashes in the report are always a decision, never a surprise.
 - **A sample report on the intro page** (`/sample-report.pdf`, served from `public/`), so the partner sees the payoff before investing the time. Regenerate it whenever the format changes by saving any audit PDF over `public/sample-report.pdf`.
 
@@ -180,11 +180,12 @@ git push -u origin main
   - `ALLOW_LOCAL_FETCH` — development only; set to `1` to let the website scanner reach private addresses
   - `GHL_WEBHOOK_URL` — Smart 1 Suite inbound webhook (see below)
   - `GHL_API_KEY` / `GHL_LOCATION_ID` — GHL API v2 contact upsert and PDF attach
-  - `GHL_PDF_FIELD_ID` — file custom field on Contact that receives the PDF
+  - `GHL_PDF_FIELD_ID` / `GHL_PDF_FIELD_KEY` — file custom field on Contact that receives the PDF (ID, or its key as an alternative)
   - `BOOKING_URL` — where the "Schedule a review" button goes; defaults to the Smart 1 contact page
   - `PUBLIC_BASE_URL` — your real domain, used to build PDF links
-  - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` — PDF storage (recommended)
+  - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` / `CLOUDINARY_FOLDER` — PDF storage (recommended)
   - `PDF_DIR` — local fallback storage; point at a mounted disk for durable links
+  - `PDF_TTL_HOURS` — how long locally stored PDFs live before the sweep deletes them (default `720`, 30 days)
 
 Render sets `PORT` automatically. Free-tier services sleep after 15 minutes of inactivity and take roughly 30 seconds to wake — move to the Starter plan before sending real partner traffic.
 
@@ -310,7 +311,7 @@ Each submission posts this JSON:
 
 In the workflow, map those into contact fields, then use `auditPdfUrl` in an email or SMS action to send the partner their report — GHL merges it as a link, so nothing needs uploading.
 
-Each audit fires the webhook **twice**: once at `"stage": "started"` when the gate is submitted, and again at `"stage": "completed"` once the PDF exists. That way a visitor who closes the tab mid-analysis is still captured. Either filter on `stage` in the workflow, or upsert by email so the second hit updates the same contact.
+Each audit can fire the webhook up to **three times**: at `"stage": "partial"` (via `POST /api/partial-lead`) once the client snapshot is complete or the visitor leaves mid-audit — business fields only, no partner contact info yet, plus UTM/attribution keys and `report_status: "partial"`; at `"stage": "started"` when the gate is submitted; and at `"stage": "completed"` once the PDF exists. That way a visitor who closes the tab mid-analysis is still captured. Every firing carries the same `lead_id`, so filter on `stage` in the workflow, or upsert by `lead_id`/email so later hits update the same contact. The payload also includes `website`, `zipCode`, `cityMarket`, and `locations` from the client snapshot.
 
 ### Option B — GHL API v2, with the PDF attached to the contact
 

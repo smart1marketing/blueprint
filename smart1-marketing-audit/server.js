@@ -22,7 +22,7 @@ const { analyzeExpenses, isAccepted, ACCEPTED } = require('./expenses');
 const { analyzeWebsite } = require('./website');
 const { estimateAudience } = require('./audience');
 const { estimateMarket, suggestCompetitors, compareSites } = require('./market');
-const { analyzeWebsite: scanSite } = require('./website');
+const scanSite = analyzeWebsite;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -39,7 +39,7 @@ const LEAD_WEBHOOK_URL = process.env.LEAD_WEBHOOK_URL;
 const BOOKING_URL = process.env.BOOKING_URL || 'https://smart1marketing.com/contact';
 
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({ limit: '2mb' }));
 
 /* Embedding: by default any site may iframe the audit. Set EMBED_ALLOWED_ORIGINS
    to a space-separated list (e.g. "https://smart1marketing.com https://www.smart1marketing.com")
@@ -410,6 +410,11 @@ function leadPayload(body = {}, pdfUrl) {
     clientBusiness: snap.clientName || '',
     clientIndustry: snap.industry || '',
     clientAnnualRevenue: snap.annualRevenue || null,
+    website: snap.website || body.website || '',
+    zipCode: snap.zipCode || body.zipCode || '',
+    cityMarket: snap.cityMarket || body.cityMarket || '',
+    locations: snap.locations ?? null,
+    lead_id: body.lead_id || '',
     monthlyMarketingSpend: body.monthlySpend ?? body.metrics?.spend ?? null,
     efficiencyScore: body.score ?? null,
     scoreTier: body.scoreTier || '',
@@ -451,6 +456,59 @@ async function deliverLead(body, pdfUrl, pdfBuffer, filename) {
 app.post('/api/lead', async (req, res) => {
   await deliverLead(req.body || {});
   res.json({ ok: true });
+});
+
+/* ---------------------------------------------------------------
+   Partial lead capture: fired when the client snapshot is complete
+   or the visitor leaves mid-audit. No email required, never fails,
+   and rate-limited on its own budget (separate from /api/analyze).
+---------------------------------------------------------------- */
+const partialHits = new Map();
+function partialRateLimited(ip, max = 30, windowMs = 60 * 60 * 1000) {
+  const now = Date.now();
+  const list = (partialHits.get(ip) || []).filter((t) => now - t < windowMs);
+  list.push(now);
+  partialHits.set(ip, list);
+  if (partialHits.size > 5000) partialHits.clear();
+  return list.length > max;
+}
+
+const ATTRIBUTION_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'referrer_url', 'landing_page_url'];
+
+app.post('/api/partial-lead', async (req, res) => {
+  // Always answer {ok:true} — this endpoint must never block the UI or beacons.
+  res.json({ ok: true });
+
+  const body = req.body || {};
+  if (body.hp || body.honeypot) return;                 // honeypot: silently drop bots
+  if (partialRateLimited(req.ip)) return;
+  if (!body.website && !body.clientName && !body.clientBusiness) return; // nothing identifying
+
+  const payload = {
+    source: 'Marketing Efficiency Audit',
+    stage: 'partial',
+    report_status: 'partial',
+    lead_id: body.lead_id || '',
+    partnerName: body.partnerName || body.preparedBy || '',
+    partnerFirm: body.partnerFirm || '',
+    clientBusiness: body.clientBusiness || body.clientName || '',
+    clientIndustry: body.clientIndustry || body.industry || '',
+    clientAnnualRevenue: body.clientAnnualRevenue ?? body.annualRevenue ?? null,
+    website: body.website || '',
+    zipCode: body.zipCode || '',
+    cityMarket: body.cityMarket || '',
+    lastScreen: body.lastScreen || '',
+    submittedAt: new Date().toISOString(),
+  };
+  for (const k of ATTRIBUTION_KEYS) {
+    if (body[k]) payload[k] = String(body[k]).slice(0, 300);
+  }
+
+  console.log('PARTIAL LEAD:', JSON.stringify(payload));
+  const jobs = [];
+  if (LEAD_WEBHOOK_URL) jobs.push(postJson(LEAD_WEBHOOK_URL, payload).catch((e) => console.error('partial lead webhook failed:', e.message)));
+  if (GHL_WEBHOOK_URL) jobs.push(postJson(GHL_WEBHOOK_URL, payload).catch((e) => console.error('partial ghl webhook failed:', e.message)));
+  await Promise.allSettled(jobs);
 });
 
 /* ---------------------------------------------------------------
@@ -692,6 +750,9 @@ app.get('/audit/:file', (req, res) => {
   fs.createReadStream(full).pipe(res);
 });
 
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 app.listen(PORT, () => console.log(`Marketing Efficiency Audit running on :${PORT}`));

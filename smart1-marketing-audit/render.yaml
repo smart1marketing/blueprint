@@ -48,3 +48,8 @@ services:
         sync: false          # e.g. https://audit.smart1marketing.com
       - key: EMBED_ALLOWED_ORIGINS
         sync: false          # optional: domains allowed to iframe the audit
+      # --- Local PDF storage (only used when Cloudinary is not configured) ---
+      - key: PDF_DIR
+        sync: false          # optional: e.g. /var/data with a mounted disk; defaults to the OS temp dir
+      - key: PDF_TTL_HOURS
+        value: "720"         # locally stored PDFs are swept after 30 days

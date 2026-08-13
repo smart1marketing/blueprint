@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 
 const C = {
-  navy: '#1a2e58', navy2: '#22365f', sky: '#35c4f4', green: '#01cdb0', green2: '#01b8a0',
+  navy: '#0A2240', navy2: '#16395F', sky: '#009ED2', green: '#01cdb0', green2: '#01b8a0',
   gold: '#fbbc00', ink: '#1A2233', muted: '#5A6577', line: '#E4E8EF', bg: '#F6F8FB',
   red: '#e0574d', amber: '#f0a02a', white: '#ffffff', lightText: '#D6E0EE',
 };
@@ -808,7 +808,7 @@ function buildAuditPdf(payload = {}) {
         doc.page.margins.bottom = 0; // footers sit below the text margin; without this PDFKit adds blank pages
         doc.moveTo(PAGE.m, FOOT_Y).lineTo(PAGE.m + CONTENT_W, FOOT_Y).lineWidth(0.5).strokeColor(C.line).stroke();
         doc.font('Helvetica').fontSize(7).fillColor(C.muted)
-          .text('Smart 1 Marketing · Directional assessment based on information supplied by the preparer. Benchmarks vary by market, competition, maturity, and geography.',
+          .text('Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional assessment based on information supplied by the preparer. Benchmarks vary by market, competition, maturity, and geography.',
             PAGE.m, FOOT_Y + 8, { width: CONTENT_W - 60, lineGap: 1 });
         doc.font('Helvetica-Bold').fontSize(7.5).fillColor(C.muted)
           .text(`${i + 1} / ${range.count}`, PAGE.m + CONTENT_W - 60, FOOT_Y + 8, { width: 60, align: 'right' });

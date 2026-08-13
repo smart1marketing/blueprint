@@ -296,6 +296,43 @@ function updateLeakTotal() {
     : `${n} of ${FLAGS.length} answered`;
 }
 
+/* ---------- Partial lead capture ---------- */
+const LEAD_ID = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2));
+const ATTR = (() => {
+  const q = new URLSearchParams(location.search);
+  const keys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid'];
+  const o = {};
+  keys.forEach((k) => { const v = q.get(k); if (v) o[k] = v.slice(0, 200); });
+  o.referrer_url = (document.referrer || '').slice(0, 300);
+  o.landing_page_url = (q.get('s1_ref') || location.href).slice(0, 300);
+  return o;
+})();
+let partialSent = false;
+function partialPayload() {
+  return {
+    clientName: $('#clientName')?.value.trim() || '',
+    clientIndustry: $('#industry')?.value || '',
+    clientAnnualRevenue: num('#annualRevenue') || null,
+    website: $('#website')?.value.trim() || '',
+    zipCode: $('#zipCode')?.value.trim() || '',
+    cityMarket: $('#cityMarket')?.value.trim() || '',
+    partnerName: $('#preparedBy')?.value.trim() || '',
+    partnerFirm: $('#partnerFirm')?.value.trim() || '',
+    lastScreen: current,
+  };
+}
+function sendPartial() {
+  if (partialSent || state.unlocked) return;
+  const p = partialPayload();
+  if (!p.website && !p.clientName) return; // need at least something identifying
+  partialSent = true;
+  const body = JSON.stringify({ ...p, ...ATTR, lead_id: LEAD_ID, lead_stage: 'partial' });
+  if (navigator.sendBeacon) navigator.sendBeacon('/api/partial-lead', new Blob([body], { type: 'application/json' }));
+  else fetch('/api/partial-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+}
+window.addEventListener('pagehide', sendPartial);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') sendPartial(); });
+
 /* ---------- Embed mode ---------- */
 const EMBED = new URLSearchParams(location.search).get('embed') === '1';
 if (EMBED) document.documentElement.classList.add('embed');
@@ -658,8 +695,13 @@ function renderExpenseResult(a) {
 const ORDER = ['intro','step1','profile','compete','step2','step3','step4','market','results'];
 let current = 'intro';
 function goto(id) {
+  const leavingStep1 = current === 'step1' && ORDER.indexOf(id) > ORDER.indexOf('step1');
   current = id;
   if (id !== 'intro' && id !== 'results') scheduleSave();
+  // Client snapshot complete → capture a partial lead before the contact gate
+  if (leavingStep1 && $('#clientName').value.trim() && $('#website').value.trim() && $('#industry').value) {
+    sendPartial();
+  }
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
   const i = ORDER.indexOf(id);
   const prog = $('#progress');
@@ -1682,7 +1724,7 @@ async function buildPdf() {
     const res = await fetch('/api/report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...state.results, analysis: state.analysis || null, lead: state.lead || null }),
+      body: JSON.stringify({ ...state.results, analysis: state.analysis || null, lead: state.lead || null, lead_id: LEAD_ID }),
     });
     const data = await res.json();
     if (!data.url) throw new Error('no url');
@@ -1763,6 +1805,8 @@ $('#unlock').addEventListener('click', async () => {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ...state.lead,
+      ...ATTR,
+      lead_id: LEAD_ID,
       partnerName: state.results.snapshot.preparedBy || state.lead.name,
       partnerFirm: state.results.snapshot.partnerFirm || state.lead.firm,
       client: state.results.snapshot,
