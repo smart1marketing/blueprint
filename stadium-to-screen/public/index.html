@@ -86,6 +86,7 @@
   .nav-links{display:flex;align-items:center;gap:30px}
   .nav-links a{font-size:.9rem;font-weight:600;color:var(--steel);transition:color .2s}
   .nav-links a:hover{color:var(--chalk)}
+  .nav-links a.btn,.nav-links a.btn:hover{color:var(--field-deep)}
   .btn{
     font-family:'Archivo';font-weight:700;font-size:.9rem;letter-spacing:.01em;
     padding:.62em 1.25em;border-radius:9px;border:0;cursor:pointer;
@@ -98,6 +99,20 @@
   .btn-blue{background:var(--electric);color:#03233d;box-shadow:0 8px 22px -8px var(--electric)}
   .btn-blue:hover{transform:translateY(-2px)}
   @media(max-width:860px){.nav-links a:not(.btn){display:none}}
+  /* phones: keep the lockup and the CTA from colliding */
+  @media(max-width:600px){
+    .nav-inner{height:58px;gap:10px}
+    .brand{gap:7px;font-size:.82rem;min-width:0;flex:1 1 auto;overflow:hidden}
+    .brand-logo{height:22px}
+    .brand-fallback{font-size:.78rem;white-space:nowrap}
+    .brand .mark{width:26px;height:26px;flex:0 0 26px}
+    .nav-links{flex:0 0 auto}
+    .nav-links a.btn{padding:0 14px;font-size:.76rem;white-space:nowrap;min-height:44px}
+  }
+  @media(max-width:380px){
+    .brand span{display:none}
+    .nav-links a.btn{padding:0 12px;font-size:.72rem;min-height:44px}
+  }
 
   /* ---------- HERO ---------- */
   .hero{position:relative;padding:96px 0 74px;overflow:hidden}
@@ -415,6 +430,45 @@
   .lead-success{margin-top:6px;border:1px solid var(--turf);background:rgba(47,208,122,.08);border-radius:14px;padding:18px 20px;font-size:1rem;color:var(--chalk)}
   .lead-success b{color:var(--turf-soft)}
   @media(max-width:560px){.lf-grid{grid-template-columns:1fr}}
+  /* ---------- mobile: touch targets + tighter rhythm ---------- */
+  @media(max-width:640px){
+    .seg button{min-height:46px;font-size:.86rem}
+    .seg.scope,.seg.tri{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .seg.scope button,.seg.tri button{padding-left:4px;padding-right:4px}
+    .form-card input,.form-card select,.lead-form input{min-height:48px;font-size:16px}
+    .btn{min-height:48px}
+    #buildBtn,#leadSubmit{width:100%}
+    .lf-grid{grid-template-columns:1fr}
+    .device-row{grid-template-columns:repeat(2,1fr)}
+    .fr-in{flex-direction:column;align-items:flex-start;gap:4px}
+    .fr-val{font-size:1.25rem}
+    .fr-sub{max-width:none}
+    .dl-actions .btn{width:100%}
+    .prop{padding-left:16px;padding-right:16px}
+    .hero-art{max-width:100%}
+  }
+
+  /* ---------- provider marquee ---------- */
+  .provider-band{padding:26px 0 30px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+        background:linear-gradient(180deg,rgba(15,32,54,.5),rgba(6,15,29,.2))}
+  .pb-label{text-align:center;font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+        color:var(--steel-dim);margin-bottom:20px}
+  .marquee{overflow:hidden;position:relative;
+        -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
+        mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+  .marquee-track{display:flex;align-items:center;gap:54px;width:max-content;
+        animation:marquee 46s linear infinite}
+  .marquee:hover .marquee-track{animation-play-state:paused}
+  @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .pv{display:flex;align-items:center;gap:9px;flex:0 0 auto;height:34px}
+  .pv img{max-height:30px;max-width:132px;width:auto;object-fit:contain;
+        filter:brightness(0) invert(1);opacity:.62;transition:opacity .2s}
+  .pv:hover img{opacity:1}
+  .pv .wm{font-size:.86rem;font-weight:800;color:var(--chalk);opacity:.62;white-space:nowrap}
+  @media (prefers-reduced-motion:reduce){.marquee-track{animation:none;flex-wrap:wrap;justify-content:center;width:auto;gap:34px}}
+  @media(max-width:700px){.marquee-track{gap:34px;animation-duration:32s}.pv img{max-height:24px;max-width:104px}
+        .provider-band{padding:20px 0 22px}}
+
   /* ---- audience funnel (replaces the contradictory metric tiles) ---- */
   .funnel{display:grid;gap:8px;margin:10px 0 4px}
   .fr{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:11px;
@@ -533,9 +587,6 @@
         
       </div>
       <div class="trust">
-        <span class="plat">Spotify</span><span class="dot"></span>
-        <span class="plat">Pandora</span><span class="dot"></span>
-        <span class="plat">iHeartRadio</span><span class="dot"></span>
         <span>38 streaming platforms · 33 podcast networks · Connected TV</span>
       </div>
     </div>
@@ -587,6 +638,17 @@
           <ellipse cx="220" cy="290" rx="12" ry="5" stroke="#5ee39a" stroke-width="1.4" fill="none" opacity=".8"/>
           <line x1="145" y1="256" x2="295" y2="256" stroke="#5ee39a" stroke-width="1.3" opacity=".7"/>
           <line x1="95" y1="324" x2="345" y2="324" stroke="#5ee39a" stroke-width="1.3" opacity=".7"/>
+
+          <!-- goal post: gooseneck base, crossbar, two uprights -->
+          <g stroke="#5ee39a" stroke-linecap="round" fill="none" opacity=".85">
+            <ellipse cx="268" cy="252" rx="9" ry="3" stroke-width="1.1" opacity=".5"/>
+            <path d="M268 252 L268 236 C268 231, 268 229, 268 228" stroke-width="3"/>
+            <line x1="245" y1="228" x2="291" y2="228" stroke-width="3"/>
+            <line x1="245" y1="228" x2="245" y2="188" stroke-width="3"/>
+            <line x1="291" y1="228" x2="291" y2="188" stroke-width="3"/>
+            <circle cx="245" cy="188" r="1.8" fill="#5ee39a" stroke="none" opacity=".9"/>
+            <circle cx="291" cy="188" r="1.8" fill="#5ee39a" stroke="none" opacity=".9"/>
+          </g>
         </g>
 
         <!-- flowing light trail: field -> ball -> screen -->
@@ -603,24 +665,39 @@
         <!-- football -->
         <g class="ball-g">
           <g transform="rotate(-22 210 145)">
-            <!-- prolate football: pointed tips, full belly (was a flat lens) -->
-            <path d="M150 145 C 158 111, 262 111, 270 145 C 262 179, 158 179, 150 145 Z"
-                  fill="url(#ballGrad)" stroke="#7bead0" stroke-width="1.6" stroke-linejoin="round"/>
-            <!-- leather highlight -->
-            <path d="M168 130 C 190 119, 232 119, 252 130" stroke="#ffffff" stroke-width="2.4"
-                  opacity=".18" fill="none" stroke-linecap="round"/>
-            <!-- white end stripes -->
-            <path d="M176 124 C 171 137, 171 153, 176 166" stroke="#eaf6ff" stroke-width="2.6"
-                  fill="none" opacity=".92" stroke-linecap="round"/>
-            <path d="M244 124 C 249 137, 249 153, 244 166" stroke="#eaf6ff" stroke-width="2.6"
-                  fill="none" opacity=".92" stroke-linecap="round"/>
-            <!-- laces -->
-            <line x1="196" y1="145" x2="224" y2="145" stroke="#eaf6ff" stroke-width="2.6" stroke-linecap="round"/>
-            <g stroke="#eaf6ff" stroke-width="2.2" stroke-linecap="round">
-              <line x1="200" y1="138.5" x2="200" y2="151.5"/>
-              <line x1="207" y1="137.8" x2="207" y2="152.2"/>
-              <line x1="214" y1="137.8" x2="214" y2="152.2"/>
-              <line x1="221" y1="138.5" x2="221" y2="151.5"/>
+            <!-- American football: 1.66:1 long axis, pointed tips, full belly.
+                 Each half is two cubics so the tips stay sharp instead of rounding
+                 into a lens. -->
+            <path d="M140 145
+                     C 152 118, 180 104, 210 104
+                     C 240 104, 268 118, 280 145
+                     C 268 172, 240 186, 210 186
+                     C 180 186, 152 172, 140 145 Z"
+                  fill="url(#ballGrad)" stroke="#7bead0" stroke-width="1.7"
+                  stroke-linejoin="miter" stroke-miterlimit="10"/>
+
+            <!-- long seam -->
+            <path d="M152 145 C 182 138, 238 138, 268 145" stroke="#0a1626" stroke-width="1.1"
+                  opacity=".26" fill="none"/>
+            <!-- leather sheen -->
+            <path d="M168 127 C 190 115, 230 115, 252 127" stroke="#ffffff" stroke-width="3"
+                  opacity=".2" fill="none" stroke-linecap="round"/>
+
+            <!-- white end bands, set close to the tips like a real ball -->
+            <path d="M172 116 C 165 132, 165 158, 172 174" stroke="#f2fbff" stroke-width="3"
+                  fill="none" opacity=".95" stroke-linecap="round"/>
+            <path d="M248 116 C 255 132, 255 158, 248 174" stroke="#f2fbff" stroke-width="3"
+                  fill="none" opacity=".95" stroke-linecap="round"/>
+
+            <!-- laces: spine plus eight stitches -->
+            <line x1="190" y1="145" x2="230" y2="145" stroke="#f2fbff" stroke-width="2.6" stroke-linecap="round"/>
+            <g stroke="#f2fbff" stroke-width="2.3" stroke-linecap="round">
+              <line x1="194" y1="139" x2="194" y2="151"/>
+              <line x1="200" y1="138" x2="200" y2="152"/>
+              <line x1="206" y1="137.5" x2="206" y2="152.5"/>
+              <line x1="212" y1="137.5" x2="212" y2="152.5"/>
+              <line x1="218" y1="137.5" x2="218" y2="152.5"/>
+              <line x1="224" y1="138" x2="224" y2="152"/>
             </g>
           </g>
         </g>
@@ -647,6 +724,16 @@
 <div class="wrap"><div class="divider-lines"></div></div>
 
 <!-- OPPORTUNITY -->
+<!-- provider marquee: the logos people already know, right up top -->
+<section class="provider-band" aria-label="Where your ads run">
+  <div class="wrap">
+    <div class="pb-label">Your ads run inside the apps they already use every day</div>
+  </div>
+  <div class="marquee" id="providerMarquee">
+    <div class="marquee-track" id="marqueeTrack"></div>
+  </div>
+</section>
+
 <section id="opportunity">
   <div class="wrap">
     <div class="sec-head">
@@ -1716,6 +1803,45 @@ const io=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){en.t
 document.querySelectorAll('.card,.play,.pillar,.pack,.gauge,.step,.col,.script').forEach(el=>{el.classList.add('reveal-el');io.observe(el);});
 const cb=document.getElementById('contactBtn');
 if(cb) cb.addEventListener('click',e=>{e.preventDefault();document.getElementById('builder').scrollIntoView({behavior:'smooth'});});
+
+/* ---------- provider marquee ----------
+   The recognisable names, up top, before anyone has to read anything. Uses the
+   same never-empty logo chain as the quote: self-hosted -> CDN -> favicon ->
+   wordmark. Rendered white via CSS so mixed brand colours read as one row. */
+const PROVIDERS = [
+  ["Hulu","hulu.com"], ["Amazon Prime Video","primevideo.com"], ["YouTube TV","youtube.com"],
+  ["Paramount+","paramountplus.com"], ["Peacock","peacocktv.com"], ["ESPN","espn.com"],
+  ["Max","max.com"], ["Roku","roku.com"], ["Tubi","tubitv.com"], ["Pluto TV","pluto.tv"],
+  ["Sling TV","sling.com"], ["Fubo","fubo.tv"],
+  ["Spotify","spotify.com"], ["Pandora","pandora.com"], ["iHeartRadio","iheart.com"],
+  ["SiriusXM","siriusxm.com"], ["Audacy","audacy.com"], ["Amazon Music","music.amazon.com"],
+  ["TuneIn","tunein.com"], ["NFL Network","nfl.com"]
+];
+function renderMarquee(){
+  const track=document.getElementById('marqueeTrack');
+  if(!track) return;
+  const cell=([name,domain])=>{
+    const mono=monogram(name), h=hueOf(name);
+    return `<div class="pv" title="${esc(name)}">`
+      + `<img src="/logos/${esc(domain)}.svg" alt="${esc(name)}" loading="lazy" referrerpolicy="no-referrer"`
+      + ` data-step="0" data-domain="${esc(domain)}" data-mono="${esc(mono)}" data-hue="${h}"`
+      + ` onerror="S1.marqueeStep(this)">`
+      + `</div>`;
+  };
+  // duplicated once so the -50% keyframe loops seamlessly
+  track.innerHTML = PROVIDERS.map(cell).join('') + PROVIDERS.map(cell).join('');
+}
+/* same chain as the quote tiles, but the last step is a wordmark, not a monogram
+   tile — a bare initial would look broken in a logo row. */
+S1.marqueeStep=function(img){
+  const d=img.dataset, step=Number(d.step||0)+1; d.step=step;
+  if(step===1){ img.src="https://logo.clearbit.com/"+d.domain; return; }
+  if(step===2){ img.src="https://www.google.com/s2/favicons?sz=128&domain="+d.domain; return; }
+  const sp=document.createElement("span");
+  sp.className="wm"; sp.textContent=img.alt||d.mono;
+  if(img.parentNode) img.parentNode.replaceChild(sp,img);
+};
+renderMarquee();
 
 refreshTeams(); onTeamType(); pickScope('local');
 
