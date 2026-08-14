@@ -36,8 +36,14 @@ const PRICING = {
 const SCOPE_LABEL = { local:"Local", regional:"Regional", national:"National" };
 const FOCUS_LABEL = { audio:"Streaming Audio", ctv:"Connected TV", both:"Audio + Connected TV" };
 function priceFor(focus,scope){ return (PRICING[focus]||PRICING.audio)[scope]||PRICING.audio.local; }
-/* impressions modeled at a $20 CPM, ~3x frequency */
-function planStats(price){ const imp=Math.round(price/20*1000); return {price,imp,fans:Math.round(imp/3)}; }
+/* Rate card: audio $24 CPM, CTV $32 CPM. "Both" is a blended $28 because the
+   budget splits across the two. Frequency ~3x. Edit here only. */
+const CPM = { audio:24, ctv:32, both:28 };
+function planStats(price, focus){
+  const cpm = CPM[focus] || CPM.audio;
+  const imp = Math.round(price / cpm * 1000);
+  return { price, imp, cpm, fans: Math.round(imp / 3) };
+}
 
 function generateProposalPdf(d={}, rep={}){
   return new Promise((resolve,reject)=>{
@@ -48,7 +54,7 @@ function generateProposalPdf(d={}, rep={}){
     const dateStr=new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
     const focus=(d.focus in PRICING)?d.focus:"audio";
     const scope=(d.scope in SCOPE_LABEL)?d.scope:"local";
-    const sc={ better: planStats(priceFor(focus,scope)) };   // the selected plan
+    const sc={ better: planStats(priceFor(focus,scope), focus) };   // the selected plan
     let y=0, firstPage=true;
 
     /* ---- logo + headers ---- */
@@ -93,18 +99,52 @@ function generateProposalPdf(d={}, rep={}){
       y=doc.y+(o.gap==null?8:o.gap);
     }
     function infoCard(cells){
-      const rows=Math.ceil(cells.length/3), h=16+rows*40;
+      const rows=Math.ceil(cells.length/3), h=18+rows*42;
       ensure(h+14);
       doc.lineWidth(1).roundedRect(ML,y,CW,h,10).fillAndStroke(WHITE,CARDBRD);
       const colW=CW/3;
       cells.forEach((c,i)=>{
-        const cx=ML+16+(i%3)*colW, cy=y+15+Math.floor(i/3)*40;
+        const cx=ML+16+(i%3)*colW, cy=y+15+Math.floor(i/3)*42;
         doc.fillColor(GRAY).font("Helvetica-Bold").fontSize(7.5).text(String(c[0]).toUpperCase(),cx,cy,{characterSpacing:1,width:colW-22});
-        doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(11).text(truncate(c[1]||"—",22),cx,cy+11,{width:colW-22});
+        /* was truncate(...,22) — "Streaming Audio · Loc…". Shrink to fit instead. */
+        const val=String(c[1]||"\u2014");
+        doc.font("Helvetica-Bold").fontSize(11);
+        let fs=11; while(fs>7.5 && doc.fontSize(fs).widthOfString(val)>colW-24) fs-=0.5;
+        doc.fontSize(fs).fillColor(NAVY).text(val,cx,cy+11+(11-fs)*0.5,{width:colW-22,lineBreak:false});
       });
       y+=h+20;
     }
-    function kvRight(label,value,strong,color){
+    /* ---------------------------------------------------------------------------
+   MEDIA PLAN CHIPS
+   The old layout pushed every list into a fixed 170pt right-hand column with a
+   hard 19pt row step, so anything longer than a line wrote on top of the next
+   row — that's the overlapping text in the report. Lists now wrap as chips
+   across the full width, each with its brand colour, and the block grows to fit.
+--------------------------------------------------------------------------- */
+const BRAND_COLOR={
+  spotify:"#1DB954", pandora:"#6C8CFF", iheartradio:"#FF4667", iheart:"#FF4667",
+  siriusxm:"#5C7CFF", "sirius xm":"#5C7CFF", audacy:"#FF3D9A", "amazon music":"#25D1DA",
+  "apple music":"#FC3C44", tunein:"#2FE0D0", soundcloud:"#FF5500", deezer:"#A238FF",
+  hulu:"#1CE783", "amazon prime video":"#00A8E1", "prime video":"#00A8E1",
+  "youtube tv":"#FF3D3D", youtube:"#FF3D3D", "paramount+":"#3C7DFF", peacock:"#FFC629",
+  espn:"#FF3B4E", "espn+":"#FF3B4E", max:"#5B6BFF", roku:"#A55BEA", tubi:"#FF8A1E",
+  "pluto tv":"#F5D400", "sling tv":"#3AB6E8", fubo:"#FA6146", netflix:"#E50914",
+  "fox sports":"#1B72E8", "cbs sports":"#0057B8", "nbc sports":"#F5A623",
+  "nfl network":"#4B8DF8", "big ten network":"#0B54A4", "sec network":"#004B87",
+  "acc network":"#013CA6", tnt:"#E01E5A", "the athletic":"#111111",
+  "locked on":"#FF6B35", "the ringer":"#00A9E0", "barstool sports":"#E01A2B",
+  "westwood one":"#2E7DD1"
+};
+function brandColor(name){
+  const k=String(name||"").toLowerCase().trim();
+  if(BRAND_COLOR[k]) return BRAND_COLOR[k];
+  let best=null;
+  for(const key in BRAND_COLOR){ if(key.length<3) continue;
+    if(k.indexOf(key)>-1 && (!best||key.length>best.length)) best=key; }
+  return best?BRAND_COLOR[best]:CYAN;
+}
+
+function kvRight(label,value,strong,color){
       ensure(22);
       doc.fillColor(strong?NAVY:INK).font(strong?"Helvetica-Bold":"Helvetica").fontSize(10.5).text(label,ML,y,{width:CW-150});
       doc.fillColor(color||(strong?NAVY:INK)).font("Helvetica-Bold").fontSize(11).text(value,MR-170,y,{width:170,align:"right"});
@@ -127,6 +167,60 @@ function generateProposalPdf(d={}, rep={}){
       });
       y+=items.length*17+10;
     }
+    /* label + wrapped brand chips; height grows with content */
+    function mediaBlock(label, items){
+      const list=(Array.isArray(items)?items:[]).map(i=>typeof i==="string"?i:(i&&i.name)).filter(Boolean);
+      if(!list.length) return;
+      const PADX=7, GAP=5, H=15, LH=H+GAP;
+      doc.font("Helvetica-Bold").fontSize(8);
+      const rows=[]; let row=[], w=0;
+      list.forEach(n=>{
+        const cw=doc.widthOfString(n)+PADX*2+11;
+        if(w+cw>CW && row.length){ rows.push(row); row=[]; w=0; }
+        row.push({n,cw}); w+=cw+GAP;
+      });
+      if(row.length) rows.push(row);
+      ensure(14+rows.length*LH+6);
+      doc.fillColor(GRAY).font("Helvetica-Bold").fontSize(7.5)
+         .text(String(label).toUpperCase(),ML,y,{characterSpacing:1,width:CW});
+      y+=12;
+      rows.forEach(r=>{
+        let x=ML;
+        r.forEach(c=>{
+          const col=brandColor(c.n);
+          doc.lineWidth(.8).roundedRect(x,y,c.cw,H,4).fillAndStroke(WHITE,CARDBRD);
+          doc.circle(x+PADX+2.5,y+H/2,2.5).fill(col);
+          doc.fillColor(INK).font("Helvetica-Bold").fontSize(8)
+             .text(c.n,x+PADX+9,y+4.2,{width:c.cw-PADX-11,lineBreak:false});
+          x+=c.cw+GAP;
+        });
+        y+=LH;
+      });
+      y+=4;
+    }
+
+    /* three side-by-side moments, instead of a bullet list */
+    function threeBlocks(items){
+      const gap=12, cw=(CW-2*gap)/3, PAD=12;
+      doc.font("Helvetica").fontSize(8);
+      let h=0;
+      items.forEach(it=>{ h=Math.max(h, doc.heightOfString(it[2],{width:cw-PAD*2})); });
+      const H=h+46;
+      ensure(H+12);
+      items.forEach((it,i)=>{
+        const x=ML+i*(cw+gap);
+        doc.lineWidth(1).roundedRect(x,y,cw,H,9).fillAndStroke("#f7fafd",CARDBRD);
+        doc.roundedRect(x,y,cw,3,1.5).fill(i===1?YELLOW:TEAL);
+        doc.fillColor(GRAY).font("Helvetica-Bold").fontSize(7)
+           .text(it[0].toUpperCase(),x+PAD,y+13,{characterSpacing:1,width:cw-PAD*2});
+        doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(9.5)
+           .text(it[1],x+PAD,y+25,{width:cw-PAD*2});
+        doc.fillColor(INK).font("Helvetica").fontSize(8)
+           .text(it[2],x+PAD,y+39,{width:cw-PAD*2});
+      });
+      y+=H+14;
+    }
+
     function priceCards(){
       const h=150, gap=14, cwc=(CW-2*gap)/3;
       ensure(h+14);
@@ -254,7 +348,7 @@ function generateProposalPdf(d={}, rep={}){
     savingsBox(tradCost,saveM,saveY,sc.better.price);
     bullets([
       "Targeting: broadcast blankets a whole DMA; we reach verified fans by digital behavior and location — no wasted impressions.",
-      "Measurement: radio/TV is estimated and unattributed; every Stadium to Screen impression is tracked to completion, banner clicks, and cost per acquisition.",
+      "Measurement: radio/TV is estimated and unattributed; every Stadium to Screen impression is tracked to completion and to banner clicks.",
       "Actionability: a radio ad can't be clicked; our audio runs beside a clickable companion banner that drives immediate, trackable web traffic.",
       "Agility: instead of one expensive spot on repeat all season, creative is swapped by day of the week to match the fan's mindset."
     ]);
@@ -262,44 +356,47 @@ function generateProposalPdf(d={}, rep={}){
     /* ================= MEDIA PLAN + INCLUDED ================= */
     if(d.recommendations){
       const r=d.recommendations;
-      section("Matched media plan",100);
-      kvRight("Streaming",names(r.streamingServices));
+      section("Matched media plan",150);
+      mediaBlock("Streaming", r.streamingServices);
       if(Array.isArray(r.podcasts)&&r.podcasts.length){
         const localPods=r.podcasts.filter(p=>p&&p.local), natPods=r.podcasts.filter(p=>!p||!p.local);
-        if(localPods.length) kvRight("Local & team podcasts",names(localPods));
-        if(natPods.length)   kvRight("National podcasts",names(natPods));
+        if(localPods.length) mediaBlock("Podcasts we are targeting \u2014 local & team", localPods);
+        if(natPods.length)   mediaBlock("Podcasts we are targeting \u2014 national", natPods);
       }
-      kvRight("Sports networks",names(r.sportsNetworks));
-      kvRight("Related audiences",names(r.relatedAudiences));
-      y+=8;
+      mediaBlock("Sports networks", r.sportsNetworks);
+      mediaBlock("Related audiences", r.relatedAudiences);
+      y+=6;
     }
 
     const wantAudio=d.focus==="audio"||d.focus==="both", wantCtv=d.focus==="ctv"||d.focus==="both";
     const inc=[];
     if(wantAudio) inc.push("3 custom audio commercials (:15 / :30) tuned to the game-week flow");
-    if(wantCtv)   inc.push("Unskippable :15 / :30 CTV video on premium streaming inventory");
+    if(wantCtv)   inc.push("Premium :15 / :30 CTV video on top-tier streaming inventory");
     inc.push("Clickable 300x250 companion banners running alongside every audio spot");
     inc.push("Targeting across premium streaming platforms and top sports podcast networks");
     inc.push("Venue Replay stadium geo-fencing with post-game retargeting");
-    inc.push("Full performance reporting: audio completion rate, banner CTR, and cost per acquisition");
+    inc.push("One clear monthly report on the program \u2014 delivery, completion rate and banner clicks");
     section("What's included",90);
     bullets(inc);
 
-    section("Why this beats a game-day buy",150);
-    para("Most football advertising is one of two mistakes: buying game day only — one spot, one moment, gone — or running all day every day and paying to reach people who will never buy. We do neither.",{gap:10});
-    bullets([
-      "Before the game — pre-game shows and sports talk while fans decide where to eat, watch and spend. This is where intent gets formed.",
-      "During the game — unskippable video and audio in live coverage and halftime, with your brand beside the thing they care about most.",
-      "After the game — recaps, Monday sports talk and the commute home, retargeting the same households while the weekend is still fresh."
+    section("Why this beats a game-day buy",210);
+    para("Most football advertising is one of two mistakes: buying game day only \u2014 one spot, one moment, gone \u2014 or running all day every day and paying to reach people who will never buy. We do neither.",{gap:12});
+    threeBlocks([
+      ["Before the game","They're planning",
+       "Pre-game shows and sports talk while fans decide where to eat, watch and spend. This is where intent gets formed."],
+      ["Game Day","They're locked in",
+       "Premium video and audio around live coverage and halftime, with your brand beside the thing they care about most."],
+      ["After the game","They're deciding",
+       "Recaps, Monday sports talk and the commute home, retargeting the same households while the weekend is still fresh."]
     ]);
-    para("Same verified fans, three moments, three messages — instead of shouting once and hoping, or paying to reach everybody.",{gap:14});
+    para("Same verified fans, three moments, three messages \u2014 instead of shouting once and hoping, or paying to reach everybody. Game Day placements are subject to inventory available in your market at the time of booking.",{size:8.5,color:GRAY,gap:14});
 
     section("Recommended next steps",90);
     numbered([
       "Book a short consult so we can confirm your goals, market, and margins.",
       "We right-size the media plan and budget to your firm — you're not locked into a tier.",
       "We produce the creative and stand up tracking before a single dollar runs.",
-      "You get one clear monthly report tying spend to leads."
+      "You get one clear monthly report on the program."
     ]);
 
     ctaBox();
@@ -320,7 +417,7 @@ function generateProposalPdf(d={}, rep={}){
       doc.page.margins.bottom=0;                     // <- stops the phantom pages
       doc.lineWidth(1).strokeColor(RULE).moveTo(ML,752).lineTo(MR,752).stroke();
       doc.fillColor(GRAYL).font("Helvetica").fontSize(7.5).text(
-        "Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan",
+        "Smart 1 Marketing \u00b7 smart1marketing.com \u00b7 Stadium Marketing Plan",
         ML,760,{width:CW-46,lineBreak:false});
       doc.fillColor(GRAY).font("Helvetica-Bold").fontSize(8).text(
         (i+1)+" / "+total,MR-46,760,{width:46,align:"right",lineBreak:false});

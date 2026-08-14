@@ -448,6 +448,9 @@
     .hero-art{max-width:100%}
   }
 
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+
   /* ---------- provider marquee ---------- */
   .provider-band{padding:26px 0 30px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
         background:linear-gradient(180deg,rgba(15,32,54,.5),rgba(6,15,29,.2))}
@@ -827,9 +830,9 @@
       <div class="pillar ctv">
         <span class="tag">Pillar 02 · Connected TV (CTV/OTT)</span>
         <h3>The Big-Screen Lean-Back</h3>
-        <p>Deliver unskippable, brand-safe video to the largest screen in the house — with the tracking of a digital campaign.</p>
+        <p>Deliver premium, brand-safe video to the largest screen in the house — with the tracking of a digital campaign.</p>
         <ul class="feat">
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>:15 or :30 unskippable video</b> during live college &amp; pro streams.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>Premium :15 or :30 video</b> during live college &amp; pro streams.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>Precision targeting</b> by geography, demographics, and viewing habits.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span><b>Zero waste</b> — track viewership down to the 1-to-1 household level.</span></li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><span>Pairs with mobile <b>Venue Replay</b> retargeting for a full-field surround.</span></li>
@@ -941,7 +944,6 @@
       <div class="gauges">
         <div class="gauge"><div class="val g">96%</div><div class="lab">Audio Completion</div><div class="sub">Typical — fans who heard the full message</div></div>
         <div class="gauge"><div class="val b">2.5%</div><div class="lab">Banner CTR</div><div class="sub">Typical — direct traffic to your site</div></div>
-        <div class="gauge"><div class="val g">$18.50</div><div class="lab">Cost Per Acquisition</div><div class="sub">Illustrative cost of a new lead</div></div>
         <div class="gauge"><div class="val b">10–18:1</div><div class="lab">Return on Ad Spend</div><div class="sub">Illustrative, on multi-screen 1-2 punch</div></div>
       </div>
       <div class="board-note">
@@ -999,6 +1001,15 @@
           </div>
         </div>
 
+        <div class="field">
+          <label>5 · Where should we send it</label>
+          <div class="grid2">
+            <input type="text" id="preCompany" placeholder="Company name" autocomplete="organization">
+            <input type="text" id="preEmail" placeholder="Work email" autocomplete="email" inputmode="email">
+          </div>
+          <div class="hint">We label your Playbook with your company and hold it against your email — so you can come back to it.</div>
+        </div>
+
         <button class="btn btn-turf" id="buildBtn" onclick="buildProposal()">Build my Playbook →</button>
       </div>
 
@@ -1022,12 +1033,12 @@
     <h2>Secure your spot<br>on the roster.</h2>
     <p>Flight dates are booking now for the upcoming college and pro football season. Don't leave your brand's biggest opportunity on the sidelines.</p>
     <div class="tagline">"Strong partnerships create smarter marketing."</div>
-    <a href="#" class="btn btn-turf" id="contactBtn">Talk to a strategist</a>
+    <a href="https://smart1marketing.com/footballmarketingconsult" target="_blank" rel="noopener" class="btn btn-turf" id="contactBtn">Talk to a strategist</a>
   </div>
 </section>
 
 <footer>
-  <div class="wrap">Stadium to Screen — College &amp; Pro Football Audio + CTV Packages<br>Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan</div>
+  <div class="wrap">Stadium to Screen — College &amp; Pro Football Audio + CTV Packages<br>Smart 1 Marketing · smart1marketing.com · Stadium Marketing Plan</div>
 </footer>
 
 <script>
@@ -1073,11 +1084,19 @@ const apiUrl = p => (BACKEND_URL||"").replace(/\/$/,"") + p;
 const RETRY_STATUS = [0,408,429,500,502,503,504,522,524];
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
+/* Backoff must OUTLAST a Render cold boot. The old schedule gave up after ~8
+   seconds, which is why waiting didn't help — the box hadn't finished starting.
+   Six attempts over ~77s: 2s, 5s, 10s, 15s, 20s, 25s. */
+const RETRY_DELAYS = [2000, 5000, 10000, 15000, 20000, 25000];
+
 async function fetchRetry(url, opts, tries, onWait){
-  tries = tries || 4;
+  tries = tries || RETRY_DELAYS.length + 1;
   let last = null;
   for (let i = 0; i < tries; i++){
-    if (i){ if (onWait) onWait(i, tries); await sleep(1200 * Math.pow(1.9, i-1)); }
+    if (i){
+      if (onWait) onWait(i, tries);
+      await sleep(RETRY_DELAYS[Math.min(i-1, RETRY_DELAYS.length-1)]);
+    }
     try{
       const r = await fetch(url, opts);
       if (r.ok) return r;
@@ -1330,7 +1349,7 @@ function recommendPackage(focus,scope){
   const price=priceFor(focus,scope);
   const note={
     audio:"The full game-week audio flow — three creative blocks running before, during and after the game, with clickable companion banners.",
-    ctv:"Unskippable :15 / :30 video on premium streaming apps, plus display retargeting to the same households.",
+    ctv:"Premium :15 / :30 video on top-tier streaming apps, plus display retargeting to the same households.",
     both:"Multi-screen coverage — CTV builds awareness on the big screen while streaming audio and mobile follow the same fans everywhere else."
   }[focus]||"";
   return { name:`${FOCUS_LABEL[focus]} · ${SCOPE_LABEL[scope]}`, price:usd(price)+"/mo", amount:price, note };
@@ -1458,12 +1477,16 @@ function partialPayload(){
   if(!partialCtx) return null;
   const p={team:partialCtx.team,league:partialCtx.league,scope:partialCtx.scope,scopeLabel:partialCtx.scopeLabel,
     focus:partialCtx.focus,dma:partialCtx.dma,city:partialCtx.city,
+    recommendedPackage:partialCtx.recommendedPackage,packagePrice:partialCtx.packagePrice,
     page:partialCtx.page,source:partialCtx.source};
+  /* step 5 in the builder — captured as a lead the moment they build, so an
+     abandoned session is still a lead instead of nothing. */
+  const pc=document.getElementById('preCompany'), pe=document.getElementById('preEmail');
+  if(pc && pc.value.trim()) p.company = pc.value.trim();
+  if(pe && pe.value.trim()) p.email   = pe.value.trim();
   const lf=document.getElementById("leadForm");
   if(lf){ ["name","email","company","phone"].forEach(k=>{
-    const el=lf.querySelector('[name="'+k+'"]'); const v=el&&el.value?el.value.trim():"";
-    if(v) p[k]=v.slice(0,300);
-  }); }
+    const el=lf.querySelector('[name="'+k+'"]'); if(el && el.value.trim()) p[k]=el.value.trim(); }); }
   return p;
 }
 function sendPartial(){
@@ -1545,7 +1568,7 @@ async function buildProposal(){
   </div>`;
   let _ci=0;
   const _rot=setInterval(()=>{const c=document.getElementById("spinCap");if(c){_ci=(_ci+1)%CAPTIONS.length;c.textContent=CAPTIONS[_ci];}},2200);
-  const _warm=setTimeout(()=>{clearInterval(_rot);const t=document.getElementById("spinCap");if(t)t.textContent="Waking up the server… first load can take up to 30s";},4500);
+  const _warm=setTimeout(()=>{clearInterval(_rot);const t=document.getElementById("spinCap");if(t)t.textContent="Calling the plays to the server first load can take up to 30s";},4500);
   box.scrollIntoView({behavior:'smooth',block:'center'});
 
   let rec, aiGenerated=false;
@@ -1648,7 +1671,7 @@ function render(team,m,pkg,rec,ai){
   /* Four samples, local/team first — then the size of the rest of the network. */
   const sample=[...localPods.slice(0,2),...natPods].slice(0,4);
   const podcastsBlock=wantAudio?`
-          <div class="block-title">Podcasts we'd put you on</div>
+          <div class="block-title">Podcasts we are targeting</div>
           ${podTiles(sample)}
           <p class="prop-note">${extraLine('podcasts',sample.length)} Exact shows are confirmed when your flight is booked.</p>`:'';
 
@@ -1720,12 +1743,12 @@ function render(team,m,pkg,rec,ai){
         <div class="diff-row">
           <div class="diff-cell"><div class="w">Before the game</div><b>They are planning</b>
             <span>Pre-game shows and sports talk while they decide where to eat, watch and spend. This is where intent gets formed.</span></div>
-          <div class="diff-cell"><div class="w">During the game</div><b>They are locked in</b>
-            <span>Unskippable video and audio in live coverage and halftime — full attention, your brand beside the thing they care about most.</span></div>
+          <div class="diff-cell"><div class="w">Game Day</div><b>They are locked in</b>
+            <span>Premium video and audio around live coverage and halftime, with your brand beside the thing they care about most.</span></div>
           <div class="diff-cell"><div class="w">After the game</div><b>They are deciding</b>
             <span>Recaps, Monday talk and the commute home, retargeting the same households while the weekend is still fresh.</span></div>
         </div>
-        <p style="margin-bottom:14px">Same fans, three moments, three messages — instead of shouting once and hoping, or paying to reach everybody.</p>
+        <p style="margin-bottom:14px">Same fans, three moments, three messages — instead of shouting once and hoping, or paying to reach everybody.<br><span style="font-size:.72rem;color:var(--steel-dim)">Game Day placements are subject to inventory available in your market at the time of booking.</span></p>
       </div>
 
       <div class="block-title" id="formTitle">Get your ${team.name} Playbook (PDF)</div>
@@ -1746,13 +1769,20 @@ function render(team,m,pkg,rec,ai){
       </form>
       <div class="disclaimer">
         <b>Estimated audiences.</b> Figures are <b>modeled planning estimates</b> — computed from baseline market data (Nielsen-style DMA / Census households) and industry-average device and match-rate assumptions, not guaranteed delivery. Podcast and audience lists are suggestions to validate against live availability. We confirm exact inventory, reach and pricing for ${team.name} before anything runs.
-        <br><br>Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan
+        <br><br>Smart 1 Marketing · smart1marketing.com · Stadium Marketing Plan
       </div>
     </div>`;
   const leadCtx={team:team.name,league:state.league,scope:state.scope,scopeLabel:m.scopeLabel,focus:state.focus,dma:team.dma,city:team.city,venue:team.venue,recommendedPackage:pkg.name,packagePrice:pkg.price,estFanBase:m.fanBase,estHouseholds:m.households,estMatchable:m.matchable,estDevicesTotal:m.devices.total,estDevicesPhones:m.devices.phones,estDevicesComputers:m.devices.computers,estDevicesTablets:m.devices.tablets,estDevicesCTV:m.devices.connectedTV,page:"football-audio-video-playbook",source:"Stadium to Screen proposal builder"};
   const lf=document.getElementById("leadForm");
   // partial lead capture: the report step is reached — team/league/scope are known
   partialCtx=leadCtx; partialSent=false; sendPartial();
+  /* carry step 5 into the download form so nobody types it twice */
+  (function(){
+    const pc=document.getElementById('preCompany'), pe=document.getElementById('preEmail');
+    const c=lf.querySelector('[name="company"]'), e=lf.querySelector('[name="email"]');
+    if(pc && pc.value.trim() && c && !c.value) c.value = pc.value.trim();
+    if(pe && pe.value.trim() && e && !e.value) e.value = pe.value.trim();
+  })();
   // if the visitor then fills fields but abandons, allow one refreshed partial (debounced)
   let _ptDeb=null;
   lf.addEventListener("input",()=>{ clearTimeout(_ptDeb); _ptDeb=setTimeout(()=>{ partialSent=false; },800); });
@@ -1774,16 +1804,21 @@ function render(team,m,pkg,rec,ai){
        slow or unset used to take the download down with it — and the old code
        then printed "Your report is ready" with no file. The PDF now comes from
        a dedicated endpoint that does nothing else, so it can't be collateral. */
-    const waiting=i=>{ if(btn) btn.textContent = i>1 ? "Still working \u2014 waking the server\u2026" : "Building your Playbook\u2026"; };
+    const waiting=i=>{
+      if(!btn) return;
+      btn.textContent = i<=1 ? "Calling the plays to the server\u2026"
+                     : i<=3 ? "Still calling \u2014 the server is warming up\u2026"
+                            : "Almost there \u2014 hang tight\u2026";
+    };
     const getPdfDirect=()=>fetchRetry(apiUrl("/api/playbook"),{
-        method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)},4,waiting)
+        method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)},7,waiting)
       .then(r=>r.blob())
       .then(b=>{ if(!b||b.size<1000) throw new Error("empty pdf");
         return {objectUrl:URL.createObjectURL(b),reportFilename:"stadium-to-screen-playbook.pdf"}; });
 
     let res=null;
     try{
-      const r=await fetchRetry(apiUrl("/api/lead"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)},4,waiting);
+      const r=await fetchRetry(apiUrl("/api/lead"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)},7,waiting);
       res=await r.json();
       if(!res.pdfBase64&&!res.pdfUrl) res=Object.assign(res,await getPdfDirect());
     }catch(err){
@@ -1793,11 +1828,10 @@ function render(team,m,pkg,rec,ai){
       try{ res=await getPdfDirect(); }
       catch(e2){
             btn.disabled=false; btn.textContent="Build my Playbook (PDF) →";
-        const why = (API_OK===false)
-        ? "We can't reach the Playbook service right now."
-        : "The Playbook server didn't respond in time.";
-      msg.innerHTML='<span class="lf-err">'+why+' Your details are saved \u2014 wait a few seconds and press the button again, or email <b>sales@smart1marketing.com</b> and we\'ll send it straight over.</span>';
-      gtm("playbook_failed",{team:leadCtx.team,reason:err.message});
+        msg.innerHTML='<span class="lf-err"><b>Delay of game.</b> We have to call a new play in. '
+        + 'Your details are saved \u2014 wait a few seconds and press the button again, or email '
+        + '<b>sales@smart1marketing.com</b> and we\'ll send it straight over.</span>';
+            gtm("playbook_failed",{team:leadCtx.team,reason:err.message});
         return;                                   // never claim success without a PDF
       }
     }
@@ -1814,16 +1848,32 @@ function render(team,m,pkg,rec,ai){
     }
     if(!url&&res.pdfUrl) url=res.pdfUrl;
 
-    if(url){                                       // fire the download immediately
-      const a=document.createElement("a"); a.href=url; a.download=fileName;
-      document.body.appendChild(a); a.click(); a.remove();
-      gtm("report_downloaded",{team:leadCtx.team});
+    /* The widget runs inside an iframe on the site. Sandboxed frames routinely
+       block programmatic downloads and blob: URLs, which is another way the
+       download can silently not happen. When we're framed and the server gave us
+       a hosted URL, use that and open it in a new tab instead. */
+    const framed = (function(){ try{ return window.top !== window.self; }catch(e){ return true; } })();
+    if(framed && res.pdfUrl) url = res.pdfUrl;
+
+    if(url){
+      try{
+        const a=document.createElement("a");
+        a.href=url;
+        if(framed && res.pdfUrl){ a.target="_blank"; a.rel="noopener"; }
+        else { a.download=fileName; }
+        document.body.appendChild(a); a.click(); a.remove();
+        gtm("report_downloaded",{team:leadCtx.team});
+      }catch(e){ /* the visible button below still works */ }
     }
 
     const first=(d.name||"there").trim().split(" ")[0];
     const calendarUrl=res.calendarUrl||CALENDAR_URL;
     const book=calendarUrl?'<a class="btn btn-turf" id="bookCall" href="'+calendarUrl+'" target="_blank" rel="noopener">Book a strategy call \u2192</a>':'';
-    const dl=url?'<a class="btn btn-ghost" id="dlReport" href="'+url+'" download="'+fileName+'">\u2193 Download Playbook (PDF)</a>':'';
+    const dl=url
+      ? '<a class="btn btn-ghost" id="dlReport" href="'+url+'"'
+        + ((framed && res.pdfUrl) ? ' target="_blank" rel="noopener"' : ' download="'+fileName+'"')
+        + '>\u2193 Download Playbook (PDF)</a>'
+      : '';
     const emailLine=API_FLAGS.email?" We've emailed you a copy too.":"";
     const body=url
       ? "It should have downloaded automatically — if not, grab it below."+emailLine
@@ -1844,7 +1894,7 @@ function render(team,m,pkg,rec,ai){
 const io=new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}}),{threshold:.14});
 document.querySelectorAll('.card,.play,.pillar,.pack,.gauge,.step,.col,.script').forEach(el=>{el.classList.add('reveal-el');io.observe(el);});
 const cb=document.getElementById('contactBtn');
-if(cb) cb.addEventListener('click',e=>{e.preventDefault();document.getElementById('builder').scrollIntoView({behavior:'smooth'});});
+
 
 /* ---------- provider marquee ----------------------------------------------
    WAS: <img> tags pointing at a logo CDN. On the live site every one failed to
