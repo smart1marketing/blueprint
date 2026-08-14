@@ -411,19 +411,54 @@
   .lead-success{margin-top:6px;border:1px solid var(--turf);background:rgba(47,208,122,.08);border-radius:14px;padding:18px 20px;font-size:1rem;color:var(--chalk)}
   .lead-success b{color:var(--turf-soft)}
   @media(max-width:560px){.lf-grid{grid-template-columns:1fr}}
-  /* gated report reveal */
-  .lock-pill{font-family:'JetBrains Mono';font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;background:rgba(139,160,184,.18);color:var(--steel);padding:.28em .6em;border-radius:20px;margin-left:8px}
-  .lock-pill.open{background:rgba(47,208,122,.16);color:var(--turf-soft)}
-  .gated{position:relative;border-radius:14px;overflow:hidden}
-  .gated .gated-content{filter:blur(6px);opacity:.5;pointer-events:none;user-select:none;max-height:200px;overflow:hidden;transition:filter .45s ease,opacity .45s ease}
-  .gated .gate-overlay{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:18px;background:linear-gradient(180deg,rgba(10,22,38,.25),rgba(10,22,38,.6))}
-  .gated .gate-card{max-width:36ch}
-  .gated .gate-card svg{margin-bottom:8px}
-  .gated .gate-title{font-family:'Archivo';font-weight:800;font-size:1.12rem;margin-bottom:6px}
-  .gated .gate-sub{font-size:.88rem;color:var(--steel)}
-  .gated .gate-cta{margin-top:14px;font-size:.92rem}
-  .gated.unlocked .gated-content{filter:none;opacity:1;pointer-events:auto;user-select:auto;max-height:none;overflow:visible}
-  .gated.unlocked .gate-overlay{display:none}
+  /* ---- audience funnel (replaces the contradictory metric tiles) ---- */
+  .funnel{display:grid;gap:8px;margin:10px 0 4px}
+  .fr{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:11px;
+      padding:12px 14px;background:rgba(6,15,29,.45)}
+  .fr .bar{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,rgba(30,157,227,.22),rgba(30,157,227,0));transition:width .6s cubic-bezier(.2,.8,.2,1)}
+  .fr.screens .bar{background:linear-gradient(90deg,rgba(47,208,122,.22),rgba(47,208,122,0))}
+  .fr-in{position:relative;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .fr-lab{font-size:.82rem;font-weight:700;color:var(--chalk)}
+  .fr-sub{font-size:.72rem;color:var(--steel);margin-top:3px;line-height:1.45;max-width:60ch}
+  .fr-val{font-family:'JetBrains Mono',monospace;font-size:1.15rem;font-weight:700;color:var(--electric-soft);white-space:nowrap}
+  .fr.screens .fr-val{color:var(--turf-soft)}
+  .fr-pill{display:inline-block;font-size:.6rem;font-weight:800;letter-spacing:.06em;
+      background:rgba(30,157,227,.16);color:var(--electric-soft);border-radius:5px;padding:2px 6px;margin-left:7px;vertical-align:middle}
+  .fr.screens .fr-pill{background:rgba(47,208,122,.16);color:var(--turf-soft)}
+  .unit-note{border:1px solid rgba(47,208,122,.28);background:rgba(47,208,122,.07);border-radius:11px;
+      padding:12px 14px;font-size:.78rem;color:var(--steel);line-height:1.6;margin-top:8px}
+  .unit-note b{color:var(--chalk)}
+
+  /* ---- brand logo tiles (replace the plain bulleted name lists) ---- */
+  .logos{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 2px}
+  .lt{display:flex;align-items:center;gap:9px;background:rgba(6,15,29,.5);border:1px solid var(--line);
+      border-radius:10px;padding:8px 13px 8px 8px;transition:.16s}
+  .lt:hover{border-color:var(--line-strong)}
+  .lt .mark{width:28px;height:28px;flex:0 0 28px;border-radius:7px;overflow:hidden;display:grid;place-items:center;background:#fff}
+  .lt .mark img{width:100%;height:100%;object-fit:contain}
+  .lt .mono{width:100%;height:100%;display:grid;place-items:center;font-size:.68rem;font-weight:800;color:#fff}
+  .lt .txt b{display:block;font-size:.79rem;font-weight:700;color:var(--chalk);line-height:1.25}
+  .lt .txt span{display:block;font-size:.66rem;color:var(--steel-dim);margin-top:1px}
+  .pods{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:4px 0 2px}
+  @media(max-width:720px){.pods{grid-template-columns:1fr}}
+  .pod{display:flex;align-items:center;gap:10px;background:rgba(6,15,29,.5);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  .pod .mark{width:30px;height:30px;flex:0 0 30px;border-radius:7px;overflow:hidden;display:grid;place-items:center;background:#fff}
+  .pod .mark img{width:100%;height:100%;object-fit:contain}
+  .pod b{display:block;font-size:.79rem;font-weight:700;color:var(--chalk);line-height:1.3}
+  .pod span{display:block;font-size:.66rem;color:var(--steel-dim);margin-top:2px}
+  .badge-local{display:inline-block;background:rgba(47,208,122,.18);color:var(--turf-soft);font-size:.55rem;
+      font-weight:800;letter-spacing:.07em;border-radius:4px;padding:2px 5px;margin-left:6px;vertical-align:middle}
+  .pod-group{margin-bottom:12px}
+  .pod-group>h5{font-size:.64rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+      color:var(--steel-dim);margin:0 0 8px}
+
+  /* ---- Playbook download ---- */
+  .dl-ready{border:1px solid rgba(47,208,122,.3);background:rgba(47,208,122,.08);border-radius:12px;
+      padding:20px;text-align:center;margin-top:14px}
+  .dl-ready h4{font-size:1.05rem;color:var(--chalk);margin:0 0 6px}
+  .dl-ready p{font-size:.8rem;color:var(--steel);margin:0 0 14px;line-height:1.55}
+  .dl-actions{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
+
   .lf-trust{font-size:.76rem;color:var(--steel-dim);margin-top:10px}
 </style>
 </head>
@@ -947,14 +982,48 @@
    to DMA_HOUSEHOLDS / STATES / multipliers / computeMetrics must be made in
    BOTH places or the widget and the server/PDF will disagree.
 ============================================================================ */
-const BACKEND_URL = ""; // empty = curated lists only
+/* FIXED: this was "" — and because the widget is embedded on smart1marketing.com,
+   every call resolved to https://smart1marketing.com/api/... and 404'd. That is why
+   the PDF never downloaded and why the podcast lists were always the generic
+   national fallback: the AI endpoint was never actually reached.
+   Verified live: https://blueprint-2.onrender.com/api/health -> {ok:true, ai:true}. */
+let BACKEND_URL = "https://blueprint-2.onrender.com";
+const BACKEND_CANDIDATES = [BACKEND_URL, ""];   // first one that answers /api/health wins
+let API_FLAGS = {};                              // ai / cloudinary / ghl / email / calendar
+let API_OK = null;
+const apiUrl = p => (BACKEND_URL||"").replace(/\/$/,"") + p;
+function resolveBackend(){
+  let i=0;
+  const attempt=()=>{
+    if(i>=BACKEND_CANDIDATES.length){
+      API_OK=false;
+      console.error("[Stadium to Screen] Backend unreachable — the PDF Playbook cannot be built. Check BACKEND_URL.");
+      return null;
+    }
+    const base=BACKEND_CANDIDATES[i++];
+    return fetch((base||"").replace(/\/$/,"")+"/api/health")
+      .then(r=>{ if(!r.ok) throw new Error("health "+r.status); return r.json(); })
+      .then(h=>{ BACKEND_URL=base; API_OK=true; API_FLAGS=h||{};
+        if(!h.ai)    console.warn("[Stadium to Screen] OPENAI_API_KEY not set — curated lists only.");
+        if(!h.email) console.warn("[Stadium to Screen] SMTP_URL not set — prospects are NOT emailed their Playbook.");
+        return h; })
+      .catch(attempt);
+  };
+  return attempt();
+}
+resolveBackend();
 // Leads POST to BACKEND_URL + "/api/lead" (server builds the PDF, stores it in Cloudinary, forwards to GHL_WEBHOOK_URL).
 const CALENDAR_URL = ""; // optional "Book a strategy call" calendar link (server can also supply via /api/lead)
 
 const AVG_HH_SIZE = 2.5;
 const DEVICE_PER_HH = { phones:2.6, computers:1.6, tablets:0.9, connectedTV:2.3 };
 const MATCH_RATE = 0.55;
+/* Share of HOUSEHOLDS that are reachable fan households. The old build applied
+   this to PEOPLE, which is what made "fan base" read as smaller than
+   "households" on screen. */
 const FAN_PENETRATION = { local:0.20, regional:0.08, national:0.03 };
+const ADDRESSABLE_RATE = 0.86;   // fan homes with a matchable connected device
+const FANS_PER_FAN_HH  = 2.2;    // people per fan home — pricing + one stat line only
 const NATIONAL = { households:132000000, population:335000000 };
 
 const DMA_HOUSEHOLDS = {
@@ -1100,39 +1169,132 @@ function marketForScope(team,scope){
   if(scope==="regional") return {label:team.stateName,households:team.stateHouseholds,population:STATES[team.state]?STATES[team.state][1]:null,geo:`the state of ${team.stateName}`};
   return {label:`${team.dma} DMA`,households:team.dmaHouseholds,population:team.dmaHouseholds?Math.round(team.dmaHouseholds*AVG_HH_SIZE):null,geo:`the ${team.dma} media market (DMA)`};
 }
+/* ---------------------------------------------------------------------------
+   THE BIG FIX. The old model multiplied devices off EVERY household in the
+   market instead of off the fan households we can actually reach, so the funnel
+   got WIDER as it got more specific:
+
+     households  940,000
+     fanBase     470,000      <- people, so "fewer fans than houses"
+     matchable 3,825,800      <- 4x the households, 8x the fan base
+
+   Now every step narrows, in HOMES, and only the last step changes unit to
+   SCREENS — with screensPerHome returned so the jump explains itself.
+--------------------------------------------------------------------------- */
 function computeMetrics(team,scope){
-  const m=marketForScope(team,scope); const hh=m.households||0;
-  const pen=FAN_PENETRATION[scope]||FAN_PENETRATION.local;
+  const m=marketForScope(team,scope);
+  const homes=m.households||0;
+  const fanPct=FAN_PENETRATION[scope]||FAN_PENETRATION.local;
+  const fanHomes=Math.round(homes*fanPct);
+  const reachableHomes=Math.round(fanHomes*ADDRESSABLE_RATE);
+
+  // screens counted INSIDE the reachable fan homes only
   const devices={
-    phones:Math.round(hh*DEVICE_PER_HH.phones),
-    computers:Math.round(hh*DEVICE_PER_HH.computers),
-    tablets:Math.round(hh*DEVICE_PER_HH.tablets),
-    connectedTV:Math.round(hh*DEVICE_PER_HH.connectedTV)
+    phones:      Math.round(reachableHomes*DEVICE_PER_HH.phones      *MATCH_RATE),
+    computers:   Math.round(reachableHomes*DEVICE_PER_HH.computers   *MATCH_RATE),
+    tablets:     Math.round(reachableHomes*DEVICE_PER_HH.tablets     *MATCH_RATE),
+    connectedTV: Math.round(reachableHomes*DEVICE_PER_HH.connectedTV *MATCH_RATE)
   };
   devices.total=devices.phones+devices.computers+devices.tablets+devices.connectedTV;
+  const screensPerHome=reachableHomes?devices.total/reachableHomes:0;
+  const fansInHomes=Math.round(fanHomes*FANS_PER_FAN_HH);
+
   return {scope,scopeLabel:m.label,geo:m.geo,
-    fanBase:Math.round((m.population||hh*AVG_HH_SIZE)*pen),
-    households:hh,devices,matchable:Math.round(devices.total*MATCH_RATE)};
+    homes, fanHomes, reachableHomes, screens:devices.total, screensPerHome,
+    fanPct, addressablePct:ADDRESSABLE_RATE, fansInHomes, devices,
+    // legacy aliases so the PDF payload keeps working (pricing tier unchanged)
+    households:homes, fanBase:fansInHomes, matchable:devices.total};
 }
 function recommendPackage(focus){
   if(focus==="ctv") return {name:"The Championship (CTV)",price:"$6,000/mo",note:"Premium CTV inventory with $2,000 dedicated to Venue Replay stadium targeting."};
   if(focus==="both") return {name:"Full-Field Coverage (Audio + CTV)",price:"from $6,000/mo",note:"Multi-screen saturation — CTV awareness feeding streaming audio and mobile Venue Replay."};
   return {name:"The Champion (Audio)",price:"$4,500/mo",note:"Full 3-block audio flow plus the Stadium Display Add-On for local retargeting."};
 }
-function fallbackRecommendations(focus){
+/* ---------------------------------------------------------------------------
+   LOCAL / TEAM PODCASTS
+   The old list was Finebaum / McAfee / Simmons for every team in every market —
+   nothing a local advertiser recognises. (Confirmed live: the AI returned five
+   national shows for the Bengals, one of them an NBA podcast.)
+   Add or replace flagship shows in LOCAL_OVERRIDES below — that is the only
+   place. Everything else falls back to two patterns that genuinely exist
+   league-wide: "Locked On <Team>" and the official team podcast.
+--------------------------------------------------------------------------- */
+const LOCAL_OVERRIDES = {
+  "Cincinnati Bengals":[["The Bengals Booth Podcast","Bengals.com — official"]],
+  "Cleveland Browns":[["Cleveland Browns Daily","Browns.com — official"],["Orange and Brown Talk","cleveland.com"]],
+  "Pittsburgh Steelers":[["The Standard is the Standard","Steelers.com — official"]],
+  "Green Bay Packers":[["Packers Unscripted","Packers.com — official"]],
+  "Buffalo Bills":[["One Bills Live","Bills.com — official"]],
+  "Philadelphia Eagles":[["Eagles Insider Podcast","Eagles.com — official"]],
+  "New England Patriots":[["Patriots Unfiltered","Patriots.com — official"]],
+  "Detroit Lions":[["Twentyman in the Huddle","Lions.com — official"]],
+  "Chicago Bears":[["Hoge & Jahns","Chicago sports talk"]],
+  "Denver Broncos":[["Broncos Country Tonight","Denver sports radio"]],
+  "Dallas Cowboys":[["Blogging The Boys","SB Nation — Dallas"]],
+  "Ohio State Buckeyes":[["Buckeye Talk","cleveland.com"]],
+  "Georgia Bulldogs":[["DawgNation Daily","DawgNation — Atlanta"]],
+  "Penn State Nittany Lions":[["The Blue White Show","Blue White Illustrated"]]
+};
+function localPodcasts(team){
+  if(!team) return [];
+  const nick=team.name.split(" ").slice(-1)[0];
+  const out=(LOCAL_OVERRIDES[team.name]||[]).map(([name,network])=>({name,network,local:true}));
+  out.push({name:`Locked On ${nick}`,network:"Locked On Podcast Network",local:true});
+  out.push({name:team.league==="pro"?`${team.name} Official Team Podcast`:`${team.name} Official Athletics Podcast`,
+            network:team.name,local:true});
+  const seen=new Set();
+  return out.filter(p=>!seen.has(p.name)&&seen.add(p.name)).slice(0,4);
+}
+
+/* Brand -> domain, for real logos instead of a bare text list. */
+const BRAND_DOMAINS={
+  "hulu":"hulu.com","hulu + live tv":"hulu.com","peacock":"peacocktv.com",
+  "paramount+":"paramountplus.com","paramount plus":"paramountplus.com",
+  "espn":"espn.com","espn+":"espn.com","max":"max.com","hbo max":"max.com",
+  "netflix":"netflix.com","prime video":"primevideo.com","amazon prime video":"primevideo.com",
+  "tubi":"tubitv.com","roku":"roku.com","the roku channel":"roku.com","roku channel":"roku.com",
+  "pluto tv":"pluto.tv","fubo":"fubo.tv","fubotv":"fubo.tv","youtube tv":"youtube.com",
+  "youtube":"youtube.com","sling tv":"sling.com","sling":"sling.com","philo":"philo.com",
+  "directv stream":"directv.com","vizio":"vizio.com","samsung tv plus":"samsung.com",
+  "spotify":"spotify.com","pandora":"pandora.com","iheartradio":"iheart.com","iheart":"iheart.com",
+  "audacy":"audacy.com","siriusxm":"siriusxm.com","sirius xm":"siriusxm.com",
+  "amazon music":"music.amazon.com","apple podcasts":"apple.com","soundcloud":"soundcloud.com",
+  "tunein":"tunein.com","deezer":"deezer.com","triton digital":"tritondigital.com","megaphone":"megaphone.fm",
+  "fox sports":"foxsports.com","fs1":"foxsports.com","cbs sports":"cbssports.com",
+  "cbs sports network":"cbssports.com","nbc sports":"nbcsports.com","tnt":"tntdrama.com",
+  "tnt sports":"tntsports.com","nfl network":"nfl.com","nfl":"nfl.com",
+  "big ten network":"bigten.org","btn":"bigten.org","sec network":"espn.com","acc network":"espn.com",
+  "fanduel sports network":"fanduelsportsnetwork.com","bally sports":"fanduelsportsnetwork.com",
+  "the athletic":"theathletic.com","bleacher report":"bleacherreport.com","westwood one":"westwoodone.com",
+  "cbs":"cbs.com","nbc":"nbc.com","abc":"abc.com","fox":"fox.com","barstool sports":"barstoolsports.com",
+  "the ringer":"theringer.com","locked on podcast network":"lockedonpodcasts.com",
+  "locked on":"lockedonpodcasts.com","sb nation":"sbnation.com","wondery":"wondery.com"
+};
+function brandDomain(name){
+  if(!name) return null;
+  const k=String(name).toLowerCase().trim().replace(/\s+/g," ");
+  if(BRAND_DOMAINS[k]) return BRAND_DOMAINS[k];
+  let best=null;
+  for(const key in BRAND_DOMAINS){ if(key.length<3) continue;
+    if(k.includes(key)&&(!best||key.length>best.length)) best=key; }
+  return best?BRAND_DOMAINS[best]:null;
+}
+
+function fallbackRecommendations(focus,team){
   const audioSvc=["Spotify","Pandora","iHeartRadio","Audacy","Amazon Music","SiriusXM"];
-  const ctvSvc=["Hulu + Live TV","YouTube TV","Sling TV","Fubo","ESPN+","Paramount+","Peacock","Roku Channel"];
+  const ctvSvc=["Hulu + Live TV","YouTube TV","Sling TV","Fubo","ESPN+","Paramount+","Peacock","The Roku Channel"];
   const svc=focus==="ctv"?ctvSvc:focus==="both"?[...ctvSvc.slice(0,5),...audioSvc.slice(0,4)]:audioSvc;
   const wantAudio=focus==="audio"||focus==="both";
+  const national=[
+    {name:"The Pat McAfee Show",network:"ESPN",local:false},
+    {name:"The Bill Simmons Podcast",network:"The Ringer",local:false},
+    {name:"The Solid Verbal",network:"College football",local:false},
+    {name:"The Paul Finebaum Show",network:"ESPN / SEC Network",local:false}
+  ];
   return {
     streamingServices:svc.map(name=>({name,why:"Common football-fan inventory"})),
-    podcasts:wantAudio?[
-      {name:"The Paul Finebaum Show",network:"ESPN / SEC Network"},
-      {name:"The Solid Verbal",network:"College football"},
-      {name:"The Pat McAfee Show",network:"ESPN"},
-      {name:"The Bill Simmons Podcast",network:"The Ringer"}
-    ]:[],
-    sportsNetworks:["ESPN","Fox Sports","CBS Sports","NBC Sports","The Athletic","Bleacher Report"].map(name=>({name,why:"National sports audience"})),
+    podcasts:wantAudio?[...localPodcasts(team),...national].slice(0,8):[],
+    sportsNetworks:["ESPN","Fox Sports","CBS Sports","NBC Sports","NFL Network"].map(name=>({name,why:"Carries this team's games"})),
     relatedAudiences:["Sports betting & DFS","Trucks & domestic auto","QSR & pizza delivery","Beer, spirits & tailgate","Sportswear & fan gear","Home improvement"].map(name=>({name,why:"Indexes high with football fans"}))
   };
 }
@@ -1152,7 +1314,7 @@ function partialPayload(){
     focus:partialCtx.focus,dma:partialCtx.dma,city:partialCtx.city,
     page:partialCtx.page,source:partialCtx.source};
   const lf=document.getElementById("leadForm");
-  if(lf){ ["company_website","name","email","company","phone"].forEach(k=>{
+  if(lf){ ["name","email","company","phone"].forEach(k=>{
     const el=lf.querySelector('[name="'+k+'"]'); const v=el&&el.value?el.value.trim():"";
     if(v) p[k]=v.slice(0,300);
   }); }
@@ -1255,12 +1417,60 @@ async function buildProposal(){
       body:JSON.stringify({league:state.league,team:team.name,focus:state.focus,scope:state.scope})});
     if(!r.ok) throw new Error('bad status');
     const j=await r.json(); rec=j.recommendations; aiGenerated=j.aiGenerated;
-  }catch(e){ rec=fallbackRecommendations(state.focus); aiGenerated=false; }
+  }catch(e){ rec=fallbackRecommendations(state.focus,team); aiGenerated=false; }
   lastRec=rec;
 
   clearTimeout(_warm); clearInterval(_rot);
   render(team,m,pkg,rec,aiGenerated);
   gtm("proposal_built",{team:team.name,league:state.league,scope:state.scope,focus:state.focus});
+}
+/* Four-step chain so a logo box is never empty:
+   self-hosted /logos/<domain>.svg -> Clearbit -> favicon -> coloured monogram. */
+window.S1=window.S1||{};
+S1.logoStep=function(img){
+  const d=img.dataset, step=Number(d.step||0)+1; d.step=step;
+  if(step===1){ img.src="https://logo.clearbit.com/"+d.domain; return; }
+  if(step===2){ img.src="https://www.google.com/s2/favicons?sz=128&domain="+d.domain; return; }
+  const sp=document.createElement("span");
+  sp.className="mono"; sp.style.background="hsl("+d.hue+",52%,42%)"; sp.textContent=d.mono;
+  if(img.parentNode) img.parentNode.replaceChild(sp,img);
+};
+function hueOf(x){let h=0;for(let i=0;i<x.length;i++)h=(h*31+x.charCodeAt(i))%360;return h;}
+function monogram(x){
+  const parts=String(x).replace(/[^a-z0-9 +]/gi,"").split(/\s+/).filter(Boolean);
+  return ((parts[0]||"?").slice(0,1)+(parts[1]?parts[1].slice(0,1):(parts[0]||"?").slice(1,2))).toUpperCase();
+}
+function esc(x){return String(x==null?"":x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function logoMark(name,domain){
+  const mono=monogram(name), h=hueOf(name);
+  if(!domain) return `<span class="mono" style="background:hsl(${h},52%,42%)">${esc(mono)}</span>`;
+  return `<img src="/logos/${esc(domain)}.svg" alt="${esc(name)} logo" loading="lazy" referrerpolicy="no-referrer"`
+       + ` data-step="0" data-domain="${esc(domain)}" data-mono="${esc(mono)}" data-hue="${h}" onerror="S1.logoStep(this)">`;
+}
+function logoTiles(items,sub){
+  if(!items||!items.length) return '<div class="prop-note">None matched.</div>';
+  return '<div class="logos">'+items.map(i=>{
+    const name=typeof i==="string"?i:i.name;
+    const note=(typeof i==="object"&&sub&&i[sub])?i[sub]:"";
+    return `<div class="lt"><span class="mark">${logoMark(name,brandDomain(name))}</span>`
+         + `<span class="txt"><b>${esc(name)}</b>${note?`<span>${esc(note)}</span>`:""}</span></div>`;
+  }).join('')+'</div>';
+}
+function podTiles(items){
+  return '<div class="pods">'+items.map(p=>{
+    const h=hueOf(p.name);
+    return `<div class="pod"><span class="mark">${logoMark(p.name,brandDomain(p.network||""))}</span>`
+         + `<span><b>${esc(p.name)}${p.local?'<span class="badge-local">LOCAL</span>':''}</b>`
+         + `<span>${esc(p.network||"Sports podcast")}</span></span></div>`;
+  }).join('')+'</div>';
+}
+/* The funnel uses FULL numbers, not fmt()'s "162K" — in a quoting tool the
+   precise figure is what makes the narrowing legible and credible. */
+const fmtFull=n=>(n==null||isNaN(n))?"—":Math.round(n).toLocaleString("en-US");
+function funnelRow(cls,label,sub,value,width,pill){
+  return `<div class="fr ${cls}"><span class="bar" style="width:${width}%"></span>`
+       + `<div class="fr-in"><div><div class="fr-lab">${esc(label)}${pill?`<span class="fr-pill">${esc(pill)}</span>`:''}</div>`
+       + `<div class="fr-sub">${esc(sub)}</div></div><div class="fr-val">${fmtFull(value)}</div></div></div>`;
 }
 function list(items,sub){ return (items||[]).map(i=>`<li>${i.name}${i[sub]?` <em>· ${i[sub]}</em>`:''}</li>`).join('') || '<li><em>None matched</em></li>'; }
 function rangeFmt(n){ if(n==null||isNaN(n)) return "—"; return fmt(Math.round(n*0.88))+"–"+fmt(Math.round(n*1.12)); }
@@ -1290,9 +1500,21 @@ function render(team,m,pkg,rec,ai){
   const wantAudio=state.focus==='audio'||state.focus==='both';
   const scopeName={local:'Local',regional:'Regional',national:'National'}[state.scope];
   const badge=ai?'<span class="badge ai">\u25C6 AI-matched</span>':'<span class="badge static">Curated fallback</span>';
+  const w=v=>Math.max(9, v/m.homes*100);
+
+  /* Podcasts: local/team first. If the model returned only national shows
+     (it did — five of them, one an NBA podcast), inject the local ones. */
+  let pods=(rec.podcasts||[]).slice();
+  let localPods=pods.filter(x=>x&&x.local);
+  const natPods=pods.filter(x=>!x||!x.local);
+  if(wantAudio&&!localPods.length) localPods=localPodcasts(team);
+
   const podcastsBlock=wantAudio?`
-          <div class="block-title">Suggested podcasts (DSP) ${badge}</div>
-          <ul class="rec-list">${list(rec.podcasts,'network')}</ul>`:'';
+          <div class="block-title">Podcasts we'd put you on ${badge}</div>
+          ${localPods.length?`<div class="pod-group"><h5>Local &amp; team shows · ${esc(team.city)}</h5>${podTiles(localPods)}</div>`:''}
+          ${natPods.length?`<div class="pod-group"><h5>National football shows</h5>${podTiles(natPods)}</div>`:''}
+          <p class="prop-note" style="margin-top:-2px">Suggested inventory — exact shows are confirmed when your flight is booked.</p>`:'';
+
   document.getElementById('proposal').innerHTML=`
     <div class="prop">
       <div class="prop-eyebrow">Proposed Game Plan · ${scopeName} · ${state.league==='pro'?'pro':'college'} football</div>
@@ -1305,63 +1527,53 @@ function render(team,m,pkg,rec,ai){
       </div>
       <div class="prop-note">${pkg.note}</div>
 
-      <div class="block-title">Audience size <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--steel-dim)">— modeled from market data</span></div>
-      <div class="metrics">
-        <div class="metric"><div class="n">${rangeFmt(m.fanBase)}</div><div class="l">Est. reachable fan base</div></div>
-        <div class="metric"><div class="n">${rangeFmt(m.households)}</div><div class="l">Households in scope</div></div>
+      <div class="block-title">Your audience <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--steel-dim)">— modeled from market data</span></div>
+      <div class="funnel">
+        ${funnelRow('','Homes in your market',`Every household in ${m.geo}.`,m.homes,100)}
+        ${funnelRow('','Football-fan homes',`Homes that follow ${team.name} — about ${Math.round(m.fanPct*100)}% of the market.`,m.fanHomes,w(m.fanHomes),Math.round(m.fanPct*100)+'% of homes')}
+        ${funnelRow('','Homes we can reach','Fan homes with a connected device we can match and serve ads to.',m.reachableHomes,w(m.reachableHomes),Math.round(m.addressablePct*100)+'% of fan homes')}
+        ${funnelRow('screens','Screens inside those homes','Phones, TVs, tablets and laptops we can serve your ad on.',m.screens,Math.max(28,w(m.reachableHomes)))}
       </div>
+      <div class="unit-note"><b>Why is the last number bigger?</b> The first three lines count <b>homes</b> and get smaller at every step.
+        The last line counts <b>screens</b> — the average reachable home has about ${m.screensPerHome.toFixed(1)} connected screens
+        (a TV, a couple of phones, a tablet or laptop). So ${fmtFull(m.reachableHomes)} homes give us roughly ${fmtFull(m.screens)} places
+        to show your ad. It is not ${fmtFull(m.screens)} extra households.</div>
+      <p class="prop-note">Roughly <b>${fmtFull(m.fansInHomes)}</b> football fans live inside those ${fmtFull(m.fanHomes)} fan homes (about ${(m.fansInHomes/m.fanHomes).toFixed(1)} per home).</p>
 
-      <div class="block-title">Device breakdown &amp; media plan <span class="lock-pill" id="lockPill">Locked</span></div>
-      <div class="gated" id="gated">
-        <div class="gated-content">
-          <div class="device-row">
-            <div class="device"><div class="n">${fmt(m.devices.phones)}</div><div class="l">Phones</div></div>
-            <div class="device"><div class="n">${fmt(m.devices.computers)}</div><div class="l">Computers</div></div>
-            <div class="device"><div class="n">${fmt(m.devices.tablets)}</div><div class="l">Tablets</div></div>
-            <div class="device"><div class="n">${fmt(m.devices.connectedTV)}</div><div class="l">Connected TV</div></div>
-          </div>
-          ${deviceBars(m.devices)}
-          <div class="metrics" style="margin-top:10px">
-            <div class="metric wide"><div class="n">${rangeFmt(m.matchable)}</div><div class="l">Realistically matchable programmatic audience (devices)</div></div>
-          </div>
-          <div class="block-title">Matched streaming services ${badge}</div>
-          <ul class="rec-list">${list(rec.streamingServices,'why')}</ul>
-          ${podcastsBlock}
-          <div class="rec-cols" style="margin-top:4px">
-            <div><div class="block-title">Sports networks</div><ul class="rec-list">${list(rec.sportsNetworks,'why')}</ul></div>
-            <div><div class="block-title">Related audiences</div><ul class="rec-list">${list(rec.relatedAudiences,'why')}</ul></div>
-          </div>
-        </div>
-        <div class="gate-overlay" id="gateOverlay">
-          <div class="gate-card">
-            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#5ee39a" stroke-width="1.6"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-            <div class="gate-title">Unlock the full breakdown</div>
-            <div class="gate-sub">Add your details below to reveal the full device breakdown and media plan — and download your PDF report.</div>
-            <button type="button" class="btn btn-turf gate-cta" id="gateCta">Enter your details below →</button>
-          </div>
-        </div>
+      <div class="device-row" style="margin-top:12px">
+        <div class="device"><div class="n">${fmt(m.devices.connectedTV)}</div><div class="l">Connected TV</div></div>
+        <div class="device"><div class="n">${fmt(m.devices.phones)}</div><div class="l">Phones</div></div>
+        <div class="device"><div class="n">${fmt(m.devices.tablets)}</div><div class="l">Tablets</div></div>
+        <div class="device"><div class="n">${fmt(m.devices.computers)}</div><div class="l">Computers</div></div>
       </div>
+      ${deviceBars(m.devices)}
 
-      <div class="block-title" id="formTitle">Get your full proposal</div>
-      <p class="prop-note" id="formIntro" style="margin-bottom:14px">Tell us where to send it. A Smart 1 strategist will follow up with the complete ${team.name} media plan — exact inventory, flight dates, and pricing.</p>
+      <div class="block-title">Where your ads will run ${badge}</div>
+      ${logoTiles(rec.streamingServices,'why')}
+
+      ${podcastsBlock}
+
+      <div class="block-title">Sports networks in the mix</div>
+      ${logoTiles(rec.sportsNetworks,'why')}
+
+      <div class="block-title">Other buyers worth reaching</div>
+      <ul class="rec-list">${list(rec.relatedAudiences,'why')}</ul>
+
+      <div class="block-title" id="formTitle">Get your ${team.name} Playbook (PDF)</div>
+      <p class="prop-note" id="formIntro" style="margin-bottom:14px">Everything above, plus flight structure and pricing, as a PDF you can download right here.</p>
       <form class="lead-form" id="leadForm" novalidate>
         <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
         <div class="lf-grid">
           <div class="lf-field"><label>Full name *</label><input type="text" name="name" autocomplete="name" placeholder="Jane Smith"></div>
           <div class="lf-field"><label>Work email *</label><input type="text" name="email" autocomplete="email" placeholder="jane@company.com"></div>
           <div class="lf-field"><label>Company *</label><input type="text" name="company" autocomplete="organization" placeholder="Company name"></div>
-          <div class="lf-field"><label>Company website</label><input type="text" name="company_website" autocomplete="url" inputmode="url" placeholder="yourcompany.com"></div>
           <div class="lf-field"><label>Phone</label><input type="text" name="phone" autocomplete="tel" placeholder="(555) 555-5555"></div>
-          <div class="lf-field"><label>Monthly budget</label><select name="budget"><option value="">Select…</option><option>$2,500–$4,500</option><option>$4,500–$6,000</option><option>$6,000+</option><option>Not sure yet</option></select></div>
-          <div class="lf-field"><label>Timeline</label><select name="timeline"><option value="">Select…</option><option>ASAP / this season</option><option>Next 1–3 months</option><option>Just exploring</option></select></div>
-          <div class="lf-field lf-full"><label>Anything else we should know?</label><textarea name="notes" rows="2" placeholder="Goals, target markets, questions…"></textarea></div>
         </div>
         <div class="lf-actions">
-          <button type="submit" class="btn btn-turf" id="leadSubmit">Unlock full report →</button>
-          <a href="#packages" class="btn btn-ghost">Compare packages</a>
+          <button type="submit" class="btn btn-turf" id="leadSubmit">Build my Playbook (PDF) →</button>
         </div>
         <div class="lf-msg" id="leadMsg"></div>
-        <p class="lf-trust">We only use your details to build your plan — no spam. Trusted by brands advertising to college &amp; pro football fans.</p>
+        <p class="lf-trust" id="lfTrust">Your Playbook downloads immediately. No spam — a strategist follows up once.</p>
       </form>
       <div class="disclaimer">
         Audience figures are <b>modeled planning estimates</b> — computed from baseline market data (Nielsen-style DMA / Census households) and industry-average device and match-rate assumptions, not guaranteed delivery. Streaming, podcast, network, and audience lists are ${ai?'AI-generated suggestions':'curated suggestions'} to validate against live DSP availability. A Smart 1 strategist confirms exact inventory, reach, and pricing for ${team.name} on your call.
@@ -1375,50 +1587,89 @@ function render(team,m,pkg,rec,ai){
   // if the visitor then fills fields but abandons, allow one refreshed partial (debounced)
   let _ptDeb=null;
   lf.addEventListener("input",()=>{ clearTimeout(_ptDeb); _ptDeb=setTimeout(()=>{ partialSent=false; },800); });
-  const gc=document.getElementById("gateCta");
-  if(gc) gc.addEventListener("click",()=>{ const ft=document.getElementById("formTitle"); if(ft) ft.scrollIntoView({behavior:"smooth",block:"start"}); setTimeout(()=>{ try{ const ni=lf.querySelector('input[name="name"]'); ni&&ni.focus(); }catch(e){} },450); });
   lf.addEventListener("submit",async(ev)=>{
     ev.preventDefault();
     const d=Object.fromEntries(new FormData(lf).entries());
     const msg=document.getElementById("leadMsg");
     const emailOk=/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((d.email||"").trim());
     if(!d.name||!d.name.trim()||!emailOk||!d.company||!d.company.trim()){
-      msg.innerHTML='<span class="lf-err">Please add your name, work email, and company to unlock the full report.</span>'; return;
+      msg.innerHTML='<span class="lf-err">Please add your name, work email, and company so we can build your Playbook.</span>'; return;
     }
-    const btn=document.getElementById("leadSubmit"); const label=btn.textContent; btn.disabled=true; btn.textContent="Unlocking…"; msg.innerHTML="";
-    gtm("unlock_started",{team:leadCtx.team});
-    const _sub=setTimeout(()=>{ if(btn) btn.textContent="Still working…"; },4500);
-    const payload=Object.assign({},d,leadCtx,{recommendations:lastRec,lead_id:LEAD_ID,submittedAt:new Date().toISOString()});
-    let pdfBase64=null,pdfUrl=null,reportFilename="company-stadium-report.pdf",calendarUrl=CALENDAR_URL;
+    const btn=document.getElementById("leadSubmit");
+    btn.disabled=true; btn.textContent="Building your Playbook…"; msg.innerHTML="";
+    gtm("playbook_requested",{team:leadCtx.team});
+    const _slow=setTimeout(()=>{ if(btn) btn.textContent="Still working — waking the server…"; },5000);
+
+    const payload=Object.assign({},d,leadCtx,{recommendations:lastRec,lead_id:LEAD_ID,submittedAt:new Date().toISOString()},ATTR);
+
+    /* The lead call also does Cloudinary + email + CRM. Any one of those being
+       slow or unset used to take the download down with it — and the old code
+       then printed "Your report is ready" with no file. The PDF now comes from
+       a dedicated endpoint that does nothing else, so it can't be collateral. */
+    const getPdfDirect=()=>fetch(apiUrl("/api/playbook"),{
+        method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+      .then(r=>{ if(!r.ok) throw new Error("playbook "+r.status); return r.blob(); })
+      .then(b=>{ if(!b||b.size<1000) throw new Error("empty pdf");
+        return {objectUrl:URL.createObjectURL(b),reportFilename:"stadium-to-screen-playbook.pdf"}; });
+
+    let res=null;
     try{
-      const r=await fetch((BACKEND_URL||"").replace(/\/$/,"")+"/api/lead",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-      if(!r.ok) throw new Error("bad status");
-      const j=await r.json(); pdfBase64=j.pdfBase64||null; pdfUrl=j.pdfUrl||null; if(j.reportFilename)reportFilename=j.reportFilename; if(j.calendarUrl)calendarUrl=j.calendarUrl;
+      const r=await fetch(apiUrl("/api/lead"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      if(r.status===429) throw new Error("rate-limited");
+      if(!r.ok) throw new Error("lead "+r.status);
+      res=await r.json();
+      if(!res.pdfBase64&&!res.pdfUrl) res=Object.assign(res,await getPdfDirect());
     }catch(err){
-      clearTimeout(_sub);
-      // Don't lose the lead: retry once via sendBeacon (fire-and-forget), still
-      // unlock the report for UX, but warn and flag the failed delivery.
-      console.warn("Lead submit failed — retrying once via sendBeacon",err);
       leadCtx.deliveryFailed=true;
-      try{
-        if(navigator.sendBeacon) navigator.sendBeacon((BACKEND_URL||"").replace(/\/$/,"")+"/api/lead",new Blob([JSON.stringify(payload)],{type:"application/json"}));
-      }catch(e2){ console.warn("sendBeacon retry failed",e2); }
+      try{ if(navigator.sendBeacon)
+        navigator.sendBeacon(apiUrl("/api/lead"),new Blob([JSON.stringify(payload)],{type:"application/json"})); }catch(e){}
+      try{ res=await getPdfDirect(); }
+      catch(e2){
+        clearTimeout(_slow);
+        btn.disabled=false; btn.textContent="Build my Playbook (PDF) →";
+        const why=err.message==="rate-limited"
+          ? "We've had a lot of requests from your connection in the last few minutes — give it a moment and try again."
+          : (API_OK===false ? "We can't reach the Playbook service right now." : "Something went wrong building the PDF.");
+        msg.innerHTML='<span class="lf-err">'+why+' Your details are saved and a strategist will follow up — or call <b>(614) 536-0768</b> and we\'ll send it straight over.</span>';
+        gtm("playbook_failed",{team:leadCtx.team,reason:err.message});
+        return;                                   // never claim success without a PDF
+      }
     }
-    clearTimeout(_sub);
-    const gated=document.getElementById("gated"); if(gated) gated.classList.add("unlocked");
-    const pill=document.getElementById("lockPill"); if(pill){ pill.textContent="Unlocked"; pill.classList.add("open"); }
-    const fi=document.getElementById("formIntro"); if(fi) fi.remove();
-    const ft=document.getElementById("formTitle"); if(ft) ft.textContent="Your report is ready";
+    clearTimeout(_slow);
+
+    /* real, downloadable file */
+    let url=res.objectUrl||null;
+    const fileName=res.reportFilename||"stadium-to-screen-playbook.pdf";
+    if(!url&&res.pdfBase64){
+      try{
+        const bin=atob(res.pdfBase64), bytes=new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+        url=URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+      }catch(e){ url=null; }
+    }
+    if(!url&&res.pdfUrl) url=res.pdfUrl;
+
+    if(url){                                       // fire the download immediately
+      const a=document.createElement("a"); a.href=url; a.download=fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      gtm("report_downloaded",{team:leadCtx.team});
+    }
+
     const first=(d.name||"there").trim().split(" ")[0];
-    const hasPdf=!!(pdfBase64||pdfUrl);
-    const dl=pdfBase64?'<button class="btn btn-ghost" id="dlReport">\u2193 Download PDF report</button>'
-            :(pdfUrl?'<a class="btn btn-ghost" href="'+pdfUrl+'" target="_blank" rel="noopener">\u2193 Download PDF report</a>':'');
+    const calendarUrl=res.calendarUrl||CALENDAR_URL;
     const book=calendarUrl?'<a class="btn btn-turf" id="bookCall" href="'+calendarUrl+'" target="_blank" rel="noopener">Book a strategy call \u2192</a>':'';
-    lf.outerHTML='<div class="lead-success">\u2713 Thanks, '+first+' — the full '+leadCtx.team+' breakdown is unlocked above'+(hasPdf?', and your PDF report is ready to download':'')+'.</div>'
-      +'<div class="lf-actions" style="margin-top:14px">'+book+dl+'<a href="#packages" class="btn btn-ghost">Compare packages</a></div>';
+    const dl=url?'<a class="btn btn-ghost" id="dlReport" href="'+url+'" download="'+fileName+'">\u2193 Download Playbook (PDF)</a>':'';
+    const emailLine=API_FLAGS.email?" We've emailed you a copy too.":"";
+    const body=url
+      ? "It should have downloaded automatically — if not, grab it below."+emailLine
+      : "Your details are in and a strategist will send your Playbook straight over.";
+
+    const fi=document.getElementById("formIntro"); if(fi) fi.remove();
+    const ft=document.getElementById("formTitle"); if(ft) ft.textContent="Your Playbook is ready";
+    lf.outerHTML='<div class="dl-ready"><h4>\u2713 Thanks, '+first+' — your '+leadCtx.team+' Playbook is ready.</h4>'
+      +'<p>'+body+'</p><div class="dl-actions">'+dl+book+'</div></div>';
+
     gtm("lead_submitted",{team:leadCtx.team,package:leadCtx.recommendedPackage,scope:leadCtx.scope,focus:leadCtx.focus});
-    const dlBtn=document.getElementById("dlReport");
-    if(dlBtn&&pdfBase64) dlBtn.addEventListener("click",()=>{downloadPdf(pdfBase64,reportFilename);gtm("report_downloaded",{team:leadCtx.team});});
     const bookBtn=document.getElementById("bookCall");
     if(bookBtn) bookBtn.addEventListener("click",()=>gtm("book_call_clicked",{team:leadCtx.team}));
   });

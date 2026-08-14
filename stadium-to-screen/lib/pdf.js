@@ -61,8 +61,8 @@ function generateProposalPdf(d={}, rep={}){
     function fullHeader(){
       doc.rect(0,0,PAGE_W,150).fill(NAVY); doc.rect(0,150,PAGE_W,3).fill(TEAL);
       logo(ML,40,1.1);
-      doc.fillColor(WHITE).font("Helvetica-Bold").fontSize(20).text("Stadium to Screen Proposal",ML,82);
-      doc.fillColor("#c3d0e6").font("Helvetica").fontSize(10.5).text("College & pro football advertising  ·  a directional media plan prepared for review",ML,112);
+      doc.fillColor(WHITE).font("Helvetica-Bold").fontSize(20).text("Stadium to Screen Playbook",ML,82);
+      doc.fillColor("#c3d0e6").font("Helvetica").fontSize(10.5).text("College & pro football advertising  ·  your directional media Playbook",ML,112);
     }
     function slimHeader(){
       doc.rect(0,0,PAGE_W,58).fill(NAVY); doc.rect(0,58,PAGE_W,3).fill(TEAL);
@@ -212,13 +212,27 @@ function generateProposalPdf(d={}, rep={}){
       ["Venue",d.venue],["Recommended package",d.recommendedPackage],["Suggested / month",money(sc.better.price)]
     ]);
 
-    section("Estimated reachable audience — "+truncate(d.scopeLabel||"your market",30),150);
-    kvRight("Reachable fan base",rangeStr(d.estFanBase));
-    kvRight("Households in scope",rangeStr(d.estHouseholds));
-    kvRight("Matchable programmatic audience (devices)",rangeStr(d.estMatchable));
+    /* Audience is presented as a NARROWING FUNNEL: three lines in HOMES, then
+       one line in SCREENS with an explicit per-home explanation. The old build
+       mixed people, households and whole-market device counts on the same list,
+       which made the numbers look like they contradicted each other. */
+    section("Your audience — "+truncate(d.scopeLabel||"your market",30),160);
+    const homes    = num(d.estHomes)          || num(d.estHouseholds);
+    const fanHomes = num(d.estFanHomes);
+    const reach    = num(d.estReachableHomes);
+    const screens  = num(d.estScreens)        || num(d.estMatchable);
+    const perHome  = num(d.estScreensPerHome) || (reach ? screens/reach : 0);
+
+    kvRight("1 · Homes in your market",rangeStr(homes));
+    if(fanHomes) kvRight("2 · Football-fan homes",rangeStr(fanHomes));
+    if(reach)    kvRight("3 · Fan homes we can reach",rangeStr(reach));
+    kvRight("4 · Screens inside those homes",rangeStr(screens),true,CYAN);
     kvRight("Suggested monthly investment (recommended tier)",money(sc.better.price)+" / mo",true,GREEN);
     y+=6; deviceMini();
-    para("Directional estimate from baseline market data (DMA households / population) and industry-average device and match-rate assumptions — shown as ranges, not guaranteed delivery. Confirm against current census or ad-platform reach figures before finalizing a budget.",{size:8.5,color:GRAY});
+    note("Lines 1-3 count HOMES and get smaller at every step. Line 4 counts SCREENS — the average "
+      + "reachable home has about "+(perHome?perHome.toFixed(1):"4")+" connected screens (a TV, phones, a tablet or laptop), "
+      + "so the same households give us more places to show your ad. It is not extra households.");
+    para("Directional estimate from baseline market data (DMA households) and industry-average device and match-rate assumptions — shown as ranges, not guaranteed delivery. Confirm against current census or ad-platform reach figures before finalizing a budget.",{size:8.5,color:GRAY});
 
     /* ================= PRICING ================= */
     section("Suggested investment scenarios — good / better / best",210);
@@ -245,7 +259,11 @@ function generateProposalPdf(d={}, rep={}){
       const r=d.recommendations;
       section("Matched media plan",100);
       kvRight("Streaming",names(r.streamingServices));
-      if(Array.isArray(r.podcasts)&&r.podcasts.length) kvRight("Podcasts",names(r.podcasts));
+      if(Array.isArray(r.podcasts)&&r.podcasts.length){
+        const localPods=r.podcasts.filter(p=>p&&p.local), natPods=r.podcasts.filter(p=>!p||!p.local);
+        if(localPods.length) kvRight("Local & team podcasts",names(localPods));
+        if(natPods.length)   kvRight("National podcasts",names(natPods));
+      }
       kvRight("Sports networks",names(r.sportsNetworks));
       kvRight("Related audiences",names(r.relatedAudiences));
       y+=8;
@@ -273,15 +291,26 @@ function generateProposalPdf(d={}, rep={}){
     ctaBox();
     para("Suggested, directional figures based on information supplied. Audience and savings numbers are planning estimates, not guaranteed delivery. Final budget, inventory, and pricing are tailored on consult.",{size:8,color:GRAYL,gap:0});
 
-    /* ================= FOOTERS ================= */
+    /* ================= FOOTERS =================
+       BUGFIX: the footer sits at y=760, which is BELOW the 70pt bottom margin
+       (content stops at 722). PDFKit treats that as an overflow and silently
+       appends a fresh page for every footer it draws — the old build shipped a
+       3-page Playbook padded out to 9 pages, 6 of them blank, with the page
+       numbers reading "1 / 3" on page 5. Zeroing the bottom margin while the
+       footers are drawn keeps everything on the page it belongs to. */
     const range=doc.bufferedPageRange();
-    for(let i=0;i<range.count;i++){
-      doc.switchToPage(i);
+    const total=range.count;
+    for(let i=0;i<total;i++){
+      doc.switchToPage(range.start+i);
+      const keepBottom=doc.page.margins.bottom;
+      doc.page.margins.bottom=0;                     // <- stops the phantom pages
       doc.lineWidth(1).strokeColor(RULE).moveTo(ML,752).lineTo(MR,752).stroke();
       doc.fillColor(GRAYL).font("Helvetica").fontSize(7.5).text(
         "Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan",
-        ML,760,{width:CW-46});
-      doc.fillColor(GRAY).font("Helvetica-Bold").fontSize(8).text((i+1)+" / "+range.count,MR-46,760,{width:46,align:"right"});
+        ML,760,{width:CW-46,lineBreak:false});
+      doc.fillColor(GRAY).font("Helvetica-Bold").fontSize(8).text(
+        (i+1)+" / "+total,MR-46,760,{width:46,align:"right",lineBreak:false});
+      doc.page.margins.bottom=keepBottom;
     }
     doc.end();
   });

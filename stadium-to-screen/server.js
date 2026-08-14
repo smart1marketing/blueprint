@@ -36,7 +36,7 @@ const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
 const SMTP_URL = process.env.SMTP_URL || "";
 const MAIL_FROM = process.env.MAIL_FROM || "Smart 1 Marketing <no-reply@smart1marketing.com>";
-const REPORT_NAME = "company-stadium-report";
+const REPORT_NAME = "stadium-to-screen-playbook";
 const REP = {
   name: process.env.REP_NAME || "",
   email: process.env.REP_EMAIL || "",
@@ -99,11 +99,21 @@ CHANNEL FOCUS: ${focus}
 Return ONLY valid JSON:
 {
   "streamingServices": [{"name":"","why":""}],   // 5-7 real ${wantVideo ? "CTV/OTT" : ""}${wantAudio ? " audio streaming" : ""} services these fans use
-  "podcasts": ${wantAudio ? '[{"name":"","network":""}]  // 5-7 real sports/football podcasts on major DSPs' : "[]"},
+  "podcasts": ${wantAudio ? '[{"name":"","network":"","local":true}]  // see PODCAST RULES below' : "[]"},
   "sportsNetworks": [{"name":"","why":""}],       // 4-6 real networks (national + this team's regional/conference net)
   "relatedAudiences": [{"name":"","why":""}]      // 5-7 adjacent buyer audiences that index high with these fans
 }
-Real brands only. Keep "why" under 10 words. Tailor to ${team.name}'s region.`;
+
+PODCAST RULES (important — a local advertiser cannot relate to an all-national list):
+- Return 6-8 shows total.
+- AT LEAST 3 must be LOCAL or TEAM-SPECIFIC to ${team.name} / ${team.city}: the team's official
+  podcast, the "Locked On ${team.nick || team.name}" show, a local sports-radio show from ${team.city},
+  or a local beat-writer podcast. Set "local": true on each of these.
+- The remaining shows may be national football podcasts. Set "local": false on those.
+- List the local/team shows FIRST.
+
+Real, verifiable brands and shows only — never invent a podcast or a network.
+Keep "why" under 10 words. Tailor everything to ${team.city} and ${team.name}.`;
 }
 async function callOpenAI(payload) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -126,14 +136,24 @@ app.post("/api/recommendations", rateLimit(30, 10 * 60 * 1000), async (req, res)
   const { league = "college", team: teamName, focus = "audio", scope = "local" } = req.body || {};
   const team = DATA.findTeam(league, teamName);
   if (!team) return res.status(400).json({ aiGenerated: false, recommendations: DATA.fallbackRecommendations(focus) });
-  if (!OPENAI_KEY) return res.json({ aiGenerated: false, recommendations: DATA.fallbackRecommendations(focus) });
+  if (!OPENAI_KEY) return res.json({ aiGenerated: false, recommendations: DATA.fallbackRecommendations(focus, team) });
   try {
     const scopeLabel = DATA.marketForScope(team, scope).label;
     const recommendations = await callOpenAI({ team, league, focus, scope, scopeLabel });
+
+    // Guarantee local/team shows even if the model ignored the instruction.
+    if (focus === "audio" || focus === "both") {
+      const pods = Array.isArray(recommendations.podcasts) ? recommendations.podcasts : [];
+      if (!pods.some(p => p && p.local)) {
+        recommendations.podcasts = DATA.localPodcasts(team)
+          .concat(pods.map(p => ({ ...p, local: false })))
+          .slice(0, 8);
+      }
+    }
     res.json({ aiGenerated: true, model: OPENAI_MODEL, recommendations });
   } catch (err) {
     console.error("OpenAI failed:", err.message);
-    res.json({ aiGenerated: false, recommendations: DATA.fallbackRecommendations(focus) });
+    res.json({ aiGenerated: false, recommendations: DATA.fallbackRecommendations(focus, team) });
   }
 });
 
@@ -168,12 +188,38 @@ app.post("/api/partial-lead", rateLimit(30, 10 * 60 * 1000), async (req, res) =>
   res.json({ ok: true });
 });
 
+/* ---------- PDF-only endpoint --------------------------------------------
+   /api/lead does PDF + Cloudinary + email + rep notify + GHL in one request.
+   If any of those is slow or misconfigured the whole call fails, and the old
+   widget responded to that by printing "Your report is ready" with no download
+   button. This endpoint builds and streams the Playbook and does NOTHING else,
+   so the visitor's download can't be taken down by an integration. Generous
+   rate limit — this costs a couple of hundred milliseconds of CPU and nothing
+   else. */
+app.post("/api/playbook", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
+  const lead = req.body || {};
+  if (lead.website) return res.status(204).end();          // honeypot
+  try {
+    const pdf = await generateProposalPdf(lead, REP);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${REPORT_NAME}.pdf"`,
+      "Content-Length": pdf.length,
+      "Cache-Control": "no-store"
+    });
+    res.end(pdf);
+  } catch (e) {
+    console.error("playbook pdf failed:", e.message);
+    res.status(500).json({ ok: false, error: "PDF generation failed" });
+  }
+});
+
 /* ---------- lead capture ---------- */
 function uploadPdfToCloudinary(buffer) {
   return new Promise((resolve, reject) => {
     const cloudinary = cloudinaryClient();
     const stream = cloudinary.uploader.upload_stream(
-      { resource_type: "image", format: "pdf", folder: "company-stadium-reports",
+      { resource_type: "image", format: "pdf", folder: "stadium-to-screen-playbooks",
         public_id: `${REPORT_NAME}-${Date.now()}`, overwrite: false },
       (err, result) => (err ? reject(err) : resolve(result.secure_url))
     );
@@ -186,9 +232,9 @@ async function emailProspect(lead, pdfBuffer) {
   const first = (lead.name || "there").trim().split(" ")[0];
   await t.sendMail({
     from: MAIL_FROM, to: lead.email,
-    subject: `Your ${lead.team || "Stadium to Screen"} advertising proposal`,
+    subject: `Your ${lead.team || "Stadium to Screen"} Playbook`,
     text: `Hi ${first},\n\nThanks for your interest in Smart 1 Marketing's Stadium to Screen program. `
-      + `Your custom ${lead.team || ""} proposal is attached as a PDF.\n\n`
+      + `Your custom ${lead.team || ""} Playbook is attached as a PDF.\n\n`
       + (REP.name ? `${REP.name} will follow up shortly` : `A strategist will follow up shortly`)
       + (REP.calendar ? ` — or grab a time here: ${REP.calendar}` : ".") + `\n\n— Smart 1 Marketing`,
     attachments: [{ filename: `${REPORT_NAME}.pdf`, content: pdfBuffer }]
@@ -276,7 +322,21 @@ app.get("/api/leads", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
   res.json({ leads: await store.getLeads(), persistent: store.persistent });
 });
 
-app.get("/api/config", (_req, res) => res.json({ calendarUrl: REP.calendar || "" }));
+/* Self-hosted brand logos: anything dropped into public/logos/ is advertised to
+   the front end so it can use it directly instead of probing (and 404-ing) for
+   every brand. Drop "hulu.com.svg" in that folder and it is picked up on the
+   next restart. */
+const fs = require("fs");
+let LOGO_MANIFEST = [];
+try {
+  LOGO_MANIFEST = fs.readdirSync(path.join(__dirname, "public", "logos"))
+    .filter(f => /\.(svg|png|webp)$/i.test(f));
+} catch (e) { LOGO_MANIFEST = []; }
+
+app.get("/api/config", (_req, res) => res.json({
+  calendarUrl: REP.calendar || "",
+  logos: LOGO_MANIFEST
+}));
 app.get("/api/health", (_req, res) => res.json({
   ok: true, ai: !!OPENAI_KEY, model: OPENAI_MODEL,
   cloudinary: CLOUDINARY_READY, ghl: !!GHL_WEBHOOK_URL,
