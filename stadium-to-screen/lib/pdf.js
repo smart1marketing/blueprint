@@ -24,19 +24,20 @@ function truncate(s,k){s=String(s==null?"":s);return s.length>k?s.slice(0,k-1).t
 function names(arr){if(!Array.isArray(arr)||!arr.length)return"—";return truncate(arr.map(i=>typeof i==="string"?i:i.name).filter(Boolean).join(", "),88);}
 const focusLabel=f=>({audio:"Streaming audio",ctv:"Connected TV",both:"Audio + CTV"}[f]||"Streaming audio");
 
-/* pricing scenarios scaled to fan base */
-function scenarios(fanBase){
-  const f=num(fanBase); let t;
-  if(f<150000)      t=[2500,3500,5000];
-  else if(f<350000) t=[3000,4500,6500];
-  else if(f<750000) t=[4500,6500,9500];
-  else if(f<1500000)t=[6500,9500,14000];
-  else if(f<4000000)t=[9500,14000,20000];
-  else              t=[14000,20000,30000];
-  const CPM=20, FREQ=3;
-  const mk=p=>{const imp=Math.round(p/CPM*1000);return{price:p,imp,fans:Math.round(imp/FREQ)};};
-  return {good:mk(t[0]),better:mk(t[1]),best:mk(t[2])};
-}
+/* ---------------------------------------------------------------------------
+   PRICING — fixed matrix, channel focus x targeting scope. Must stay in sync
+   with PRICING in public/index.html.
+--------------------------------------------------------------------------- */
+const PRICING = {
+  audio: { local:2500, regional:4500, national:6500 },
+  ctv:   { local:2900, regional:4800, national:7500 },
+  both:  { local:4000, regional:7500, national:10000 }
+};
+const SCOPE_LABEL = { local:"Local", regional:"Regional", national:"National" };
+const FOCUS_LABEL = { audio:"Streaming Audio", ctv:"Connected TV", both:"Audio + Connected TV" };
+function priceFor(focus,scope){ return (PRICING[focus]||PRICING.audio)[scope]||PRICING.audio.local; }
+/* impressions modeled at a $20 CPM, ~3x frequency */
+function planStats(price){ const imp=Math.round(price/20*1000); return {price,imp,fans:Math.round(imp/3)}; }
 
 function generateProposalPdf(d={}, rep={}){
   return new Promise((resolve,reject)=>{
@@ -45,11 +46,18 @@ function generateProposalPdf(d={}, rep={}){
 
     const client=truncate(d.company||d.name||"Your Firm",42);
     const dateStr=new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
-    const fan=num(d.estFanBase), sc=scenarios(fan);
+    const focus=(d.focus in PRICING)?d.focus:"audio";
+    const scope=(d.scope in SCOPE_LABEL)?d.scope:"local";
+    const sc={ better: planStats(priceFor(focus,scope)) };   // the selected plan
     let y=0, firstPage=true;
 
     /* ---- logo + headers ---- */
     function logo(x,yy,s){
+      /* Real Smart 1 lockup when the server managed to fetch it; the drawn
+         mark is only a fallback so the PDF never breaks on a network hiccup. */
+      if(rep && rep.logoBuffer){
+        try{ doc.image(rep.logoBuffer,x,yy+2*s,{height:20*s}); return; }catch(e){}
+      }
       doc.roundedRect(x,yy,22*s,22*s,5*s).fill(CYAN);
       doc.circle(x+11*s,yy+9.5*s,4.6*s).fill(WHITE);
       doc.rect(x+8.6*s,yy+13*s,4.8*s,3.4*s).fill(WHITE);
@@ -120,25 +128,22 @@ function generateProposalPdf(d={}, rep={}){
       y+=items.length*17+10;
     }
     function priceCards(){
-      const h=178, gap=14, cwc=(CW-2*gap)/3;
+      const h=150, gap=14, cwc=(CW-2*gap)/3;
       ensure(h+14);
-      const tiers=[["Good",sc.good,"Core game-week audio flow",false],
-                   ["Better",sc.better,"Audio + CTV + companion banners",true],
-                   ["Best",sc.best,"Full multi-screen + Venue Replay",false]];
-      tiers.forEach((t,i)=>{
-        const x=ML+i*(cwc+gap), rec=t[3], tc=rec?WHITE:NAVY, sub=rec?"#bcc9e0":GRAY;
-        if(rec) doc.roundedRect(x,y,cwc,h,10).fill(NAVY);
+      ["local","regional","national"].forEach((sc,i)=>{
+        const x=ML+i*(cwc+gap), on=(sc===scope), st=planStats(priceFor(focus,sc));
+        const tc=on?WHITE:NAVY, sub=on?"#bcc9e0":GRAY;
+        if(on) doc.roundedRect(x,y,cwc,h,10).fill(NAVY);
         else doc.lineWidth(1).roundedRect(x,y,cwc,h,10).fillAndStroke(WHITE,CARDBRD);
-        if(rec){ doc.roundedRect(x+cwc-96,y-9,88,18,9).fill(YELLOW);
-          doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(7).text("RECOMMENDED",x+cwc-96,y-4.5,{width:88,align:"center",characterSpacing:.6}); }
-        doc.fillColor(sub).font("Helvetica-Bold").fontSize(8).text(t[0].toUpperCase(),x+16,y+16,{characterSpacing:1.5});
-        doc.fillColor(tc).font("Helvetica-Bold").fontSize(23).text(money(t[1].price),x+16,y+29);
+        if(on){ doc.roundedRect(x+cwc-104,y-9,96,18,9).fill(YELLOW);
+          doc.fillColor(NAVY).font("Helvetica-Bold").fontSize(7).text("YOUR SELECTION",x+cwc-104,y-4.5,{width:96,align:"center",characterSpacing:.6}); }
+        doc.fillColor(sub).font("Helvetica-Bold").fontSize(8).text(SCOPE_LABEL[sc].toUpperCase(),x+16,y+16,{characterSpacing:1.5});
+        doc.fillColor(tc).font("Helvetica-Bold").fontSize(23).text(money(st.price),x+16,y+29);
         doc.fillColor(sub).font("Helvetica").fontSize(8.5).text("/ month",x+16,y+57);
-        doc.fillColor(rec?"#d7e0ef":INK).font("Helvetica").fontSize(9).text(t[2],x+16,y+74,{width:cwc-30});
-        const ly=y+112;
-        doc.fillColor(tc).font("Helvetica-Bold").fontSize(12).text("~"+kfmt(t[1].imp),x+16,ly);
+        const ly=y+84;
+        doc.fillColor(tc).font("Helvetica-Bold").fontSize(12).text("~"+kfmt(st.imp),x+16,ly);
         doc.fillColor(sub).font("Helvetica").fontSize(7.5).text("qualified impressions / mo",x+16,ly+14);
-        doc.fillColor(tc).font("Helvetica-Bold").fontSize(12).text("~"+kfmt(t[1].fans),x+16,ly+30);
+        doc.fillColor(tc).font("Helvetica-Bold").fontSize(12).text("~"+kfmt(st.fans),x+16,ly+30);
         doc.fillColor(sub).font("Helvetica").fontSize(7.5).text("fans reached / mo",x+16,ly+44);
       });
       y+=h+16;
@@ -209,14 +214,14 @@ function generateProposalPdf(d={}, rep={}){
 
     infoCard([
       ["Team",d.team],["Targeting scope",d.scopeLabel||d.scope],["Channel focus",focusLabel(d.focus)],
-      ["Venue",d.venue],["Recommended package",d.recommendedPackage],["Suggested / month",money(sc.better.price)]
+      ["Venue",d.venue],["Your plan",FOCUS_LABEL[focus]+" \u00b7 "+SCOPE_LABEL[scope]],["Investment / month",money(sc.better.price)]
     ]);
 
     /* Audience is presented as a NARROWING FUNNEL: three lines in HOMES, then
        one line in SCREENS with an explicit per-home explanation. The old build
        mixed people, households and whole-market device counts on the same list,
        which made the numbers look like they contradicted each other. */
-    section("Your audience — "+truncate(d.scopeLabel||"your market",30),160);
+    section("Your audience (estimated) — "+truncate(d.scopeLabel||"your market",30),160);
     const homes    = num(d.estHomes)          || num(d.estHouseholds);
     const fanHomes = num(d.estFanHomes);
     const reach    = num(d.estReachableHomes);
@@ -227,7 +232,7 @@ function generateProposalPdf(d={}, rep={}){
     if(fanHomes) kvRight("2 · Football-fan homes",rangeStr(fanHomes));
     if(reach)    kvRight("3 · Fan homes we can reach",rangeStr(reach));
     kvRight("4 · Screens inside those homes",rangeStr(screens),true,CYAN);
-    kvRight("Suggested monthly investment (recommended tier)",money(sc.better.price)+" / mo",true,GREEN);
+    kvRight("Your monthly investment",money(sc.better.price)+" / mo",true,GREEN);
     y+=6; deviceMini();
     note("Lines 1-3 count HOMES and get smaller at every step. Line 4 counts SCREENS — the average "
       + "reachable home has about "+(perHome?perHome.toFixed(1):"4")+" connected screens (a TV, phones, a tablet or laptop), "
@@ -235,10 +240,10 @@ function generateProposalPdf(d={}, rep={}){
     para("Directional estimate from baseline market data (DMA households) and industry-average device and match-rate assumptions — shown as ranges, not guaranteed delivery. Confirm against current census or ad-platform reach figures before finalizing a budget.",{size:8.5,color:GRAY});
 
     /* ================= PRICING ================= */
-    section("Suggested investment scenarios — good / better / best",210);
-    para("Three ways to enter, scaled to your "+(d.team||"team")+" fan base. A larger, more passionate audience justifies more reach and frequency across the game-week flow — so the suggested budget grows with it. The middle tier is where most advertisers see the strongest return.",{gap:12});
+    section("What it costs at each reach",190);
+    para("Same "+FOCUS_LABEL[focus].toLowerCase()+" plan, priced by how far you want to reach. Your selection is highlighted.",{gap:12});
     priceCards();
-    note("This is a suggested budget based on your fan base — not a fixed quote. On a quick consult we tailor a plan and budget that fit your firm's goals, margins, and season. You're never locked into these tiers.");
+    note("Pricing is per month for the flight you select. Audience figures are estimates for planning, not guaranteed delivery.");
 
     /* ================= SAVINGS ================= */
     const RELEVANT=0.35, TRAD_CPM=25;
@@ -275,10 +280,19 @@ function generateProposalPdf(d={}, rep={}){
     if(wantCtv)   inc.push("Unskippable :15 / :30 CTV video on premium streaming inventory");
     inc.push("Clickable 300x250 companion banners running alongside every audio spot");
     inc.push("Targeting across premium streaming platforms and top sports podcast networks");
-    inc.push("Venue Replay stadium geo-fencing with Sunday / Monday retargeting (Champion / Championship tiers)");
+    inc.push("Venue Replay stadium geo-fencing with post-game retargeting");
     inc.push("Full performance reporting: audio completion rate, banner CTR, and cost per acquisition");
     section("What's included",90);
     bullets(inc);
+
+    section("Why this beats a game-day buy",150);
+    para("Most football advertising is one of two mistakes: buying game day only — one spot, one moment, gone — or running all day every day and paying to reach people who will never buy. We do neither.",{gap:10});
+    bullets([
+      "Before the game — pre-game shows and sports talk while fans decide where to eat, watch and spend. This is where intent gets formed.",
+      "During the game — unskippable video and audio in live coverage and halftime, with your brand beside the thing they care about most.",
+      "After the game — recaps, Monday sports talk and the commute home, retargeting the same households while the weekend is still fresh."
+    ]);
+    para("Same verified fans, three moments, three messages — instead of shouting once and hoping, or paying to reach everybody.",{gap:14});
 
     section("Recommended next steps",90);
     numbered([

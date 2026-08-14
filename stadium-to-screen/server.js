@@ -37,11 +37,26 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
 const SMTP_URL = process.env.SMTP_URL || "";
 const MAIL_FROM = process.env.MAIL_FROM || "Smart 1 Marketing <no-reply@smart1marketing.com>";
 const REPORT_NAME = "stadium-to-screen-playbook";
+/* Brand lockup for the PDF. Fetched once at boot; if it fails the PDF falls
+   back to the drawn mark, so a network hiccup never breaks a Playbook. */
+const LOGO_URL = process.env.LOGO_URL ||
+  "https://content.app-sources.com/s/30680510049142132/uploads/Our_Products_/logo-final-cmyk-hz1line-white-9562849.png";
+let LOGO_BUFFER = null;
+(async () => {
+  try {
+    const r = await fetch(LOGO_URL);
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    LOGO_BUFFER = Buffer.from(await r.arrayBuffer());
+    console.log("logo loaded for PDF (" + LOGO_BUFFER.length + " bytes)");
+  } catch (e) { console.warn("logo fetch failed, PDF will use the drawn mark:", e.message); }
+})();
+
 const REP = {
   name: process.env.REP_NAME || "",
   email: process.env.REP_EMAIL || "",
   phone: process.env.REP_PHONE || "",
-  calendar: process.env.CALENDAR_URL || ""
+  calendar: process.env.CALENDAR_URL || "",
+  get logoBuffer(){ return LOGO_BUFFER; }
 };
 
 // Cloudinary is loaded lazily and only when the URL is well-formed.
@@ -196,7 +211,7 @@ app.post("/api/partial-lead", rateLimit(30, 10 * 60 * 1000), async (req, res) =>
    so the visitor's download can't be taken down by an integration. Generous
    rate limit — this costs a couple of hundred milliseconds of CPU and nothing
    else. */
-app.post("/api/playbook", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
+app.post("/api/playbook", rateLimit(60, 10 * 60 * 1000), async (req, res) => {
   const lead = req.body || {};
   if (lead.website) return res.status(204).end();          // honeypot
   try {
@@ -252,7 +267,7 @@ async function notifyRep(lead, pdfUrl) {
   return r.ok;
 }
 
-app.post("/api/lead", rateLimit(8, 10 * 60 * 1000), async (req, res) => {
+app.post("/api/lead", rateLimit(30, 10 * 60 * 1000), async (req, res) => {
   const lead = req.body || {};
   // honeypot: bots fill the hidden "website" field — silently accept & drop
   if (lead.website) return res.json({ ok: true, dropped: true });

@@ -62,6 +62,10 @@
   @media(max-width:1080px){.yardrail{display:none}}
 
   /* ---------- NAV ---------- */
+  .brand-logo{height:30px;width:auto;display:block}
+  .brand-fallback{display:flex;align-items:center;gap:8px}
+  @media(max-width:600px){.brand-logo{height:24px}}
+  .foot-logo{height:26px;width:auto;display:block;margin:0 auto 12px;opacity:.9}
   header.nav{
     position:relative;z-index:40;
     backdrop-filter:blur(14px);
@@ -452,6 +456,37 @@
   .pod-group>h5{font-size:.64rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
       color:var(--steel-dim);margin:0 0 8px}
 
+  /* ---- price ladder ---- */
+  .ladder{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 2px}
+  @media(max-width:620px){.ladder{grid-template-columns:1fr}}
+  .rung{position:relative;border:1px solid var(--line);border-radius:11px;padding:14px 12px;
+        background:rgba(6,15,29,.45);text-align:center}
+  .rung.on{border-color:rgba(47,208,122,.55);background:rgba(47,208,122,.09)}
+  .rung-l{font-size:.66rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--steel-dim)}
+  .rung-p{font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:var(--chalk);margin-top:6px}
+  .rung.on .rung-p{color:var(--turf-soft)}
+  .rung-p em{font-style:normal;font-size:.7rem;color:var(--steel-dim);margin-left:2px}
+  .rung-tag{font-size:.58rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+        color:var(--turf-soft);margin-top:6px}
+  .est-flag{display:inline-block;font-size:.58rem;font-weight:800;letter-spacing:.09em;
+        background:rgba(30,157,227,.16);color:var(--electric-soft);border-radius:5px;padding:3px 7px;
+        margin-left:8px;vertical-align:middle;text-transform:uppercase}
+
+  /* ---- why this is different ---- */
+  .diff{border:1px solid rgba(47,208,122,.28);background:rgba(47,208,122,.06);border-radius:12px;
+        padding:18px 18px 6px;margin:4px 0 2px}
+  .diff h4{font-size:.95rem;color:var(--chalk);margin:0 0 4px}
+  .diff>p{font-size:.8rem;color:var(--steel);margin:0 0 14px;line-height:1.6}
+  .diff-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media(max-width:720px){.diff-row{grid-template-columns:1fr}}
+  .diff-cell{border:1px solid var(--line);border-radius:10px;padding:12px 13px;background:rgba(6,15,29,.45);margin-bottom:12px}
+  .diff-cell .w{font-size:.6rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--turf-soft)}
+  .diff-cell b{display:block;font-size:.83rem;color:var(--chalk);margin:5px 0 3px}
+  .diff-cell span{font-size:.73rem;color:var(--steel);line-height:1.5}
+  .diff-vs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .diff-vs span{font-size:.71rem;color:var(--steel-dim);border:1px solid var(--line);border-radius:999px;padding:5px 11px}
+  .diff-vs span:before{content:'\2715';color:#c8695f;font-weight:800;margin-right:6px}
+
   /* ---- Playbook download ---- */
   .dl-ready{border:1px solid rgba(47,208,122,.3);background:rgba(47,208,122,.08);border-radius:12px;
       padding:20px;text-align:center;margin-top:14px}
@@ -471,15 +506,16 @@
 <!-- NAV -->
 <header class="nav">
   <div class="wrap nav-inner">
-    <div class="brand">
-      <span class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.2V16h6v-.3c0-.8.4-1.6 1-2.2A6 6 0 0 0 12 3Z" fill="#fff"/><rect x="9.5" y="17.2" width="5" height="1.6" rx=".8" fill="#fff"/><rect x="10.2" y="19.4" width="3.6" height="1.4" rx=".7" fill="#fff"/></svg></span>
-      SMART<b>1</b><span>MARKETING</span>
-    </div>
+    <a class="brand" href="https://smart1marketing.com" aria-label="Smart 1 Marketing">
+      <img class="brand-logo" alt="Smart 1 Marketing"
+           src="https://content.app-sources.com/s/30680510049142132/uploads/Our_Products_/logo-final-cmyk-hz1line-white-9562849.png?format=webp"
+           onerror="this.onerror=null;this.outerHTML=document.getElementById('brandFallback').innerHTML">
+      <template id="brandFallback"><span class="brand-fallback"><span class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.2V16h6v-.3c0-.8.4-1.6 1-2.2A6 6 0 0 0 12 3Z" fill="#fff"/><rect x="9.5" y="17.2" width="5" height="1.6" rx=".8" fill="#fff"/><rect x="10.2" y="19.4" width="3.6" height="1.4" rx=".7" fill="#fff"/></svg></span>SMART<b>1</b><span>MARKETING</span></span></template>
+    </a>
     <nav class="nav-links">
       <a href="#opportunity">The Opportunity</a>
       <a href="#pillars">How It Works</a>
-      <a href="#packages">Packages</a>
-      <a href="#builder" class="btn btn-turf">Build Your Proposal</a>
+      <a href="#builder" class="btn btn-turf">Build Your Playbook</a>
     </nav>
   </div>
 </header>
@@ -493,8 +529,8 @@
       <h1>From the Stadium<br><span class="to">to the Screen.</span></h1>
       <p class="lede">Reach high-intent college and pro football fans across premium streaming audio and Connected TV — then follow them from the tailgate to the couch.</p>
       <div class="hero-cta">
-        <a href="#builder" class="btn btn-turf">Build your proposal →</a>
-        <a href="#packages" class="btn btn-ghost">See the packages</a>
+        <a href="#builder" class="btn btn-turf">Build your Playbook →</a>
+        
       </div>
       <div class="trust">
         <span class="plat">Spotify</span><span class="dot"></span>
@@ -567,19 +603,25 @@
         <!-- football -->
         <g class="ball-g">
           <g transform="rotate(-22 210 145)">
-            <path d="M154 145 Q210 106 266 145 Q210 184 154 145 Z" fill="#2fd07a" opacity=".22" filter="url(#soft)"/>
-            <path d="M154 145 Q210 106 266 145 Q210 184 154 145 Z" fill="url(#ballGrad)" stroke="#7bead0" stroke-width="1.6"/>
-            <path d="M170 137 Q210 118 250 137" stroke="#ffffff" stroke-width="1" opacity=".22" fill="none"/>
-            <path d="M170 139 L250 151 M172 151 L248 139" stroke="#eaf6ff" stroke-width="1" opacity=".22" fill="none"/>
-            <path d="M176 133 Q172 145 176 157" stroke="#eaf6ff" stroke-width="2" opacity=".9" fill="none"/>
-            <path d="M244 133 Q248 145 244 157" stroke="#eaf6ff" stroke-width="2" opacity=".9" fill="none"/>
-            <line x1="188" y1="145" x2="232" y2="145" stroke="#eaf6ff" stroke-width="2" opacity=".95"/>
-            <g stroke="#eaf6ff" stroke-width="1.8" opacity=".9">
-              <line x1="196" y1="140" x2="196" y2="150"/><line x1="206" y1="139" x2="206" y2="151"/>
-              <line x1="216" y1="139" x2="216" y2="151"/><line x1="226" y1="140" x2="226" y2="150"/>
+            <!-- prolate football: pointed tips, full belly (was a flat lens) -->
+            <path d="M150 145 C 158 111, 262 111, 270 145 C 262 179, 158 179, 150 145 Z"
+                  fill="url(#ballGrad)" stroke="#7bead0" stroke-width="1.6" stroke-linejoin="round"/>
+            <!-- leather highlight -->
+            <path d="M168 130 C 190 119, 232 119, 252 130" stroke="#ffffff" stroke-width="2.4"
+                  opacity=".18" fill="none" stroke-linecap="round"/>
+            <!-- white end stripes -->
+            <path d="M176 124 C 171 137, 171 153, 176 166" stroke="#eaf6ff" stroke-width="2.6"
+                  fill="none" opacity=".92" stroke-linecap="round"/>
+            <path d="M244 124 C 249 137, 249 153, 244 166" stroke="#eaf6ff" stroke-width="2.6"
+                  fill="none" opacity=".92" stroke-linecap="round"/>
+            <!-- laces -->
+            <line x1="196" y1="145" x2="224" y2="145" stroke="#eaf6ff" stroke-width="2.6" stroke-linecap="round"/>
+            <g stroke="#eaf6ff" stroke-width="2.2" stroke-linecap="round">
+              <line x1="200" y1="138.5" x2="200" y2="151.5"/>
+              <line x1="207" y1="137.8" x2="207" y2="152.2"/>
+              <line x1="214" y1="137.8" x2="214" y2="152.2"/>
+              <line x1="221" y1="138.5" x2="221" y2="151.5"/>
             </g>
-            <circle cx="190" cy="150" r="2" fill="#eaf6ff" opacity=".7"/>
-            <circle cx="232" cy="139" r="2" fill="#c8f7df" opacity=".8"/>
           </g>
         </g>
 
@@ -815,84 +857,13 @@
 </section>
 
 <!-- PACKAGES -->
-<section id="packages">
-  <div class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow turf">Choose Your Playbook</span>
-      <h2>Two products. Four ways to play.</h2>
-      <p>Start with streaming audio, go big with Connected TV, or run both for full-field coverage. Pricing shown is monthly.</p>
-    </div>
-
-    <div class="toggle" role="tablist" aria-label="Package type">
-      <button data-mode="audio" class="on" onclick="setPack('audio')">Streaming Audio</button>
-      <button data-mode="ctv" onclick="setPack('ctv')">Connected TV / OTT</button>
-    </div>
-
-    <!-- AUDIO PACKS -->
-    <div class="packs" id="pack-audio">
-      <div class="pack">
-        <div class="pk-name">The Tailgater</div>
-        <div class="price">$2,500<small> / mo</small></div>
-        <div class="focus">The complete audio flow, Thursday through Monday.</div>
-        <ul>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>The complete 3-block audio flow (Thurs–Mon)</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Creative production — 3 custom audio spots</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>300×250 clickable companion banners</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>38 streaming platforms &amp; 33 podcast networks</li>
-        </ul>
-        <a href="#builder" class="btn btn-ghost">Build this plan</a>
-      </div>
-      <div class="pack hero-pack">
-        <span class="flag">MOST LOCAL REACH</span>
-        <div class="pk-name">The Champion</div>
-        <div class="price">$4,500<small> / mo</small></div>
-        <div class="focus">Everything in Tailgater, plus stadium-level targeting.</div>
-        <ul>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><b>Everything in The Tailgater, plus:</b></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>The Stadium Display Add-On (Location Lookback)</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Capture device IDs at the stadium on Saturday</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Retarget those exact fans Sunday &amp; Monday</li>
-        </ul>
-        <a href="#builder" class="btn btn-turf">Build this plan</a>
-      </div>
-    </div>
-
-    <!-- CTV PACKS -->
-    <div class="packs" id="pack-ctv" style="display:none">
-      <div class="pack">
-        <div class="pk-name">The Alumni</div>
-        <div class="price">$3,500<small> / mo</small></div>
-        <div class="focus">Baseline CTV penetration and standard digital display.</div>
-        <ul>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>High-impact CTV video impressions</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Standard programmatic display retargeting</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Standard campaign reporting</li>
-        </ul>
-        <a href="#builder" class="btn btn-ghost">Build this plan</a>
-      </div>
-      <div class="pack hero-pack">
-        <span class="flag">RECOMMENDED</span>
-        <div class="pk-name">The Championship</div>
-        <div class="price">$6,000<small> / mo</small></div>
-        <div class="focus">Ultimate multi-screen saturation and stadium capture.</div>
-        <ul>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Premium CTV impressions (highest-tier inventory)</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg><b>$2,000 dedicated to Venue Replay targeting</b></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Direct targeting of attendees &amp; tailgaters</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M5 12l4 4L19 6"/></svg>Maximum frequency and localized dominance</li>
-        </ul>
-        <a href="#builder" class="btn btn-turf">Build this plan</a>
-      </div>
-    </div>
-  </div>
-</section>
 
 <!-- BUILDER -->
 <section id="builder">
   <div class="wrap">
     <div class="sec-head">
       <span class="eyebrow turf">Draw Up Your Play</span>
-      <h2>Build your proposal.</h2>
+      <h2>Build your Playbook.</h2>
       <p>Pick your team and targeting scope. We'll size the audience from market data and assemble a matched media plan — services, podcasts, networks, and adjacent audiences.</p>
     </div>
 
@@ -912,7 +883,6 @@
           <input type="text" id="teamInput" list="teamList" placeholder="Start typing a team…" autocomplete="off" oninput="onTeamType()">
           <datalist id="teamList"></datalist>
           <div class="hint" id="teamHint">Type any team — popular ones autofill their city and stadium.</div>
-          <div class="chips" id="teamChips"></div>
         </div>
 
         <div class="field">
@@ -934,7 +904,7 @@
           </div>
         </div>
 
-        <button class="btn btn-turf" id="buildBtn" onclick="buildProposal()">Build my game plan →</button>
+        <button class="btn btn-turf" id="buildBtn" onclick="buildProposal()">Build my Playbook →</button>
       </div>
 
       <!-- output -->
@@ -1021,7 +991,11 @@ const MATCH_RATE = 0.55;
 /* Share of HOUSEHOLDS that are reachable fan households. The old build applied
    this to PEOPLE, which is what made "fan base" read as smaller than
    "households" on screen. */
-const FAN_PENETRATION = { local:0.20, regional:0.08, national:0.03 };
+/* Share of HOUSEHOLDS that are reachable fan households.
+   Raised from 0.20/0.08/0.03 — 20% of a home market being football-fan homes
+   badly understates an NFL / major-college market. These are planning
+   estimates and are labelled as such on screen. Edit here only. */
+const FAN_PENETRATION = { local:0.55, regional:0.32, national:0.08 };
 const ADDRESSABLE_RATE = 0.86;   // fan homes with a matchable connected device
 const FANS_PER_FAN_HH  = 2.2;    // people per fan home — pricing + one stat line only
 const NATIONAL = { households:132000000, population:335000000 };
@@ -1205,11 +1179,31 @@ function computeMetrics(team,scope){
     // legacy aliases so the PDF payload keeps working (pricing tier unchanged)
     households:homes, fanBase:fansInHomes, matchable:devices.total};
 }
-function recommendPackage(focus){
-  if(focus==="ctv") return {name:"The Championship (CTV)",price:"$6,000/mo",note:"Premium CTV inventory with $2,000 dedicated to Venue Replay stadium targeting."};
-  if(focus==="both") return {name:"Full-Field Coverage (Audio + CTV)",price:"from $6,000/mo",note:"Multi-screen saturation — CTV awareness feeding streaming audio and mobile Venue Replay."};
-  return {name:"The Champion (Audio)",price:"$4,500/mo",note:"Full 3-block audio flow plus the Stadium Display Add-On for local retargeting."};
+/* ---------------------------------------------------------------------------
+   PRICING — one table, driven by channel focus x targeting scope.
+   Edit these nine numbers and everything (page, quote, PDF) follows.
+--------------------------------------------------------------------------- */
+const PRICING = {
+  audio: { local:2500, regional:4500, national:6500 },
+  ctv:   { local:2900, regional:4800, national:7500 },
+  both:  { local:4000, regional:7500, national:10000 }
+};
+const FOCUS_LABEL = { audio:"Streaming Audio", ctv:"Connected TV", both:"Audio + Connected TV" };
+const SCOPE_LABEL = { local:"Local", regional:"Regional", national:"National" };
+const usd = n => "$" + Math.round(n).toLocaleString("en-US");
+
+function priceFor(focus,scope){ return (PRICING[focus]||PRICING.audio)[scope||"local"]; }
+
+function recommendPackage(focus,scope){
+  const price=priceFor(focus,scope);
+  const note={
+    audio:"The full game-week audio flow — three creative blocks running before, during and after the game, with clickable companion banners.",
+    ctv:"Unskippable :15 / :30 video on premium streaming apps, plus display retargeting to the same households.",
+    both:"Multi-screen coverage — CTV builds awareness on the big screen while streaming audio and mobile follow the same fans everywhere else."
+  }[focus]||"";
+  return { name:`${FOCUS_LABEL[focus]} · ${SCOPE_LABEL[scope]}`, price:usd(price)+"/mo", amount:price, note };
 }
+
 /* ---------------------------------------------------------------------------
    LOCAL / TEAM PODCASTS
    The old list was Finebaum / McAfee / Simmons for every team in every market —
@@ -1246,18 +1240,38 @@ function localPodcasts(team){
   return out.filter(p=>!seen.has(p.name)&&seen.add(p.name)).slice(0,4);
 }
 
+/* ---------------------------------------------------------------------------
+   INVENTORY — this is OUR media, not an AI guess, so it is fixed and correct.
+   Six examples are shown, then the remaining count. Totals match the site copy
+   (38 streaming platforms, 33 podcast networks).
+--------------------------------------------------------------------------- */
+const INVENTORY = {
+  audio: ["Spotify","Pandora","iHeartRadio","SiriusXM","Audacy","Amazon Music"],
+  ctv:   ["Hulu","Amazon Prime Video","YouTube TV","Paramount+","Peacock","ESPN"],
+  both:  ["Hulu","Amazon Prime Video","YouTube TV","Spotify","iHeartRadio","SiriusXM"]
+};
+const INVENTORY_TOTALS = { audio:38, podcasts:33, ctv:null };  // ctv: set a number to show "plus N"
+function extraLine(kind,shown){
+  const total=INVENTORY_TOTALS[kind];
+  if(total==null) return "plus additional premium CTV apps and channels.";
+  const n=total-shown;
+  return kind==="podcasts"
+    ? `plus ${n} other premium sports podcast networks.`
+    : `plus ${n} other premium audio networks.`;
+}
+
 /* Brand -> domain, for real logos instead of a bare text list. */
 const BRAND_DOMAINS={
   "hulu":"hulu.com","hulu + live tv":"hulu.com","peacock":"peacocktv.com",
   "paramount+":"paramountplus.com","paramount plus":"paramountplus.com",
   "espn":"espn.com","espn+":"espn.com","max":"max.com","hbo max":"max.com",
-  "netflix":"netflix.com","prime video":"primevideo.com","amazon prime video":"primevideo.com",
+  "netflix":"netflix.com","prime video":"primevideo.com","amazon prime video":"primevideo.com","amazon":"primevideo.com",
   "tubi":"tubitv.com","roku":"roku.com","the roku channel":"roku.com","roku channel":"roku.com",
   "pluto tv":"pluto.tv","fubo":"fubo.tv","fubotv":"fubo.tv","youtube tv":"youtube.com",
   "youtube":"youtube.com","sling tv":"sling.com","sling":"sling.com","philo":"philo.com",
   "directv stream":"directv.com","vizio":"vizio.com","samsung tv plus":"samsung.com",
   "spotify":"spotify.com","pandora":"pandora.com","iheartradio":"iheart.com","iheart":"iheart.com",
-  "audacy":"audacy.com","siriusxm":"siriusxm.com","sirius xm":"siriusxm.com",
+  "audacy":"audacy.com","siriusxm":"siriusxm.com","sirius xm":"siriusxm.com","sirius":"siriusxm.com",
   "amazon music":"music.amazon.com","apple podcasts":"apple.com","soundcloud":"soundcloud.com",
   "tunein":"tunein.com","deezer":"deezer.com","triton digital":"tritondigital.com","megaphone":"megaphone.fm",
   "fox sports":"foxsports.com","fs1":"foxsports.com","cbs sports":"cbssports.com",
@@ -1340,11 +1354,6 @@ function fmt(n){
   if(n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1).replace(/\.0$/,"")+"K";
   return String(n);
 }
-function setPack(mode){
-  document.getElementById('pack-audio').style.display = mode==='audio'?'grid':'none';
-  document.getElementById('pack-ctv').style.display = mode==='ctv'?'grid':'none';
-  document.querySelectorAll('#packages .toggle button').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
-}
 function seg(id,val){ document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('on',b.dataset.val===val)); }
 function pickLeague(v){ state.league=v; seg('seg-league',v); refreshTeams(); document.getElementById('teamInput').value=''; onTeamType(); }
 function pickFocus(v){ state.focus=v; seg('seg-focus',v); }
@@ -1356,11 +1365,6 @@ function pickScope(v){
 function refreshTeams(){
   const dl=document.getElementById('teamList'); dl.innerHTML='';
   (TEAMS[state.league]||[]).forEach(t=>{const o=document.createElement('option');o.value=t.name;dl.appendChild(o);});
-  const chips=document.getElementById('teamChips'); chips.innerHTML='';
-  const picks = state.league==='college'
-    ? ["Ohio State Buckeyes","Georgia Bulldogs","Texas Longhorns","Alabama Crimson Tide"]
-    : ["Kansas City Chiefs","Dallas Cowboys","Philadelphia Eagles","Cleveland Browns"];
-  picks.forEach(name=>{const c=document.createElement('button');c.className='chip';c.textContent=name;c.onclick=()=>{document.getElementById('teamInput').value=name;onTeamType();};chips.appendChild(c);});
 }
 function onTeamType(){
   const t=findTeam(state.league,document.getElementById('teamInput').value);
@@ -1377,7 +1381,7 @@ async function buildProposal(){
   if(!team){ document.getElementById('teamInput').focus(); document.getElementById('teamHint').innerHTML='<span style="color:#ff9a9a">Pick a team from the list to build a plan.</span>'; return; }
 
   const m=computeMetrics(team,state.scope);
-  const pkg=recommendPackage(state.focus);
+  const pkg=recommendPackage(state.focus,state.scope);
   const CAPTIONS=[
     `Sizing the ${m.scopeLabel} audience…`,
     "Scouting streaming & podcast inventory…",
@@ -1499,7 +1503,6 @@ function deviceBars(devices){
 function render(team,m,pkg,rec,ai){
   const wantAudio=state.focus==='audio'||state.focus==='both';
   const scopeName={local:'Local',regional:'Regional',national:'National'}[state.scope];
-  const badge=ai?'<span class="badge ai">\u25C6 AI-matched</span>':'<span class="badge static">Curated fallback</span>';
   const w=v=>Math.max(9, v/m.homes*100);
 
   /* Podcasts: local/team first. If the model returned only national shows
@@ -1509,11 +1512,12 @@ function render(team,m,pkg,rec,ai){
   const natPods=pods.filter(x=>!x||!x.local);
   if(wantAudio&&!localPods.length) localPods=localPodcasts(team);
 
+  /* Four samples, local/team first — then the size of the rest of the network. */
+  const sample=[...localPods.slice(0,2),...natPods].slice(0,4);
   const podcastsBlock=wantAudio?`
-          <div class="block-title">Podcasts we'd put you on ${badge}</div>
-          ${localPods.length?`<div class="pod-group"><h5>Local &amp; team shows · ${esc(team.city)}</h5>${podTiles(localPods)}</div>`:''}
-          ${natPods.length?`<div class="pod-group"><h5>National football shows</h5>${podTiles(natPods)}</div>`:''}
-          <p class="prop-note" style="margin-top:-2px">Suggested inventory — exact shows are confirmed when your flight is booked.</p>`:'';
+          <div class="block-title">Podcasts we'd put you on</div>
+          ${podTiles(sample)}
+          <p class="prop-note">${extraLine('podcasts',sample.length)} Exact shows are confirmed when your flight is booked.</p>`:'';
 
   document.getElementById('proposal').innerHTML=`
     <div class="prop">
@@ -1522,12 +1526,24 @@ function render(team,m,pkg,rec,ai){
       <div class="prop-meta"><b>${m.scopeLabel}</b> &nbsp;·&nbsp; ${team.venue} &nbsp;·&nbsp; targeting ${m.geo}</div>
 
       <div class="prop-rec">
-        <div><div class="rl">Recommended package</div><div class="rn">${pkg.name}</div></div>
+        <div><div class="rl">Your plan</div><div class="rn">${FOCUS_LABEL[state.focus]} · ${SCOPE_LABEL[state.scope]}</div></div>
         <div class="rp">${pkg.price}</div>
       </div>
       <div class="prop-note">${pkg.note}</div>
 
-      <div class="block-title">Your audience <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--steel-dim)">— modeled from market data</span></div>
+      <div class="block-title">What it costs at each reach</div>
+      <div class="ladder">
+        ${['local','regional','national'].map(sc=>`
+          <div class="rung ${sc===state.scope?'on':''}">
+            <div class="rung-l">${SCOPE_LABEL[sc]}</div>
+            <div class="rung-p">${usd(priceFor(state.focus,sc))}<em>/mo</em></div>
+            ${sc===state.scope?'<div class="rung-tag">Your selection</div>':''}
+          </div>`).join('')}
+      </div>
+      <p class="prop-note">Switch <b>Channel focus</b> or <b>Targeting scope</b> above and this updates instantly — no hidden tiers.</p>
+
+      <div class="block-title">Your audience <span class="est-flag">Estimated Audiences</span></div>
+      <p class="prop-note" style="margin-top:-4px">Modeled from market data. Figures are estimates for planning, not guaranteed delivery.</p>
       <div class="funnel">
         ${funnelRow('','Homes in your market',`Every household in ${m.geo}.`,m.homes,100)}
         ${funnelRow('','Football-fan homes',`Homes that follow ${team.name} — about ${Math.round(m.fanPct*100)}% of the market.`,m.fanHomes,w(m.fanHomes),Math.round(m.fanPct*100)+'% of homes')}
@@ -1548,8 +1564,9 @@ function render(team,m,pkg,rec,ai){
       </div>
       ${deviceBars(m.devices)}
 
-      <div class="block-title">Where your ads will run ${badge}</div>
-      ${logoTiles(rec.streamingServices,'why')}
+      <div class="block-title">Where your ads will run</div>
+      ${logoTiles(INVENTORY[state.focus]||INVENTORY.audio)}
+      <p class="prop-note">${extraLine(state.focus==='ctv'?'ctv':'audio',6)}</p>
 
       ${podcastsBlock}
 
@@ -1558,6 +1575,25 @@ function render(team,m,pkg,rec,ai){
 
       <div class="block-title">Other buyers worth reaching</div>
       <ul class="rec-list">${list(rec.relatedAudiences,'why')}</ul>
+
+      <div class="block-title">Why this works when a game-day ad doesn't</div>
+      <div class="diff">
+        <p>Most football advertising is one of two mistakes.</p>
+        <div class="diff-vs">
+          <span>Buying game day only — one spot, one moment, gone</span>
+          <span>Running all day every day — paying to reach people who will never buy</span>
+        </div>
+        <h4>We do neither. We follow one verified ${team.name} audience through the whole week, with a different message each time.</h4>
+        <div class="diff-row">
+          <div class="diff-cell"><div class="w">Before the game</div><b>They are planning</b>
+            <span>Pre-game shows and sports talk while they decide where to eat, watch and spend. This is where intent gets formed.</span></div>
+          <div class="diff-cell"><div class="w">During the game</div><b>They are locked in</b>
+            <span>Unskippable video and audio in live coverage and halftime — full attention, your brand beside the thing they care about most.</span></div>
+          <div class="diff-cell"><div class="w">After the game</div><b>They are deciding</b>
+            <span>Recaps, Monday talk and the commute home, retargeting the same households while the weekend is still fresh.</span></div>
+        </div>
+        <p style="margin-bottom:14px">Same fans, three moments, three messages — instead of shouting once and hoping, or paying to reach everybody.</p>
+      </div>
 
       <div class="block-title" id="formTitle">Get your ${team.name} Playbook (PDF)</div>
       <p class="prop-note" id="formIntro" style="margin-bottom:14px">Everything above, plus flight structure and pricing, as a PDF you can download right here.</p>
@@ -1573,10 +1609,10 @@ function render(team,m,pkg,rec,ai){
           <button type="submit" class="btn btn-turf" id="leadSubmit">Build my Playbook (PDF) →</button>
         </div>
         <div class="lf-msg" id="leadMsg"></div>
-        <p class="lf-trust" id="lfTrust">Your Playbook downloads immediately. No spam — a strategist follows up once.</p>
+        <p class="lf-trust" id="lfTrust">Your Playbook downloads immediately — nothing to wait for.</p>
       </form>
       <div class="disclaimer">
-        Audience figures are <b>modeled planning estimates</b> — computed from baseline market data (Nielsen-style DMA / Census households) and industry-average device and match-rate assumptions, not guaranteed delivery. Streaming, podcast, network, and audience lists are ${ai?'AI-generated suggestions':'curated suggestions'} to validate against live DSP availability. A Smart 1 strategist confirms exact inventory, reach, and pricing for ${team.name} on your call.
+        <b>Estimated audiences.</b> Figures are <b>modeled planning estimates</b> — computed from baseline market data (Nielsen-style DMA / Census households) and industry-average device and match-rate assumptions, not guaranteed delivery. Podcast and audience lists are suggestions to validate against live availability. We confirm exact inventory, reach and pricing for ${team.name} before anything runs.
         <br><br>Smart 1 Marketing · (614) 536-0768 · smart1marketing.com · Directional media plan
       </div>
     </div>`;
@@ -1630,7 +1666,7 @@ function render(team,m,pkg,rec,ai){
         const why=err.message==="rate-limited"
           ? "We've had a lot of requests from your connection in the last few minutes — give it a moment and try again."
           : (API_OK===false ? "We can't reach the Playbook service right now." : "Something went wrong building the PDF.");
-        msg.innerHTML='<span class="lf-err">'+why+' Your details are saved and a strategist will follow up — or call <b>(614) 536-0768</b> and we\'ll send it straight over.</span>';
+        msg.innerHTML='<span class="lf-err">'+why+' Your details are saved. Email <b>sales@smart1marketing.com</b> and we\'ll send your Playbook straight over.</span>';
         gtm("playbook_failed",{team:leadCtx.team,reason:err.message});
         return;                                   // never claim success without a PDF
       }
@@ -1662,7 +1698,7 @@ function render(team,m,pkg,rec,ai){
     const emailLine=API_FLAGS.email?" We've emailed you a copy too.":"";
     const body=url
       ? "It should have downloaded automatically — if not, grab it below."+emailLine
-      : "Your details are in and a strategist will send your Playbook straight over.";
+      : "Your details are in — email sales@smart1marketing.com and we will send your Playbook over.";
 
     const fi=document.getElementById("formIntro"); if(fi) fi.remove();
     const ft=document.getElementById("formTitle"); if(ft) ft.textContent="Your Playbook is ready";

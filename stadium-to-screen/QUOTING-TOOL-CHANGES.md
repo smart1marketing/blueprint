@@ -1,174 +1,145 @@
-# Quoting tool — what changed
+# Quoting tool — round 2
 
-**Your page is untouched.** Same design, same copy, same sections, same order, same
-animations. Every change below is inside the proposal builder (`#builder` / `#proposal`)
-and the server that feeds it.
-
-Files changed: `public/index.html` (builder only), `public/data.js`, `server.js`, `lib/pdf.js`
+Your page structure, design and copy are otherwise untouched. Everything below is the tool,
+plus the four page-level items you asked for.
 
 ---
 
-## 1. The PDF download — root cause found
+## Pricing — now a single table
 
-`public/index.html` line 950 shipped as:
+| | Local | Regional | National |
+|---|---|---|---|
+| **Audio** | $2,500 | $4,500 | $6,500 |
+| **CTV** | $2,900 | $4,800 | $7,500 |
+| **Both** | $4,000 | $7,500 | $10,000 |
 
-```js
-const BACKEND_URL = "";
-```
+Price is driven by **channel focus × targeting scope** and updates the moment either changes —
+which fixes "when I click the $2,500/month it does not translate to below." The quote shows
+your selected price *and* the other two reaches side by side, so there's no hidden ladder.
+Both is a first-class option, priced properly.
 
-Every call was built as `BACKEND_URL + "/api/lead"`. The widget is embedded on
-smart1marketing.com, so that resolved to `https://smart1marketing.com/api/lead` → **404**.
+Nine numbers, one place: `PRICING` near the top of the builder script, mirrored in `lib/pdf.js`.
 
-The old handler caught that failure and *still* ran the success path:
-
-```js
-const hasPdf = !!(pdfBase64 || pdfUrl);   // false
-const dl = pdfBase64 ? '<button…>' : '';  // no button
-ft.textContent = "Your report is ready";  // printed anyway
-```
-
-**It caught the error, threw the PDF away, and said "Your report is ready."** Your
-`downloadPdf()` function was correct the whole time — it just never got a button.
-
-Same reason the podcasts were always national: `/api/recommendations` 404'd too, so the
-widget silently used the curated fallback. It was never reaching the AI.
-
-**Fixed four ways:**
-
-1. `BACKEND_URL` is now `https://blueprint-2.onrender.com` — verified live
-   (`/api/health` → `{ok:true, ai:true, cloudinary:true, ghl:true}`). It probes a list of
-   candidates and uses whichever answers, so a mis-pasted embed self-corrects.
-2. New **`POST /api/playbook`** builds and streams the PDF and does *nothing else* — no
-   Cloudinary, no email, no CRM. The download can't be broken by an integration.
-3. If `/api/lead` fails or returns no PDF, the widget falls back to that endpoint. The
-   lead is still retried via `sendBeacon`.
-4. **No more fake success.** If the PDF genuinely can't be built, the visitor sees a real
-   error with your phone number. There's a specific message for rate-limiting.
-
-Verified: with `/api/lead` forced to 404 — the exact production failure — the customer
-still gets `stadium-to-screen-playbook.pdf`. With everything failing, they get an honest
-error and the success panel never appears.
+**The $6,000 plan no longer carves out $2,000 for Venue Replay** — that line is gone from the
+page and the PDF.
 
 ---
 
-## 2. The audience numbers
+## Removed
 
-The old model multiplied devices off **every household in the market** instead of the fan
-households we can reach, so the funnel got *wider* as it got more specific:
+- The whole **"Two products. Four ways to play."** packages section, plus its nav link
+- The **Ohio State / Georgia / Texas / Alabama** quick-pick chips
+- Every **"AI-matched" / "AI-generated"** label
+- **"a strategist follows up once"**
+- The **phone number in the error message** — it now points to `sales@smart1marketing.com`
 
-| | Old | Problem |
+"Build your proposal" is **Build your Playbook** everywhere — nav, hero, button, section head.
+
+---
+
+## Audience
+
+**Fan-home penetration was far too low.** 20% of a home market being football-fan homes badly
+understates an NFL or major-college market. Raised to:
+
+| | Old | New |
 |---|---|---|
-| Households | 940,000 | — |
-| Fan base | 470,000 | counted *people*, so fans looked smaller than houses |
-| Matchable devices | 3,825,800 | 4× the households, 8× the fan base |
+| Local | 20% | **55%** |
+| Regional | 8% | **32%** |
+| National | 3% | **8%** |
 
-Now every line narrows, in **homes**, and only the last changes unit to **screens**:
+Cincinnati local now reads 940,000 homes → **517,000** fan homes → 444,620 reachable →
+1,809,604 screens. Still narrows at every step.
 
-```
-Homes in your market       940,000
-Football-fan homes         188,000   20% of homes
-Homes we can reach         161,680   86% of fan homes
-Screens inside those homes 658,037   ~4.1 screens per home
-```
+Every audience block carries an **ESTIMATED AUDIENCES** flag and a one-line note that these are
+planning estimates, not guaranteed delivery. Same in the PDF header.
 
-With this on screen and in the PDF:
-
-> **Why is the last number bigger?** The first three lines count homes and get smaller at
-> every step. The last counts screens — the average reachable home has about 4.1 connected
-> screens. So 161,680 homes give us roughly 658,037 places to show your ad. It is not
-> 658,037 extra households.
-
-"Fan base" no longer sits next to a household count. It appears once, in context:
-*"Roughly 413,600 football fans live inside those 188,000 fan homes."*
-
-Funnel figures use full numbers (`161,680`), not `162K` — precision reads as credible in a
-quote. **Pricing tiers are unchanged**; every market lands where it did before.
-
-Verified: the widget's inline model and `public/data.js` now return identical numbers for
-every market, so the screen and the PDF can't disagree.
+Edit the three numbers in `FAN_PENETRATION` — one place, and the PDF follows.
 
 ---
 
-## 3. The form and the gate
+## Media
 
-| Removed | Why |
-|---|---|
-| Monthly budget | Already chosen in the package above |
-| Timeline | Season is starting |
-| Anything else we should know | Open textarea mid-conversion, unused |
-| Company website | Redundant with company |
-| The blur-gate over the results | You were being asked to "unlock" details you hadn't seen |
-| "Unlock full report" / "Compare packages" | Same reason |
+**Where your ads will run** now shows **exactly 6 logos**, then *"plus 32 other premium audio
+networks."* (6 + 32 = your 38.) This is now **our fixed inventory**, not an AI guess, so it's
+always correct:
 
-The form is now **name, email, company, phone** — and it comes *after* the full breakdown
-is visible, not on top of a blurred one. Honeypot kept.
+- Audio: Spotify, Pandora, iHeartRadio, **SiriusXM**, Audacy, Amazon Music
+- CTV: Hulu, **Amazon Prime Video**, YouTube TV, Paramount+, Peacock, ESPN
+- Both: Hulu, Amazon Prime Video, YouTube TV, Spotify, iHeartRadio, SiriusXM
 
-"Full breakdown" / "report" is **Playbook** everywhere — page, button, PDF header, email
-subject, filename.
+**Podcasts** show **4 samples**, local/team first, then *"plus 29 other premium sports podcast
+networks."* (4 + 29 = your 33.)
 
----
-
-## 4. Logos and local podcasts
-
-Streaming services and sports networks render as brand tiles with real logos, styled in
-your existing dark theme. Four-step chain so a box is never empty:
-`public/logos/<domain>.svg` → Clearbit → favicon → coloured monogram. Drop official SVGs
-into `public/logos/` to lock them in permanently.
-
-**Podcasts.** I called your live endpoint for the Bengals. The AI returned:
-
-```
-The Bill Simmons Podcast · Pardon My Take · The Lowe Post · Around the NFL · The Rich Eisen Show
-```
-
-Five national shows, zero local, and *The Lowe Post is an NBA podcast*. The AI was fine —
-the old prompt just asked for "5-7 real sports/football podcasts on major DSPs".
-
-Now: the prompt requires at least 3 local/team shows tagged and listed first; the server
-injects them if the model ignores it; and there's a curated fallback. The tool splits them
-into **Local & team shows · [City]** with a green LOCAL badge, and **National** below.
-
-Add your own in `LOCAL_OVERRIDES` near the top of the builder script — that's the only place.
+Lists live in `INVENTORY`; the counts in `INVENTORY_TOTALS`. I left the CTV total as `null`
+because you didn't give me a number — set it and it'll print "plus N" the same way.
 
 ---
 
-## 5. Also fixed
+## Why this is different
 
-The PDF was **9 pages, 6 of them blank**, with page numbers reading "1 / 3" on page 5. The
-footer draws below the bottom margin, so PDFKit appended a page for each one. **Now 3 clean
-pages.**
+New block above the form, and a matching section in the PDF:
+
+> Most football advertising is one of two mistakes: **buying game day only** — one spot, one
+> moment, gone — or **running all day every day**, paying to reach people who will never buy.
+> We do neither.
+>
+> **Before the game** — they're planning. Pre-game shows and sports talk while they decide where
+> to eat, watch and spend. This is where intent gets formed.
+> **During the game** — they're locked in. Unskippable video and audio in live coverage and
+> halftime, your brand beside the thing they care about most.
+> **After the game** — they're deciding. Recaps, Monday talk and the commute home, retargeting
+> the same households while the weekend is still fresh.
+>
+> Same fans, three moments, three messages.
 
 ---
 
-## Two things for you
+## Logo and football
 
-**Set these on Render** — `/api/health` says they're off:
+The nav uses your hosted lockup. If that URL ever fails to load it falls back to the old drawn
+wordmark rather than showing a broken image. The PDF fetches the PNG once at boot and uses it
+in the header, falling back to the drawn mark on any network hiccup — set `LOGO_URL` on Render
+to point somewhere else.
 
-| Variable | Effect |
-|---|---|
-| `SMTP_URL` + `MAIL_FROM` | Prospects are **not** being emailed their Playbook. The tool no longer claims they are, and will start claiming it automatically once this is set. |
-| `ADMIN_TOKEN` | `/leads` is disabled — you can't see captured leads |
-| `CALENDAR_URL` | "Book a strategy call" never appears next to the download |
-| `NOTIFY_WEBHOOK_URL` | No instant ping when a lead lands |
+The hero football was a flat lens shape. It's now a proper prolate silhouette with pointed tips,
+a full belly, white end stripes and four laces.
 
-**There are two copies of the page.** `index.html` (86 KB) at the repo root and
-`public/index.html` (94 KB). I patched `public/index.html` — it's the one Render serves and
-the one with the GoHighLevel full-bleed styling. The root copy is stale and now differs;
-delete it or replace it with the patched file so you don't edit the wrong one.
+---
+
+## The PDF error you hit
+
+> *"Something went wrong building the PDF."*
+
+Two things caused it, and both are fixed:
+
+1. **`/api/lead` was rate-limited to 8 requests per 10 minutes per IP.** You've been testing it
+   repeatedly, so you tripped it. A 429 threw, and the fallback endpoint didn't exist on the
+   deployed server yet, so you got the error. Raised to **30**, and `/api/playbook` to **60**.
+2. **`/api/playbook` only exists in the new `server.js`.** Until you deploy it, the fallback has
+   nothing to fall back to.
+
+**You need to deploy `server.js` and `lib/pdf.js`, not just `index.html`.** With only the HTML
+updated, the primary path still works (the live server already returns the PDF inline) — but you
+lose the safety net, and the pricing in the PDF will be the old fan-base tiers rather than your
+new table.
 
 ---
 
 ## Test results
 
-| Test | Result |
+| | |
 |---|---|
-| Funnel narrows | 940,000 → 188,000 → 161,680 → 658,037 |
-| No blur gate | Details visible immediately |
-| Logos | 14 brand tiles, none empty |
-| Local podcasts | 3 local of 7 shows |
-| Form fields | name, email, company, phone (+ honeypot) |
-| PDF downloads | `stadium-to-screen-playbook.pdf` |
-| `/api/lead` returns 404 | **PDF still delivered** |
-| Everything fails | Honest error, no fake success |
+| Pricing matrix | All 9 combinations correct |
+| Price ladder | $4,000 / $7,500 / $10,000 for Both, Local highlighted |
+| Funnel | 940,000 → 517,000 → 444,620 → 1,809,604 |
+| Fan homes | 55% of market |
+| Inventory | Exactly 6 logos + "plus 32 other premium audio networks" |
+| SiriusXM / Prime Video | Both present |
+| Podcasts | 4 shown + "plus 29 other premium sports podcast networks" |
+| Estimated Audiences flag | Present, page and PDF |
+| Why-different block | Present, page and PDF |
+| AI wording | None anywhere |
+| Packages section / team chips | Gone |
+| PDF | Downloads, 3 pages, Both/Local prices at $4,000 |
 | JS errors | None |
-| Widget vs server model | Identical across 4 markets |
