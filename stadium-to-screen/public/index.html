@@ -454,20 +454,28 @@
   .pb-label{text-align:center;font-size:.68rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
         color:var(--steel-dim);margin-bottom:20px}
   .marquee{overflow:hidden;position:relative;
-        -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
-        mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
-  .marquee-track{display:flex;align-items:center;gap:54px;width:max-content;
-        animation:marquee 46s linear infinite}
+        -webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);
+        mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+  .marquee-track{display:flex;align-items:stretch;gap:12px;width:max-content;
+        animation:marquee 60s linear infinite}
   .marquee:hover .marquee-track{animation-play-state:paused}
   @keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-  .pv{display:flex;align-items:center;gap:9px;flex:0 0 auto;height:34px}
-  .pv img{max-height:30px;max-width:132px;width:auto;object-fit:contain;
-        filter:brightness(0) invert(1);opacity:.62;transition:opacity .2s}
-  .pv:hover img{opacity:1}
-  .pv .wm{font-size:.86rem;font-weight:800;color:var(--chalk);opacity:.62;white-space:nowrap}
-  @media (prefers-reduced-motion:reduce){.marquee-track{animation:none;flex-wrap:wrap;justify-content:center;width:auto;gap:34px}}
-  @media(max-width:700px){.marquee-track{gap:34px;animation-duration:32s}.pv img{max-height:24px;max-width:104px}
-        .provider-band{padding:20px 0 22px}}
+  .pv{display:flex;align-items:center;gap:10px;flex:0 0 auto;padding:10px 16px 10px 11px;
+        border:1px solid var(--line);border-radius:12px;background:rgba(6,15,29,.55);transition:.18s}
+  .pv:hover{border-color:var(--line-strong);background:rgba(15,32,54,.75)}
+  .pv-mark{display:grid;place-items:center;width:34px;height:34px;flex:0 0 34px;border-radius:9px;border:1px solid}
+  .pv-mark svg{width:19px;height:19px}
+  .pv-txt{display:flex;flex-direction:column;line-height:1.2}
+  .pv-txt b{font-size:.86rem;font-weight:700;color:var(--chalk);white-space:nowrap}
+  .pv-txt span{font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+        opacity:.9;white-space:nowrap;margin-top:2px}
+  @media (prefers-reduced-motion:reduce){.marquee-track{animation:none;flex-wrap:wrap;justify-content:center;width:auto}}
+  @media(max-width:700px){
+    .marquee-track{gap:9px;animation-duration:44s}
+    .pv{padding:8px 13px 8px 9px;gap:8px}
+    .pv-mark{width:29px;height:29px;flex:0 0 29px}.pv-mark svg{width:16px;height:16px}
+    .pv-txt b{font-size:.79rem}.pv-txt span{font-size:.57rem}
+    .provider-band{padding:20px 0 22px}}
 
   /* ---- audience funnel (replaces the contradictory metric tiles) ---- */
   .funnel{display:grid;gap:8px;margin:10px 0 4px}
@@ -1049,6 +1057,43 @@ const BACKEND_CANDIDATES = [BACKEND_URL, ""];   // first one that answers /api/h
 let API_FLAGS = {};                              // ai / cloudinary / ghl / email / calendar
 let API_OK = null;
 const apiUrl = p => (BACKEND_URL||"").replace(/\/$/,"") + p;
+
+/* ---------------------------------------------------------------------------
+   RENDER COLD STARTS — this is what was killing the PDF.
+
+   The app runs on Render's free plan, which spins the instance down after ~15
+   minutes idle. The first request after that either hangs for 30-60s or returns
+   502/503 while the container boots. The old code treated that one failure as
+   final: /api/lead threw, /api/playbook threw for the same reason, and the
+   visitor saw "Something went wrong building the PDF" when nothing was wrong.
+
+   Now both calls retry with backoff, and the builder pings /api/health as soon
+   as someone builds a proposal so the box is awake by the time they submit.
+--------------------------------------------------------------------------- */
+const RETRY_STATUS = [0,408,429,500,502,503,504,522,524];
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+async function fetchRetry(url, opts, tries, onWait){
+  tries = tries || 4;
+  let last = null;
+  for (let i = 0; i < tries; i++){
+    if (i){ if (onWait) onWait(i, tries); await sleep(1200 * Math.pow(1.9, i-1)); }
+    try{
+      const r = await fetch(url, opts);
+      if (r.ok) return r;
+      last = new Error("HTTP " + r.status); last.status = r.status;
+      if (RETRY_STATUS.indexOf(r.status) === -1) throw last;   // 400/404 won't fix themselves
+    }catch(e){
+      if (e && e.status && RETRY_STATUS.indexOf(e.status) === -1) throw e;
+      last = e;
+    }
+  }
+  throw last || new Error("request failed");
+}
+
+let _warmed = false;
+function warmBackend(){ if(_warmed) return; _warmed = true; fetch(apiUrl("/api/health")).catch(()=>{}); }
+
 function resolveBackend(){
   let i=0;
   const attempt=()=>{
@@ -1462,6 +1507,7 @@ function onTeamType(){
 
 /* ---------- build ---------- */
 async function buildProposal(){
+  warmBackend();
   const raw=document.getElementById('teamInput').value.trim();
   const team=findTeam(state.league,raw);
   const box=document.getElementById('proposal');
@@ -1721,7 +1767,6 @@ function render(team,m,pkg,rec,ai){
     const btn=document.getElementById("leadSubmit");
     btn.disabled=true; btn.textContent="Building your Playbook…"; msg.innerHTML="";
     gtm("playbook_requested",{team:leadCtx.team});
-    const _slow=setTimeout(()=>{ if(btn) btn.textContent="Still working — waking the server…"; },5000);
 
     const payload=Object.assign({},d,leadCtx,{recommendations:lastRec,lead_id:LEAD_ID,submittedAt:new Date().toISOString()},ATTR);
 
@@ -1729,17 +1774,16 @@ function render(team,m,pkg,rec,ai){
        slow or unset used to take the download down with it — and the old code
        then printed "Your report is ready" with no file. The PDF now comes from
        a dedicated endpoint that does nothing else, so it can't be collateral. */
-    const getPdfDirect=()=>fetch(apiUrl("/api/playbook"),{
-        method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
-      .then(r=>{ if(!r.ok) throw new Error("playbook "+r.status); return r.blob(); })
+    const waiting=i=>{ if(btn) btn.textContent = i>1 ? "Still working \u2014 waking the server\u2026" : "Building your Playbook\u2026"; };
+    const getPdfDirect=()=>fetchRetry(apiUrl("/api/playbook"),{
+        method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)},4,waiting)
+      .then(r=>r.blob())
       .then(b=>{ if(!b||b.size<1000) throw new Error("empty pdf");
         return {objectUrl:URL.createObjectURL(b),reportFilename:"stadium-to-screen-playbook.pdf"}; });
 
     let res=null;
     try{
-      const r=await fetch(apiUrl("/api/lead"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-      if(r.status===429) throw new Error("rate-limited");
-      if(!r.ok) throw new Error("lead "+r.status);
+      const r=await fetchRetry(apiUrl("/api/lead"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)},4,waiting);
       res=await r.json();
       if(!res.pdfBase64&&!res.pdfUrl) res=Object.assign(res,await getPdfDirect());
     }catch(err){
@@ -1748,17 +1792,15 @@ function render(team,m,pkg,rec,ai){
         navigator.sendBeacon(apiUrl("/api/lead"),new Blob([JSON.stringify(payload)],{type:"application/json"})); }catch(e){}
       try{ res=await getPdfDirect(); }
       catch(e2){
-        clearTimeout(_slow);
-        btn.disabled=false; btn.textContent="Build my Playbook (PDF) →";
-        const why=err.message==="rate-limited"
-          ? "We've had a lot of requests from your connection in the last few minutes — give it a moment and try again."
-          : (API_OK===false ? "We can't reach the Playbook service right now." : "Something went wrong building the PDF.");
-        msg.innerHTML='<span class="lf-err">'+why+' Your details are saved. Email <b>sales@smart1marketing.com</b> and we\'ll send your Playbook straight over.</span>';
-        gtm("playbook_failed",{team:leadCtx.team,reason:err.message});
+            btn.disabled=false; btn.textContent="Build my Playbook (PDF) →";
+        const why = (API_OK===false)
+        ? "We can't reach the Playbook service right now."
+        : "The Playbook server didn't respond in time.";
+      msg.innerHTML='<span class="lf-err">'+why+' Your details are saved \u2014 wait a few seconds and press the button again, or email <b>sales@smart1marketing.com</b> and we\'ll send it straight over.</span>';
+      gtm("playbook_failed",{team:leadCtx.team,reason:err.message});
         return;                                   // never claim success without a PDF
       }
     }
-    clearTimeout(_slow);
 
     /* real, downloadable file */
     let url=res.objectUrl||null;
@@ -1804,43 +1846,51 @@ document.querySelectorAll('.card,.play,.pillar,.pack,.gauge,.step,.col,.script')
 const cb=document.getElementById('contactBtn');
 if(cb) cb.addEventListener('click',e=>{e.preventDefault();document.getElementById('builder').scrollIntoView({behavior:'smooth'});});
 
-/* ---------- provider marquee ----------
-   The recognisable names, up top, before anyone has to read anything. Uses the
-   same never-empty logo chain as the quote: self-hosted -> CDN -> favicon ->
-   wordmark. Rendered white via CSS so mixed brand colours read as one row. */
+/* ---------- provider marquee ----------------------------------------------
+   WAS: <img> tags pointing at a logo CDN. On the live site every one failed to
+   load (naturalWidth 0, and onerror never fired because of loading="lazy"), so
+   the white CSS filter turned twenty empty boxes into featureless grey blocks.
+
+   NOW: nothing is fetched. Each provider is a self-contained SVG name-plate —
+   brand-coloured glyph (a screen for video, a waveform for audio) plus the name
+   and the channel type. Always renders, sharp at any size, and you can actually
+   read which networks they are.
+--------------------------------------------------------------------------- */
 const PROVIDERS = [
-  ["Hulu","hulu.com"], ["Amazon Prime Video","primevideo.com"], ["YouTube TV","youtube.com"],
-  ["Paramount+","paramountplus.com"], ["Peacock","peacocktv.com"], ["ESPN","espn.com"],
-  ["Max","max.com"], ["Roku","roku.com"], ["Tubi","tubitv.com"], ["Pluto TV","pluto.tv"],
-  ["Sling TV","sling.com"], ["Fubo","fubo.tv"],
-  ["Spotify","spotify.com"], ["Pandora","pandora.com"], ["iHeartRadio","iheart.com"],
-  ["SiriusXM","siriusxm.com"], ["Audacy","audacy.com"], ["Amazon Music","music.amazon.com"],
-  ["TuneIn","tunein.com"], ["NFL Network","nfl.com"]
+  ["Hulu","#1CE783","ctv"], ["Amazon Prime Video","#00A8E1","ctv"],
+  ["YouTube TV","#FF3D3D","ctv"], ["Paramount+","#3C7DFF","ctv"],
+  ["Peacock","#FFC629","ctv"], ["ESPN","#FF3B4E","ctv"],
+  ["Max","#5B6BFF","ctv"], ["Roku","#A55BEA","ctv"],
+  ["Tubi","#FF8A1E","ctv"], ["Pluto TV","#F5D400","ctv"],
+  ["Sling TV","#3AB6E8","ctv"], ["Fubo","#FA6146","ctv"],
+  ["NFL Network","#4B8DF8","ctv"],
+  ["Spotify","#1DB954","audio"], ["Pandora","#6C8CFF","audio"],
+  ["iHeartRadio","#FF4667","audio"], ["SiriusXM","#5C7CFF","audio"],
+  ["Audacy","#FF3D9A","audio"], ["Amazon Music","#25D1DA","audio"],
+  ["TuneIn","#2FE0D0","audio"]
 ];
+const GLYPH = {
+  ctv:  '<rect x="2.5" y="3.5" width="19" height="13" rx="2.5"/><path d="M9 20h6M12 16.5V20"/>'
+      + '<path d="M10.6 8.2l4.2 2.3-4.2 2.3z" fill="currentColor" stroke="none"/>',
+  audio:'<path d="M3 12h2M7.5 7.5v9M12 4v16M16.5 7.5v9M21 12h-2"/>'
+};
+function providerPlate(pv){
+  const name=pv[0], color=pv[1], kind=pv[2];
+  return '<div class="pv" title="'+esc(name)+'">'
+    + '<span class="pv-mark" style="color:'+color+';background:'+color+'1f;border-color:'+color+'4d">'
+    +   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" '
+    +   'stroke-linecap="round" stroke-linejoin="round">'+GLYPH[kind]+'</svg>'
+    + '</span>'
+    + '<span class="pv-txt"><b>'+esc(name)+'</b>'
+    +   '<span style="color:'+color+'">'+(kind==='ctv'?'Connected TV':'Streaming audio')+'</span></span>'
+    + '</div>';
+}
 function renderMarquee(){
   const track=document.getElementById('marqueeTrack');
   if(!track) return;
-  const cell=([name,domain])=>{
-    const mono=monogram(name), h=hueOf(name);
-    return `<div class="pv" title="${esc(name)}">`
-      + `<img src="/logos/${esc(domain)}.svg" alt="${esc(name)}" loading="lazy" referrerpolicy="no-referrer"`
-      + ` data-step="0" data-domain="${esc(domain)}" data-mono="${esc(mono)}" data-hue="${h}"`
-      + ` onerror="S1.marqueeStep(this)">`
-      + `</div>`;
-  };
-  // duplicated once so the -50% keyframe loops seamlessly
-  track.innerHTML = PROVIDERS.map(cell).join('') + PROVIDERS.map(cell).join('');
+  const row=PROVIDERS.map(providerPlate).join('');
+  track.innerHTML=row+row;            // duplicated for the -50% seamless loop
 }
-/* same chain as the quote tiles, but the last step is a wordmark, not a monogram
-   tile — a bare initial would look broken in a logo row. */
-S1.marqueeStep=function(img){
-  const d=img.dataset, step=Number(d.step||0)+1; d.step=step;
-  if(step===1){ img.src="https://logo.clearbit.com/"+d.domain; return; }
-  if(step===2){ img.src="https://www.google.com/s2/favicons?sz=128&domain="+d.domain; return; }
-  const sp=document.createElement("span");
-  sp.className="wm"; sp.textContent=img.alt||d.mono;
-  if(img.parentNode) img.parentNode.replaceChild(sp,img);
-};
 renderMarquee();
 
 refreshTeams(); onTeamType(); pickScope('local');

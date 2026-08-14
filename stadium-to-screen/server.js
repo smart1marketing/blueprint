@@ -359,6 +359,33 @@ app.get("/api/health", (_req, res) => res.json({
   leadsDashboard: !!ADMIN_TOKEN, calendar: !!REP.calendar
 }));
 
+/* ---------------------------------------------------------------------------
+   KEEP-WARM (opt-in)
+
+   Render's free plan spins the instance down after ~15 minutes idle. The next
+   visitor then waits 30-60s, or gets a 502, while the container boots — which is
+   what made the Playbook button fail. The widget now retries, but the honest fix
+   is for the box not to sleep.
+
+   Set KEEP_WARM=true on Render to have the app ping its own health endpoint
+   every 10 minutes. That counts as inbound traffic, so the instance stays up.
+
+   Trade-off: an always-on free service uses roughly 730 of your 750 free
+   instance-hours a month, so run ONE service this way. A paid instance or an
+   external uptime pinger does the same job without that ceiling.
+--------------------------------------------------------------------------- */
+const KEEP_WARM = String(process.env.KEEP_WARM || "").toLowerCase() === "true";
+const SELF_URL  = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL || "";
+if (KEEP_WARM && SELF_URL) {
+  setInterval(() => {
+    fetch(SELF_URL.replace(/\/$/, "") + "/api/health")
+      .catch(e => console.warn("keep-warm ping failed:", e.message));
+  }, 10 * 60 * 1000).unref();
+  console.log("keep-warm on — pinging " + SELF_URL + "/api/health every 10 min");
+} else if (KEEP_WARM) {
+  console.warn("KEEP_WARM set but RENDER_EXTERNAL_URL / PUBLIC_URL is missing — skipping");
+}
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(
   `Stadium to Screen on :${PORT}  (AI ${OPENAI_KEY ? "on" : "off"} · Cloudinary ${CLOUDINARY_READY ? "on" : "off"} · GHL ${GHL_WEBHOOK_URL ? "on" : "off"} · email ${SMTP_URL ? "on" : "off"} · notify ${NOTIFY_WEBHOOK_URL ? "on" : "off"})`
